@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FileText, Shield, Accessibility, Info, MessageSquare, Languages } from 'lucide-react';
+import { FileText, Shield, Accessibility, Info, MessageSquare } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { TopNavigationBar } from '../components/layout';
 import { FeedbackFormModal } from '../components/feedbacks';
 import { APP_CONFIG } from '../config/appConfig';
+import { useRTL } from '../hooks/useRTL';
 
-function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
+function MarkdownSection({ content, title, navigate, onStickyH2Change, t, isRTL }) {
   const h2Refs = useRef({});
   const [stickyH2, setStickyH2] = useState(null);
 
@@ -79,7 +82,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
   if (!content || content.trim() === '') {
     return (
       <div className="prose prose-gray max-w-none">
-        <p className="text-gray-500 italic">Content coming soon...</p>
+        <p className="text-gray-500 italic">{t('about.contentComingSoon')}</p>
       </div>
     );
   }
@@ -267,11 +270,27 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
       const trimmed = line.trim();
       
       // Quick Summary detection - start collecting
-      if (trimmed.startsWith('**Quick Summary:**') || trimmed.startsWith('**Quick Summary**')) {
+      // Check for both English and translated versions to support markdown files in either language
+      const quickSummaryLabel = t('about.quickSummary');
+      const quickSummaryEn = 'Quick Summary'; // English fallback
+      
+      // Try translated version first, then English fallback
+      let summaryPrefix = null;
+      if (trimmed.startsWith(`**${quickSummaryLabel}:**`)) {
+        summaryPrefix = `**${quickSummaryLabel}:**`;
+      } else if (trimmed.startsWith(`**${quickSummaryLabel}**`)) {
+        summaryPrefix = `**${quickSummaryLabel}**`;
+      } else if (trimmed.startsWith(`**${quickSummaryEn}:**`)) {
+        summaryPrefix = `**${quickSummaryEn}:**`;
+      } else if (trimmed.startsWith(`**${quickSummaryEn}**`)) {
+        summaryPrefix = `**${quickSummaryEn}**`;
+      }
+      
+      if (summaryPrefix) {
         flushList();
         flushParagraph();
-        // Extract summary text (remove the "**Quick Summary:**" prefix)
-        const summaryText = trimmed.replace(/^\*\*Quick Summary:\*\*\s*/, '').replace(/^\*\*Quick Summary\*\*\s*/, '');
+        // Extract summary text (remove the prefix)
+        const summaryText = trimmed.substring(summaryPrefix.length).trim();
         quickSummary = summaryText;
         collectingSummary = true;
         return; // Skip normal processing
@@ -376,10 +395,13 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
     // Add Quick Summary box at the beginning if it exists
     if (quickSummary) {
       const summaryKey = `quick-summary-${elementIndex++}`;
+      // Use border-start for RTL support (border-l-4 in LTR, border-r-4 in RTL)
+      const borderClass = isRTL ? 'border-r-4' : 'border-l-4';
       elements.unshift(
         <div 
           key={summaryKey}
-          className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-l-4 border-blue-500 rounded-lg p-6 mb-8 shadow-sm"
+          dir={isRTL ? 'rtl' : 'ltr'}
+          className={`bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 ${borderClass} border-blue-500 rounded-lg p-6 mb-8 shadow-sm`}
         >
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-1">
@@ -388,7 +410,7 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Summary</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('about.quickSummary')}</h3>
               <p className="text-gray-700 leading-relaxed">
                 {processInlineMarkdown(quickSummary)}
               </p>
@@ -411,6 +433,8 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change }) {
 export default function AboutPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
+  const { isRTL, start } = useRTL();
   const [activeSection, setActiveSection] = useState('about');
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showStickyHeader, setShowStickyHeader] = useState(false);
@@ -418,8 +442,8 @@ export default function AboutPage() {
   const sectionRefs = useRef({});
   const sidebarRef = useRef(null);
   const sidebarContainerRef = useRef(null);
+  const prevLanguageRef = useRef(i18n.language);
   const [stickyH2Info, setStickyH2Info] = useState(null);
-  const [language, setLanguage] = useState('en');
   const [sidebarStyle, setSidebarStyle] = useState({});
   const [markdownContent, setMarkdownContent] = useState({
     about: '',
@@ -459,14 +483,13 @@ export default function AboutPage() {
     }
   }, []);
 
-
   useEffect(() => {
-    document.title = `About | ${APP_CONFIG.name}`;
+    document.title = `${t('about.about')} | ${APP_CONFIG.name}`;
     
-    // Load markdown files based on selected language
+    // Load markdown files based on current i18n language
     const loadMarkdown = async () => {
       try {
-        const lang = language || 'en';
+        const lang = i18n.language || 'en';
         const [aboutRes, termsRes, privacyRes, accessibilityRes] = await Promise.all([
           fetch(`/content/about.${lang}.md`).catch(() => null),
           fetch(`/content/terms.${lang}.md`).catch(() => null),
@@ -488,7 +511,7 @@ export default function AboutPage() {
     };
 
     loadMarkdown();
-  }, [language]);
+  }, [i18n.language]);
 
   // Manual sticky implementation for sidebar (CSS Grid interferes with native sticky)
   useEffect(() => {
@@ -497,8 +520,11 @@ export default function AboutPage() {
     
     if (!sidebar || !container) return;
     
+    // Compute direction string once based on current isRTL value
+    const direction = isRTL ? 'right' : 'left';
+    
     let isSticky = false;
-    let initialLeft = 0;
+    let initialStart = 0; // RTL-aware start position (left in LTR, right in RTL)
     let initialWidth = 0;
     let initialTop = 0;
     
@@ -513,11 +539,14 @@ export default function AboutPage() {
       // Switch when sidebar reaches the sticky position to prevent jump
       const shouldBeSticky = sidebarRect.top <= stickyTop;
       
+      // Get RTL-aware start position
+      const currentStart = isRTL ? window.innerWidth - containerRect.right : containerRect.left;
+      
       if (shouldBeSticky && !isSticky) {
-        // Just became sticky - use sidebar's current position to prevent jump
-        // Start with current top position, then smoothly transition to target
-        initialLeft = sidebarRect.left;
-        initialWidth = sidebarRect.width;
+        // Just became sticky - use container position for accuracy
+        // This ensures we get the correct position after language/direction changes
+        initialStart = currentStart;
+        initialWidth = containerRect.width;
         initialTop = sidebarRect.top;
         isSticky = true;
         
@@ -525,7 +554,7 @@ export default function AboutPage() {
         setSidebarStyle({
           position: 'fixed',
           top: `${initialTop}px`,
-          left: `${initialLeft}px`,
+          [direction]: `${initialStart}px`,
           width: `${initialWidth}px`,
           zIndex: 10
         });
@@ -535,24 +564,23 @@ export default function AboutPage() {
           setSidebarStyle({
             position: 'fixed',
             top: `${stickyTop}px`,
-            left: `${initialLeft}px`,
+            [direction]: `${initialStart}px`,
             width: `${initialWidth}px`,
             zIndex: 10
           });
         });
       } else if (shouldBeSticky && isSticky) {
-        // Already sticky - update position if container moved (e.g., on resize)
-        const currentLeft = containerRect.left;
+        // Already sticky - update position if container moved (e.g., on resize or language change)
         const currentWidth = containerRect.width;
         
-        // Only update if position/width changed significantly (e.g., window resize)
-        if (Math.abs(currentLeft - initialLeft) > 1 || Math.abs(currentWidth - initialWidth) > 1) {
-          initialLeft = currentLeft;
+        // Always update if position/width changed significantly (e.g., window resize or language change)
+        if (Math.abs(currentStart - initialStart) > 1 || Math.abs(currentWidth - initialWidth) > 1) {
+          initialStart = currentStart;
           initialWidth = currentWidth;
           setSidebarStyle({
             position: 'fixed',
             top: `${stickyTop}px`,
-            left: `${initialLeft}px`,
+            [direction]: `${initialStart}px`,
             width: `${initialWidth}px`,
             zIndex: 10
           });
@@ -565,7 +593,7 @@ export default function AboutPage() {
           setSidebarStyle({
             position: 'relative',
             top: 'auto',
-            left: 'auto',
+            [direction]: 'auto',
             width: 'auto',
             zIndex: 'auto'
           });
@@ -576,6 +604,22 @@ export default function AboutPage() {
     // Initial check
     handleScroll();
     
+    // When language changes, reset and recalculate after layout updates
+    const languageChanged = prevLanguageRef.current !== i18n.language;
+    if (languageChanged) {
+      prevLanguageRef.current = i18n.language;
+      // Reset sticky state and initial values to force recalculation
+      isSticky = false;
+      initialStart = 0;
+      initialWidth = 0;
+      initialTop = 0;
+      setSidebarStyle({});
+      // Trigger resize event after a short delay to ensure layout has updated
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 100);
+    }
+    
     window.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('resize', handleScroll, { passive: true });
     
@@ -583,7 +627,7 @@ export default function AboutPage() {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleScroll);
     };
-  }, [activeSection, language]);
+  }, [activeSection, i18n.language, isRTL]);
 
   // Reset sticky header when section changes
   useEffect(() => {
@@ -609,7 +653,7 @@ export default function AboutPage() {
   const sections = [
     {
       id: 'about',
-      title: 'About',
+      title: t('about.about'),
       icon: Info,
       content: markdownContent.about,
       activeClasses: 'bg-blue-50 border-2 border-blue-200 text-blue-700 font-medium',
@@ -619,7 +663,7 @@ export default function AboutPage() {
     },
     {
       id: 'terms',
-      title: 'Terms & Conditions',
+      title: t('about.termsConditions'),
       icon: FileText,
       content: markdownContent.terms,
       activeClasses: 'bg-slate-50 border-2 border-slate-300 text-slate-800 font-medium',
@@ -629,7 +673,7 @@ export default function AboutPage() {
     },
     {
       id: 'privacy',
-      title: 'Privacy Policy',
+      title: t('about.privacyPolicy'),
       icon: Shield,
       content: markdownContent.privacy,
       activeClasses: 'bg-green-50 border-2 border-green-200 text-green-700 font-medium',
@@ -639,7 +683,7 @@ export default function AboutPage() {
     },
     {
       id: 'accessibility',
-      title: 'Accessibility Policy',
+      title: t('about.accessibilityPolicy'),
       icon: Accessibility,
       content: markdownContent.accessibility,
       activeClasses: 'bg-purple-50 border-2 border-purple-200 text-purple-700 font-medium',
@@ -654,7 +698,7 @@ export default function AboutPage() {
   return (
     <>
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
-      <div className="bg-gradient-to-b from-gray-50 to-white pt-[4rem]">
+      <div className="bg-gradient-to-b from-gray-50 to-white pt-[4rem]" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="container mx-auto px-4 pt-6 pb-4 max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start" style={{ overflow: 'visible' }}>
             {/* Sidebar Navigation */}
@@ -664,37 +708,8 @@ export default function AboutPage() {
                 className="space-y-2" 
                 style={sidebarStyle}
                 data-sidebar-sticky
+                dir={isRTL ? 'rtl' : 'ltr'}
               >
-                {/* Language Selector */}
-                <div className="bg-white border-2 border-gray-200 rounded-lg p-3 mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Languages className="w-4 h-4 text-gray-500" />
-                    <span className="text-xs font-medium text-gray-600">Language</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setLanguage('en')}
-                      className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                        language === 'en'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      English
-                    </button>
-                    <button
-                      onClick={() => setLanguage('he')}
-                      className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                        language === 'he'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      עברית
-                    </button>
-                  </div>
-                </div>
-
                 {sections.map((section) => {
                   const Icon = section.icon;
                   const isActive = activeSection === section.id;
@@ -707,6 +722,8 @@ export default function AboutPage() {
                           ? section.activeClasses
                           : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                       }`}
+                      title={section.title}
+                      aria-label={section.title}
                     >
                       <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? section.iconActiveClasses : section.iconInactiveClasses}`} />
                       <span className="text-sm">{section.title}</span>
@@ -718,9 +735,11 @@ export default function AboutPage() {
                 <button
                   onClick={() => setShowFeedbackModal(true)}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left bg-white border-2 border-gray-200 text-gray-700 hover:border-primary-300 hover:bg-primary-50 mt-4"
+                  title={t('about.sendFeedback')}
+                  aria-label={t('about.sendFeedback')}
                 >
                   <MessageSquare className="w-5 h-5 flex-shrink-0 text-gray-500" />
-                  <span className="text-sm">Send Feedback</span>
+                  <span className="text-sm">{t('about.sendFeedback')}</span>
                 </button>
               </nav>
             </aside>
@@ -777,6 +796,8 @@ export default function AboutPage() {
                   title={activeSectionData.title}
                   navigate={navigate}
                   onStickyH2Change={setStickyH2Info}
+                  t={t}
+                  isRTL={isRTL}
                 />
               </div>
             </motion.div>

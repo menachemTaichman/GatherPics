@@ -6,6 +6,7 @@ import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { generateImageAltText } from '../../utils/accessibility';
 import { formatTime } from '../../utils/dateUtils';
+import { useRTL } from '../../hooks/useRTL';
 
 const SingleImageTile = forwardRef(function SingleImageTile({
   image,
@@ -53,20 +54,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   const permissions = usePermissions();
   
   // RTL support
-  const { i18n } = useTranslation();
-  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
-  
-  // Update RTL state when language changes
-  useEffect(() => {
-    const updateDirection = () => {
-      setIsRTL(document.documentElement.dir === 'rtl');
-    };
-    updateDirection();
-    i18n.on('languageChanged', updateDirection);
-    return () => {
-      i18n.off('languageChanged', updateDirection);
-    };
-  }, [i18n]);
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   
   // Apply highlight styles
   const highlightStyle = isHighlighted ? {
@@ -156,7 +145,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
               className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 opacity-100 ${
                 isRTL ? 'left-2' : 'right-2'
               }`}
-              title="Remove from Archive"
+              title={t('singleImageTile.removeFromArchive')}
+              aria-label={t('singleImageTile.removeFromArchive')}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleArchive();
@@ -188,7 +178,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
                 } ${
                   selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                 }`}
-                title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                title={isFavorite ? t('singleImageTile.removeFromFavorites') : t('singleImageTile.addToFavorites')}
+                aria-label={isFavorite ? t('singleImageTile.removeFromFavorites') : t('singleImageTile.addToFavorites')}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleFavorite();
@@ -225,7 +216,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
               } ${
                 selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
-              title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+              title={isFavorite ? t('singleImageTile.removeFromFavorites') : t('singleImageTile.addToFavorites')}
+              aria-label={isFavorite ? t('singleImageTile.removeFromFavorites') : t('singleImageTile.addToFavorites')}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleFavorite();
@@ -254,7 +246,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
           <svg viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-          <span className="text-sm">Click to view</span>
+          <span className="text-sm">{t('singleImageTile.clickToView')}</span>
         </div>
       </div>
 
@@ -272,7 +264,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         <div className={`absolute top-2 bg-primary-600 text-white text-xs px-2 py-1 rounded ${
           isRTL ? 'left-2' : 'right-2'
         }`}>
-          Crop
+          {t('singleImageTile.crop')}
         </div>
       )}
 
@@ -291,7 +283,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
           } ${
             isRepresentative ? 'opacity-100' : (selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
           }`}
-          title={isRepresentative ? 'Current representative' : 'Set as representative'}
+          title={isRepresentative ? t('singleImageTile.currentRepresentative') : t('singleImageTile.setAsRepresentative')}
+          aria-label={isRepresentative ? t('singleImageTile.currentRepresentative') : t('singleImageTile.setAsRepresentative')}
           onClick={(e) => {
             e.stopPropagation();
             onSetRepresentative && onSetRepresentative();

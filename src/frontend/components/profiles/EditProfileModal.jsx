@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Shield, Image as ImageIcon, FolderOpen, Users, AlertTriangle, AlertCircle, Save, Trash2, MapPin, ChevronDown, Calendar, Plus, HelpCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI, getEventUrlById, API_BASE } from '../../utils/apiService';
@@ -17,6 +19,8 @@ import ConfirmDelete from '../modals/ConfirmDelete';
 import PublicProfilePasswordModal from './PublicProfilePasswordModal';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false, initialEventId = null }) {
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass, ps, pe } = useRTL();
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const MODAL_ID = 'edit-profile-modal';
@@ -169,7 +173,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   // all_groups should be disabled when can_upload_and_delete_images is enabled (cannot restrict groups if upload is enabled)
   const disableAllGroups = Boolean(editingProfile?.can_upload_and_delete_images);
   const allGroupsDisabledReason = disableAllGroups 
-    ? 'Cannot restrict groups when Upload & Delete Photos is enabled' 
+    ? t('editProfile.cannotRestrictGroupsWhenUploadIsEnabled')
     : null;
   
   // can_upload_and_delete_images should be disabled when:
@@ -181,12 +185,12 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const disableCanUploadAndDeleteImages = Boolean(editingProfile?.is_public) || !Boolean(editingProfile?.all_groups) || !Boolean(editingProfile?.can_edit) || hasForbiddenGroups;
   const canUploadAndDeleteImagesDisabledReason = disableCanUploadAndDeleteImages
     ? Boolean(editingProfile?.is_public)
-      ? 'Public profiles cannot have upload permissions'
+      ? t('editProfile.publicProfilesCannotHaveUploadPermissions')
       : !Boolean(editingProfile?.all_groups)
-        ? 'All People Access must be enabled'
+        ? t('editProfile.allPeopleAccessMustBeEnabled')
         : !Boolean(editingProfile?.can_edit)
-          ? 'Can Edit permission must be enabled'
-          : 'Remove forbidden groups first'
+          ? t('editProfile.canEditPermissionMustBeEnabled')
+          : t('editProfile.removeForbiddenGroupsFirst')
     : null;
   
   // can_edit should be enabled/required when can_upload_and_delete_images is enabled
@@ -218,21 +222,21 @@ const publicToggleRestrictedByRank = (editingProfile?.hierarchy_rank ?? 0) > 0;
 const publicToggleRestrictedByCanCreateEvents = Boolean(editingProfile?.can_create_events);
 const disablePublicToggle = publicToggleRestrictedByEvent || publicToggleRestrictedByRank || publicToggleRestrictedByCanCreateEvents;
 const publicToggleTooltip = publicToggleRestrictedByCanCreateEvents
-  ? 'Profiles with event creation permissions cannot be public.'
+  ? t('editProfile.profilesWithEventCreationPermissionsCannotBePublic')
   : publicToggleRestrictedByRank
-    ? 'Public profiles must use rank 0.'
+    ? t('editProfile.publicProfilesMustUseRank0')
     : publicToggleRestrictedByEvent
-      ? 'Public access is only available for profiles restricted to an event.'
+      ? t('editProfile.publicAccessIsOnlyAvailableForProfilesRestrictedToEvent')
       : undefined;
 const isRestricted = Boolean(editingProfile?.restricted_to_event || currentProfile?.restricted_to_event);
 const disableRestrictionToggle = isCurrentProfileRestricted || Boolean(editingProfile?.is_public) || Boolean(editingProfile?.can_create_events);
 const restrictionTooltip = isCurrentProfileRestricted
-  ? 'You are restricted to an event and cannot change restrictions'
+  ? t('editProfile.youAreRestrictedCannotChange')
   : Boolean(editingProfile?.is_public)
-    ? 'Public profiles must be restricted to their own event'
+    ? t('editProfile.publicProfilesMustBeRestricted')
     : Boolean(editingProfile?.can_create_events)
-      ? 'Profiles with event creation permissions cannot be restricted to an event'
-      : `Manage restrictions`
+      ? t('editProfile.profilesWithEventCreationCannotBeRestricted')
+      : t('editProfile.manageRestrictions')
 const disableEventManagementToggles = Boolean(editingProfile?.is_public);
 const disableCanCreateEvents = disableEventManagementToggles || isRestricted;
 const disableRankSelection = Boolean(editingProfile?.is_public);
@@ -944,12 +948,12 @@ const isProfileEditable = useMemo(() => {
     if (!isProfileEditable && !isCreating) {
       // Only save event-specific fields when profile is not editable
       if (!selectedEventId) {
-        showToast('Please select an event to update event-specific authorizations', 'error');
+        showToast(t('editProfile.pleaseSelectEventToUpdateEventSpecificAuthorizations'), 'error');
         return;
       }
       
       if (!hasEventSpecificChanges) {
-        showToast('No event-specific changes to save', 'info');
+        showToast(t('editProfile.noEventSpecificChangesToSave'), 'info');
         return;
       }
       
@@ -960,12 +964,12 @@ const isProfileEditable = useMemo(() => {
 
     // Normal validation for editable profiles or when creating
     if (nameConflict) {
-      showToast('Cannot save: Profile name already exists', 'error');
+      showToast(t('editProfile.cannotSaveProfileNameAlreadyExists'), 'error');
       return;
     }
 
     if (!editingProfile.label.trim()) {
-      showToast('Profile name cannot be empty', 'error');
+      showToast(t('editProfile.profileNameCannotBeEmpty'), 'error');
       return;
     }
 
@@ -973,7 +977,7 @@ const isProfileEditable = useMemo(() => {
     if (isCreating && !Boolean(editingProfile.is_public)) {
       const emailValue = editingProfile.email?.trim();
       if (!emailValue || emailValue.length === 0) {
-        showToast('Email is required for non-public profiles', 'error');
+        showToast(t('editProfile.emailIsRequiredForNonPublicProfiles'), 'error');
         return;
       }
     }
@@ -982,7 +986,7 @@ const isProfileEditable = useMemo(() => {
     if (!isCreating && changingFromPublicToNonPublic) {
       const emailValue = editingProfile.email?.trim();
       if (!emailValue || emailValue.length === 0) {
-        showToast('Email is required when changing from public to non-public profile', 'error');
+        showToast(t('editProfile.emailIsRequiredWhenChangingFromPublicToNonPublic'), 'error');
         return;
       }
     }
@@ -991,7 +995,7 @@ const isProfileEditable = useMemo(() => {
     if (isCreating && Boolean(editingProfile.is_public)) {
       const passwordValue = editingProfile.password?.trim();
       if (!passwordValue || passwordValue.length === 0) {
-        showToast('Password is required for public profiles', 'error');
+        showToast(t('editProfile.passwordIsRequiredForPublicProfiles'), 'error');
         return;
       }
     }
@@ -1043,7 +1047,7 @@ const isProfileEditable = useMemo(() => {
         const createData = { ...generalProfileData, ...eventProfileData };
         const targetEventUrl = selectedEventId ? getEventUrlFromId(selectedEventId) : eventUrl;
         const createdProfile = await profilesAPI.create(createData, targetEventUrl || eventUrl);
-        showToast(`Profile "${editingProfile.label}" created successfully`, 'success');
+        showToast(t('editProfile.profileCreatedSuccessfully'), 'success');
         
         // After creation, get profile from store (API interceptor should have added it)
         const createdProfileId = createdProfile?.id || createdProfile?.profile_id;
@@ -1085,7 +1089,7 @@ const isProfileEditable = useMemo(() => {
           });
         }
         
-        showToast('Profile updated successfully', 'success');
+        showToast(t('editProfile.profileUpdatedSuccessfully'), 'success');
         
         // Changes are automatically applied by apiService interceptor
         if (onSave) onSave();
@@ -1107,7 +1111,7 @@ const isProfileEditable = useMemo(() => {
         setNameConflict(true);
         setError('');
         // Show both inline error and toast
-        showToast('Profile label already exists', 'error');
+        showToast(t('editProfile.profileLabelAlreadyExists'), 'error');
       } else {
         // Use the error handler for user-friendly messages
         const errorMsg = formatErrorMessage(isCreating ? 'create' : 'update profile', error);
@@ -1134,8 +1138,8 @@ const isProfileEditable = useMemo(() => {
         return evtId && String(evtId) === String(selectedEventId);
       });
     }
-    return event?.name || 'Untitled Event';
-  }, [selectedEventId, eventsList, allEventsList, isCreating]);
+    return event?.name || t('profilesGallery.untitledEvent');
+  }, [selectedEventId, eventsList, allEventsList, isCreating, t]);
 
   // Update restriction search term when restricted event changes
   useEffect(() => {
@@ -1183,10 +1187,10 @@ const isProfileEditable = useMemo(() => {
     if (!eventSearchTerm.trim()) return eventsList;
     const searchLower = eventSearchTerm.toLowerCase();
     return eventsList.filter(event => {
-      const evtName = event?.name || 'Untitled Event';
+      const evtName = event?.name || t('profilesGallery.untitledEvent');
       return evtName.toLowerCase().includes(searchLower);
     });
-  }, [eventsList, eventSearchTerm]);
+  }, [eventsList, eventSearchTerm, t]);
 
   // Reset highlighted index when filtered events change
   useEffect(() => {
@@ -1196,7 +1200,7 @@ const isProfileEditable = useMemo(() => {
   // Handle event selection (prevent if there are unsaved changes)
   const handleEventSelect = (evtId) => {
     if (hasEventSpecificChanges) {
-      showToast('Please save or cancel event-specific changes before switching events', 'error');
+      showToast(t('editProfile.pleaseSaveOrCancelChangesBeforeSwitchingEvents'), 'error');
       return;
     }
     
@@ -1240,10 +1244,10 @@ const isProfileEditable = useMemo(() => {
         all_albums: editingProfile.all_albums
       });
       
-      showToast('Event-specific authorizations saved successfully', 'success');
+      showToast(t('editProfile.eventSpecificAuthorizationsSavedSuccessfully'), 'success');
     } catch (error) {
       console.error('Failed to save event-specific authorizations:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to save event-specific authorizations';
+      const errorMsg = error.response?.data?.error || error.message || t('editProfile.failedToSaveEventSpecificAuthorizations');
       setError(errorMsg);
       showToast(errorMsg, 'error');
     } finally {
@@ -1288,7 +1292,7 @@ const isProfileEditable = useMemo(() => {
         setShowEventDropdown(false);
       }
       
-      showToast('Event removed from profile', 'success');
+      showToast(t('editProfile.eventRemovedFromProfile'), 'success');
       setEventToRemove(null);
     } catch (error) {
       console.error('Failed to remove event from profile:', error);
@@ -1304,7 +1308,7 @@ const isProfileEditable = useMemo(() => {
     try {
       await profilesAPI.addEvent(editingProfile.id, eventIdToAdd);
       // Changes are automatically applied by apiService interceptor
-      showToast('Event added to profile', 'success');
+      showToast(t('editProfile.eventAddedToProfile'), 'success');
     } catch (error) {
       console.error('Failed to add event to profile:', error);
       showToast(formatErrorMessage('add event', error), 'error');
@@ -1316,19 +1320,19 @@ const isProfileEditable = useMemo(() => {
     const options = [];
     // Add "Clear" option if an event is selected and not searching
     if (selectedEventId && !eventSearchTerm) {
-      options.push({ id: null, name: 'Clear Selection', isPlaceholder: false, isClear: true });
+      options.push({ id: null, name: t('editProfile.clearSelection'), isPlaceholder: false, isClear: true });
     }
     // Add "Select Event" if no eventId from URL and not searching
     if (!eventId && !eventSearchTerm && !selectedEventId) {
-      options.push({ id: null, name: 'Select Event', isPlaceholder: true });
+      options.push({ id: null, name: t('editProfile.selectEvent'), isPlaceholder: true });
     }
     filteredEvents.forEach(event => {
       const evtId = event?.event_id || event?.id;
-      const evtName = event?.name || 'Untitled Event';
+      const evtName = event?.name || t('profilesGallery.untitledEvent');
       options.push({ id: evtId, name: evtName, isPlaceholder: false });
     });
     return options;
-  }, [filteredEvents, eventId, eventSearchTerm, selectedEventId]);
+  }, [filteredEvents, eventId, eventSearchTerm, selectedEventId, t]);
 
   // Handle keyboard navigation (backup handler, but modal handler takes precedence)
   const handleEventInputKeyDown = (e) => {
@@ -1464,7 +1468,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeImagesFromProfile(editingProfile.id, [imageId], targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Photo removed from profile', 'success');
+      showToast(t('editProfile.photoRemovedFromProfile'), 'success');
     } catch (error) {
       console.error('Failed to remove photo:', error);
       showToast(formatErrorMessage('remove photo', error), 'error');
@@ -1476,7 +1480,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeAlbumsFromProfile(editingProfile.id, [albumId], targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Album removed from profile', 'success');
+      showToast(t('editProfile.albumRemovedFromProfile'), 'success');
     } catch (error) {
       console.error('Failed to remove album:', error);
       showToast(formatErrorMessage('remove album', error), 'error');
@@ -1491,7 +1495,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeImagesFromProfile(editingProfile.id, imageIds, targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${imageIds.length} photos cleared from profile`, 'success');
+      showToast(t('editProfile.photosClearedFromProfile', { count: imageIds.length }), 'success');
     } catch (error) {
       console.error('Failed to clear photos:', error);
       showToast(formatErrorMessage('clear photos', error), 'error');
@@ -1506,7 +1510,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeAlbumsFromProfile(editingProfile.id, albumIds, targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${albumIds.length} albums cleared from profile`, 'success');
+      showToast(t('editProfile.albumsClearedFromProfile', { count: albumIds.length }), 'success');
     } catch (error) {
       console.error('Failed to clear albums:', error);
       showToast(formatErrorMessage('clear albums', error), 'error');
@@ -1518,7 +1522,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeGroupsFromProfile(editingProfile.id, [groupId], targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast('Group removed from profile', 'success');
+      showToast(t('editProfile.groupRemovedFromProfile'), 'success');
     } catch (error) {
       console.error('Failed to remove group:', error);
       showToast(formatErrorMessage('remove group', error), 'error');
@@ -1533,7 +1537,7 @@ const isProfileEditable = useMemo(() => {
       const targetEventUrl = getEventUrlFromId(selectedEventId) || eventUrl;
       await profilesAPI.removeGroupsFromProfile(editingProfile.id, groupIds, targetEventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`${groupIds.length} groups cleared from profile`, 'success');
+      showToast(t('editProfile.groupsClearedFromProfile', { count: groupIds.length }), 'success');
     } catch (error) {
       console.error('Failed to clear groups:', error);
       showToast(formatErrorMessage('clear groups', error), 'error');
@@ -1577,18 +1581,19 @@ const isProfileEditable = useMemo(() => {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.2 }}
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
           tabIndex={-1}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                 <User className="w-5 h-5 text-purple-600" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {isCreating ? 'Create Profile' : 'Edit Profile'}
+                  {isCreating ? t('editProfile.createProfile') : t('editProfile.editProfile')}
                 </h2>
                 {!isCreating && <p className="text-sm text-gray-500">{profile?.label}</p>}
               </div>
@@ -1607,16 +1612,16 @@ const isProfileEditable = useMemo(() => {
               {/* Basic Info Section - Compact (only show if profile is editable) */}
               {isProfileEditable && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center space-x-2">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                     <User className="w-4 h-4" />
-                    <span>Basic Information</span>
+                    <span>{t('editProfile.basicInformation')}</span>
                   </h3>
 
                   <div className={`flex flex-col gap-3 md:grid ${basicInfoGridLayout} md:justify-center md:items-start md:gap-3`}>
                     {/* Label */}
                     <div className="w-full md:w-full">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Profile Name <span className="text-red-500">*</span>
+                        {t('editProfile.profileNameRequired')}
                       </label>
                       <div className="relative">
                         <input
@@ -1626,12 +1631,12 @@ const isProfileEditable = useMemo(() => {
                         className={`w-full h-10 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                             nameConflict ? 'border-red-500' : 'border-gray-300'
                           }`}
-                          placeholder="Enter profile name"
+                          placeholder={t('editProfile.enterProfileName')}
                         />
                         {nameConflict && (
-                          <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                          <div className="absolute top-full left-0 mt-1 flex items-center gap-1 text-red-500 text-xs">
                             <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                            <span>Name exists</span>
+                            <span>{t('editProfile.nameExists')}</span>
                           </div>
                         )}
                       </div>
@@ -1641,7 +1646,7 @@ const isProfileEditable = useMemo(() => {
                     {hasEmailInput && (
                       <div className="w-full md:w-full">
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Email <span className="text-red-500">*</span>
+                          {t('editProfile.emailRequired')}
                         </label>
                         <input
                           type="email"
@@ -1649,7 +1654,7 @@ const isProfileEditable = useMemo(() => {
                           onChange={(e) => handleFieldChange('email', e.target.value)}
                           autoComplete="off"
                           className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter email (required)"
+                          placeholder={t('editProfile.enterEmailRequired')}
                           required
                         />
                       </div>
@@ -1657,10 +1662,10 @@ const isProfileEditable = useMemo(() => {
                     {hasEmailDisplay && (
                       <div className="w-full md:w-full">
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Email
+                          {t('editProfile.email')}
                         </label>
                         <div className="w-full h-10 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 flex items-center">
-                          {generalProfile?.email || 'Not available'}
+                          {generalProfile?.email || t('editProfile.notAvailable')}
                         </div>
                       </div>
                     )}
@@ -1669,7 +1674,7 @@ const isProfileEditable = useMemo(() => {
                     {hasPasswordInput && (
                       <div className="w-full md:w-full">
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Password <span className="text-red-500">*</span>
+                          {t('editProfile.passwordRequired')}
                         </label>
                         <div className="relative">
                           <input
@@ -1677,15 +1682,16 @@ const isProfileEditable = useMemo(() => {
                             value={editingProfile.password || ''}
                             onChange={(e) => handleFieldChange('password', e.target.value)}
                             autoComplete="new-password"
-                            className="w-full h-10 px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter password (required)"
+                            className={`w-full h-10 px-3 py-2 ${pe('10')} text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            placeholder={t('editProfile.enterPasswordRequired')}
                             required
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                            title={showPassword ? 'Hide password' : 'Show password'}
+                            className={`absolute ${endClass('2')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
+                            title={showPassword ? t('editProfile.hidePassword') : t('editProfile.showPassword')}
+                            aria-label={showPassword ? t('editProfile.hidePassword') : t('editProfile.showPassword')}
                           >
                             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
@@ -1699,17 +1705,17 @@ const isProfileEditable = useMemo(() => {
               {/* General Authorizations Section */}
               {!isCurrentProfileRestricted && (
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Shield className="w-5 h-5" />
-                  <span>General Authorizations</span>
+                  <span>{t('editProfile.generalAuthorizations')}</span>
                 </h3>
 
                 <div className="space-y-3">
                   {/* Restricted to Event */}
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">Restricted to Event</p>
-                      <p className="text-sm text-gray-500">Profile is restricted to a specific event</p>
+                      <p className="font-medium text-gray-900">{t('editProfile.restrictedToEvent')}</p>
+                      <p className="text-sm text-gray-500">{t('editProfile.profileIsRestrictedToSpecificEvent')}</p>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <div className="relative" ref={restrictionInputRef}>
@@ -1733,12 +1739,12 @@ const isProfileEditable = useMemo(() => {
                               }
                               setShowRestrictionDropdown(true);
                             }}
-                            placeholder="Select event or clear"
-                            className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder={t('editProfile.selectEventOrClear')}
+                            className={`px-3 py-1.5 ${pe('8')} text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 disabled:opacity-60 disabled:cursor-not-allowed`}
                             disabled={disableRestrictionToggle}
                             title={disableRestrictionToggle ? restrictionTooltip : undefined}
                           />
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                          <ChevronDown className={`absolute ${endClass('2')} top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none`} />
                         </div>
                         {showRestrictionDropdown && (
                           <div
@@ -1751,7 +1757,7 @@ const isProfileEditable = useMemo(() => {
                               // Use editingProfile first, then fall back to computed values
                               const currentRestrictionId = editingProfile?.restricted_to_event || restrictedToEventId;
                               if (currentRestrictionId) {
-                                restrictionOptions.push({ id: null, name: 'Clear Selection', isClear: true });
+                                restrictionOptions.push({ id: null, name: t('editProfile.clearSelection'), isClear: true });
                               }
                               
                               // When editing existing profile: only show profile events
@@ -1776,8 +1782,8 @@ const isProfileEditable = useMemo(() => {
                                     if (aId !== initialIdStr && bId === initialIdStr) return 1;
                                   }
                                   // If both are initial or both are not, sort by name
-                                  const aName = (a?.name || 'Untitled Event').toLowerCase();
-                                  const bName = (b?.name || 'Untitled Event').toLowerCase();
+                                  const aName = (a?.name || t('profilesGallery.untitledEvent')).toLowerCase();
+                                  const bName = (b?.name || t('profilesGallery.untitledEvent')).toLowerCase();
                                   return aName.localeCompare(bName);
                                 });
                                 
@@ -1792,8 +1798,8 @@ const isProfileEditable = useMemo(() => {
                                 
                                 // Sort by name
                                 eventsToShow.sort((a, b) => {
-                                  const aName = (a?.name || 'Untitled Event').toLowerCase();
-                                  const bName = (b?.name || 'Untitled Event').toLowerCase();
+                                  const aName = (a?.name || t('profilesGallery.untitledEvent')).toLowerCase();
+                                  const bName = (b?.name || t('profilesGallery.untitledEvent')).toLowerCase();
                                   return aName.localeCompare(bName);
                                 });
                               }
@@ -1801,19 +1807,19 @@ const isProfileEditable = useMemo(() => {
                               // Filter events based on search term
                               const filtered = restrictionSearchTerm.trim()
                                 ? eventsToShow.filter(e => 
-                                    (e?.name || 'Untitled Event').toLowerCase().includes(restrictionSearchTerm.toLowerCase())
+                                    (e?.name || t('profilesGallery.untitledEvent')).toLowerCase().includes(restrictionSearchTerm.toLowerCase())
                                   )
                                 : eventsToShow;
                               
                               filtered.forEach(event => {
                                 const evtId = event?.event_id || event?.id;
-                                const evtName = event?.name || 'Untitled Event';
+                                const evtName = event?.name || t('profilesGallery.untitledEvent');
                                 restrictionOptions.push({ id: evtId, name: evtName, event: event });
                               });
                               
                               return restrictionOptions.length === 0 ? (
                                 <div className="px-3 py-2 text-sm text-gray-500">
-                                  {restrictionSearchTerm ? 'No events found' : 'No events available'}
+                                  {restrictionSearchTerm ? t('profilesGallery.noEventsFound') : t('profilesGallery.noEventsAvailable')}
                                 </div>
                               ) : (
                                 restrictionOptions.map((option, index) => {
@@ -1878,7 +1884,7 @@ const isProfileEditable = useMemo(() => {
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                     <div className="flex-1 relative">
                       <div className="flex items-center gap-1">
-                        <p className="font-medium text-gray-900">Rank</p>
+                        <p className="font-medium text-gray-900">{t('editProfile.rank')}</p>
                         <div className="relative">
                           <HelpCircle 
                             className="w-3.5 h-3.5 text-gray-400 cursor-help" 
@@ -1886,19 +1892,19 @@ const isProfileEditable = useMemo(() => {
                             onMouseLeave={() => setShowRankTooltip(false)}
                           />
                           {showRankTooltip && (
-                            <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                              Can create and manage profiles with lower rank. Rank 0 has no managing authority.
+                            <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                              {t('editProfile.rankTooltip')}
                             </div>
                           )}
                         </div>
                       </div>
-                      <p className="text-sm text-gray-500">Can manage profiles with lower rank</p>
+                      <p className="text-sm text-gray-500">{t('editProfile.canManageProfilesWithLowerRank')}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {disableRankSelection ? (
                         <div
                           className="w-32 h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 opacity-80 flex items-center"
-                          title="Public profiles use default rank"
+                          title={t('editProfile.publicProfilesUseDefaultRank')}
                         >
                           {editingProfile.hierarchy_rank}
                         </div>
@@ -1922,11 +1928,11 @@ const isProfileEditable = useMemo(() => {
                   {Boolean(currentProfile?.can_manage_create_events) && (
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">Can Create Events</p>
-                        <p className="text-sm text-gray-500">Can create new events</p>
+                        <p className="font-medium text-gray-900">{t('editProfile.canCreateEvents')}</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.canCreateNewEvents')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (Boolean(editingProfile?.is_public) ? 'Public profiles cannot create events' : 'Restricted profiles cannot create events') : undefined}>
+                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (Boolean(editingProfile?.is_public) ? t('editProfile.publicProfilesCannotCreateEvents') : t('editProfile.restrictedProfilesCannotCreateEvents')) : undefined}>
                           <input
                             type="checkbox"
                             checked={Boolean(editingProfile.can_create_events)}
@@ -1934,18 +1940,18 @@ const isProfileEditable = useMemo(() => {
                             disabled={!canGrantCanCreateEvents || disableCanCreateEvents}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                         </label>
                         {disableCanCreateEvents && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
                             {Boolean(editingProfile?.is_public) 
-                              ? 'Public profiles cannot create events.'
-                              : 'Restricted profiles cannot create events.'}
+                              ? t('editProfile.publicProfilesCannotCreateEvents')
+                              : t('editProfile.restrictedProfilesCannotCreateEvents')}
                           </p>
                         )}
                         {!canGrantCanCreateEvents && !disableCanCreateEvents && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
-                            You do not have permission to grant this.
+                            {t('editProfile.youDoNotHavePermissionToGrantThis')}
                           </p>
                         )}
                       </div>
@@ -1956,7 +1962,7 @@ const isProfileEditable = useMemo(() => {
                   <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                     <div className="relative">
                       <div className="flex items-center gap-1">
-                        <p className="font-medium text-gray-900">Public Profile</p>
+                        <p className="font-medium text-gray-900">{t('editProfile.publicProfile')}</p>
                         <div className="relative">
                           <HelpCircle 
                             className="w-3.5 h-3.5 text-gray-400 cursor-help" 
@@ -1964,13 +1970,13 @@ const isProfileEditable = useMemo(() => {
                             onMouseLeave={() => setShowPublicTooltip(false)}
                           />
                           {showPublicTooltip && (
-                            <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                              Accessible via link. Cannot edit own label. No email. Preferences not saved.
+                            <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                              {t('editProfile.publicProfileTooltip')}
                             </div>
                           )}
                         </div>
                       </div>
-                      <p className="text-sm text-gray-500">Accessible via link, managed by admins only</p>
+                      <p className="text-sm text-gray-500">{t('editProfile.accessibleViaLinkManagedByAdminsOnly')}</p>
                     </div>
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-3">
@@ -1980,7 +1986,7 @@ const isProfileEditable = useMemo(() => {
                             type="button"
                             onClick={() => setShowPasswordModal(true)}
                             disabled={!canChangePassword}
-                            className={`px-3 py-1.5 text-sm font-medium flex items-center space-x-2 transition-colors ${
+                            className={`px-3 py-1.5 text-sm font-medium flex items-center gap-2 transition-colors ${
                               canChangePassword
                                 ? 'bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200'
                                 : 'bg-gray-50 text-gray-400 rounded-lg cursor-not-allowed opacity-60'
@@ -1988,13 +1994,13 @@ const isProfileEditable = useMemo(() => {
                             title={
                               !canChangePassword
                                 ? isPublicChanged
-                                  ? 'Please save changes first'
-                                  : 'Password can only be changed for public profiles'
-                                : 'Change password for this public profile'
+                                  ? t('editProfile.pleaseSaveChangesFirst')
+                                  : t('editProfile.passwordCanOnlyBeChangedForPublicProfiles')
+                                : t('editProfile.changePasswordForThisPublicProfile')
                             }
                           >
                             <Lock className="w-3.5 h-3.5" />
-                            <span>Change Password</span>
+                            <span>{t('editProfile.changePassword')}</span>
                           </button>
                         )}
                         <label
@@ -2008,7 +2014,7 @@ const isProfileEditable = useMemo(() => {
                             className="sr-only peer"
                             disabled={disablePublicToggle}
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                         </label>
                       </div>
                       {disablePublicToggle && (
@@ -2025,18 +2031,18 @@ const isProfileEditable = useMemo(() => {
               {/* Profile Events Section */}
               {!isCreating && !isCurrentProfileRestricted && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <Calendar className="w-5 h-5" />
-                    <span>Profile Events</span>
+                    <span>{t('editProfile.profileEvents')}</span>
                   </h3>
                   
                   <div className="space-y-2">
                     {profileEventsList.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-2">No events assigned</p>
+                      <p className="text-sm text-gray-500 text-center py-2">{t('editProfile.noEventsAssigned')}</p>
                     ) : (
                       profileEventsList.map((event) => {
                         const eventId = event.event_id || event.id;
-                        const eventName = event.name || 'Untitled Event';
+                        const eventName = event.name || t('profilesGallery.untitledEvent');
                         return (
                           <div
                             key={eventId}
@@ -2046,7 +2052,7 @@ const isProfileEditable = useMemo(() => {
                             <button
                               onClick={() => handleRemoveProfileEvent(eventId)}
                               className="w-6 h-6 flex items-center justify-center text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Remove event"
+                              title={t('editProfile.removeEvent')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2063,10 +2069,10 @@ const isProfileEditable = useMemo(() => {
                           onChange={(e) => setSelectedEventToAdd(e.target.value)}
                           className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">Select event to add...</option>
+                          <option value="">{t('editProfile.selectEventToAdd')}</option>
                           {availableEventsToAdd.map((event) => {
                             const eventId = event.event_id || event.id;
-                            const eventName = event.name || 'Untitled Event';
+                            const eventName = event.name || t('profilesGallery.untitledEvent');
                             return (
                               <option key={eventId} value={eventId}>
                                 {eventName}
@@ -2082,7 +2088,7 @@ const isProfileEditable = useMemo(() => {
                             }
                           }}
                           className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Add event"
+                          title={t('editProfile.addEvent')}
                           disabled={!selectedEventToAdd}
                         >
                           <Plus className="w-4 h-4" />
@@ -2097,9 +2103,9 @@ const isProfileEditable = useMemo(() => {
               {!(isCreating && !initialEventId) && (
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     <Shield className="w-5 h-5" />
-                    <span>Specific Event Authorizations</span>
+                    <span>{t('editProfile.specificEventAuthorizations')}</span>
                   </h3>
                   <div className="flex items-center gap-3">
                     {/* Save/Cancel buttons for event-specific changes */}
@@ -2110,22 +2116,22 @@ const isProfileEditable = useMemo(() => {
                           disabled={savingEventSpecific}
                           className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Cancel
+                          {t('editProfile.cancel')}
                         </button>
                         <button
                           onClick={handleSaveEventSpecific}
                           disabled={savingEventSpecific}
-                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {savingEventSpecific ? (
                             <>
                               <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              <span>Saving...</span>
+                              <span>{t('editProfile.saving')}</span>
                             </>
                           ) : (
                             <>
                               <Save className="w-3 h-3" />
-                              <span>Save</span>
+                              <span>{t('editProfile.save')}</span>
                             </>
                           )}
                         </button>
@@ -2157,14 +2163,14 @@ const isProfileEditable = useMemo(() => {
                                 setShowEventDropdown(true);
                               }}
                               onKeyDown={handleEventInputKeyDown}
-                              placeholder={!eventId ? "Select Event" : "Search events..."}
+                              placeholder={!eventId ? t('editProfile.selectEvent') : t('profilesGallery.searchEvents')}
                               disabled={hasEventSpecificChanges}
-                              className={`px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 ${
+                              className={`px-3 py-1.5 ${pe('8')} text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64 ${
                                 hasEventSpecificChanges ? 'opacity-60 cursor-not-allowed' : ''
                               }`}
-                              title={hasEventSpecificChanges ? 'Please save or cancel changes before switching events' : undefined}
+                              title={hasEventSpecificChanges ? t('editProfile.pleaseSaveOrCancelChangesBeforeSwitchingEvents') : undefined}
                             />
-                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                            <ChevronDown className={`absolute ${endClass('2')} top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none`} />
                           </div>
                           {showEventDropdown && (
                             <div
@@ -2173,7 +2179,7 @@ const isProfileEditable = useMemo(() => {
                             >
                               {selectableOptions.length === 0 ? (
                                 <div className="px-3 py-2 text-sm text-gray-500">
-                                  {eventSearchTerm ? 'No events found' : 'No events available'}
+                                  {eventSearchTerm ? t('profilesGallery.noEventsFound') : t('profilesGallery.noEventsAvailable')}
                                 </div>
                               ) : (
                                 selectableOptions.map((option, index) => {
@@ -2198,7 +2204,7 @@ const isProfileEditable = useMemo(() => {
                                                 ? 'text-red-600 hover:bg-red-50'
                                                 : 'text-gray-700 hover:bg-gray-100'
                                       }`}
-                                      title={isDisabled ? 'Please save or cancel changes before switching events' : undefined}
+                                      title={isDisabled ? t('editProfile.pleaseSaveOrCancelChangesBeforeSwitchingEvents') : undefined}
                                     >
                                       {option.name}
                                     </button>
@@ -2220,7 +2226,7 @@ const isProfileEditable = useMemo(() => {
                       <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                         <div className="relative">
                           <div className="flex items-center gap-1">
-                            <p className="font-medium text-gray-900">Manage Event</p>
+                            <p className="font-medium text-gray-900">{t('editProfile.manageEvent')}</p>
                             <div className="relative">
                               <HelpCircle 
                                 className="w-3.5 h-3.5 text-gray-400 cursor-help" 
@@ -2228,13 +2234,13 @@ const isProfileEditable = useMemo(() => {
                                 onMouseLeave={() => setShowManageEventTooltip(false)}
                               />
                               {showManageEventTooltip && (
-                                <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                                  Can edit event name, URL, upload limits, and cover photo
+                                <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                                  {t('editProfile.manageEventTooltip')}
                                 </div>
                               )}
                             </div>
                           </div>
-                          <p className="text-sm text-gray-500">Can update event settings</p>
+                          <p className="text-sm text-gray-500">{t('editProfile.canUpdateEventSettings')}</p>
                         </div>
                         <div className="flex flex-col items-end">
                           <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanManageEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
@@ -2246,18 +2252,18 @@ const isProfileEditable = useMemo(() => {
                               disabled={disableEventManagementToggles || !canGrantCanManageEvent}
                             />
                             <div
-                              className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
-                              title={disableEventManagementToggles ? 'Public profiles cannot manage events' : !canGrantCanManageEvent ? 'You do not have permission to grant this' : undefined}
+                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}
+                              title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotManageEvents') : !canGrantCanManageEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
                             ></div>
                           </label>
                           {disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
-                              Public profiles cannot manage events.
+                              {t('editProfile.publicProfilesCannotManageEvents')}
                             </p>
                           )}
                           {!canGrantCanManageEvent && !disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
-                              You do not have permission to grant this.
+                              {t('editProfile.youDoNotHavePermissionToGrantThis')}
                             </p>
                           )}
                         </div>
@@ -2268,8 +2274,8 @@ const isProfileEditable = useMemo(() => {
                     <PermissionGate requires="canManageEvent" eventUrl={selectedEventUrl}>
                       <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                         <div>
-                          <p className="font-medium text-gray-900">Delete Event</p>
-                          <p className="text-sm text-gray-500">Can permanently delete this event and all related data</p>
+                          <p className="font-medium text-gray-900">{t('editProfile.deleteEvent')}</p>
+                          <p className="text-sm text-gray-500">{t('editProfile.canPermanentlyDeleteThisEventAndAllRelatedData')}</p>
                         </div>
                         <div className="flex flex-col items-end">
                           <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanDeleteEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
@@ -2281,18 +2287,18 @@ const isProfileEditable = useMemo(() => {
                               disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
                             />
                             <div
-                              className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
-                              title={disableEventManagementToggles ? 'Public profiles cannot delete events' : !canGrantCanDeleteEvent ? 'You do not have permission to grant this' : undefined}
+                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}
+                              title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotDeleteEvents') : !canGrantCanDeleteEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
                             ></div>
                           </label>
                           {disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
-                              Public profiles cannot delete events.
+                              {t('editProfile.publicProfilesCannotDeleteEvents')}
                             </p>
                           )}
                           {!canGrantCanDeleteEvent && !disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
-                              You do not have permission to grant this.
+                              {t('editProfile.youDoNotHavePermissionToGrantThis')}
                             </p>
                           )}
                         </div>
@@ -2303,9 +2309,9 @@ const isProfileEditable = useMemo(() => {
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div className="relative">
                         <div className="flex items-center gap-1">
-                          <p className="font-medium text-gray-900">Upload & Delete Photos</p>
+                          <p className="font-medium text-gray-900">{t('editProfile.uploadDeletePhotos')}</p>
                         </div>
-                        <p className="text-sm text-gray-500">Can upload new photos and delete existing ones</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.canUploadNewPhotosAndDeleteExistingOnes')}</p>
                       </div>
                       <div className="flex flex-col items-end">
                         <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages && !disableCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanUploadAndDeleteImages ? canUploadAndDeleteImagesDisabledReason : undefined}>
@@ -2324,7 +2330,7 @@ const isProfileEditable = useMemo(() => {
                             disabled={!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                         </label>
                         {disableCanUploadAndDeleteImages && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
@@ -2337,11 +2343,11 @@ const isProfileEditable = useMemo(() => {
                     {/* Can Edit */}
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">Can Edit</p>
-                        <p className="text-sm text-gray-500">Can edit albums, groups, moments, and transfer faces</p>
+                        <p className="font-medium text-gray-900">{t('editProfile.canEdit')}</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.canEditAlbumsGroupsMomentsAndTransferFaces')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanEdit && !requiresCanEdit && !disableCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanEdit ? 'Public profiles cannot have edit permissions' : requiresCanEdit ? 'Required when Upload & Delete Photos is enabled' : undefined}>
+                        <label className={`relative inline-flex items-center ${canGrantCanEdit && !requiresCanEdit && !disableCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanEdit ? t('editProfile.publicProfilesCannotHaveEditPermissions') : requiresCanEdit ? t('editProfile.requiredWhenUploadDeletePhotosIsEnabled') : undefined}>
                           <input
                             type="checkbox"
                             checked={Boolean(editingProfile.can_edit)}
@@ -2356,16 +2362,16 @@ const isProfileEditable = useMemo(() => {
                             disabled={!canGrantCanEdit || requiresCanEdit || disableCanEdit}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                         </label>
                         {disableCanEdit && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
-                            Public profiles cannot have edit permissions.
+                            {t('editProfile.publicProfilesCannotHaveEditPermissions')}
                           </p>
                         )}
                         {requiresCanEdit && !disableCanEdit && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
-                            Required when Upload & Delete Photos is enabled
+                            {t('editProfile.requiredWhenUploadDeletePhotosIsEnabled')}
                           </p>
                         )}
                       </div>
@@ -2375,7 +2381,7 @@ const isProfileEditable = useMemo(() => {
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div className="relative">
                         <div className="flex items-center gap-1">
-                          <p className="font-medium text-gray-900">All Photos Access</p>
+                          <p className="font-medium text-gray-900">{t('editProfile.allPhotosAccess')}</p>
                           <div className="relative">
                             <HelpCircle 
                               className="w-3.5 h-3.5 text-gray-400 cursor-help" 
@@ -2383,14 +2389,14 @@ const isProfileEditable = useMemo(() => {
                               onMouseLeave={() => setShowImagesTooltip(false)}
                             />
                             {showImagesTooltip && (
-                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                                <div>Determines which photos are accessible.</div>
-                                <div className="mt-1">Archived photos require archive album access.</div>
+                              <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                                <div>{t('editProfile.determinesWhichPhotosAreAccessible')}</div>
+                                <div className="mt-1">{t('editProfile.archivedPhotosRequireArchiveAlbumAccess')}</div>
                               </div>
                             )}
                           </div>
                         </div>
-                        <p className="text-sm text-gray-500">If ON: Access all photos except listed below. If OFF: Only access listed photos</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllPhotosExceptListedBelow')}</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                         <input
@@ -2400,7 +2406,7 @@ const isProfileEditable = useMemo(() => {
                           disabled={!canGrantAllImages}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
+                        <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                       </label>
                     </div>
 
@@ -2408,7 +2414,7 @@ const isProfileEditable = useMemo(() => {
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div className="relative">
                         <div className="flex items-center gap-1">
-                          <p className="font-medium text-gray-900">All Albums Access</p>
+                          <p className="font-medium text-gray-900">{t('editProfile.allAlbumsAccess')}</p>
                           <div className="relative">
                             <HelpCircle 
                               className="w-3.5 h-3.5 text-gray-400 cursor-help" 
@@ -2416,16 +2422,16 @@ const isProfileEditable = useMemo(() => {
                               onMouseLeave={() => setShowAlbumsTooltip(false)}
                             />
                             {showAlbumsTooltip && (
-                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                                <div>Controls which albums are visible in collection.</div>
-                                <div className="mt-1">Photo access follows the photos rule.</div>
-                                <div className="mt-1">Archived photos require archive album access.</div>
-                                <div className="mt-1">Without edit permission, empty albums are hidden.</div>
+                              <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                                <div>{t('editProfile.controlsWhichAlbumsAreVisibleInCollection')}</div>
+                                <div className="mt-1">{t('editProfile.photoAccessFollowsThePhotosRule')}</div>
+                                <div className="mt-1">{t('editProfile.archivedPhotosRequireArchiveAlbumAccess')}</div>
+                                <div className="mt-1">{t('editProfile.withoutEditPermissionEmptyAlbumsAreHidden')}</div>
                               </div>
                             )}
                           </div>
                         </div>
-                        <p className="text-sm text-gray-500">If ON: Access all albums except listed below. If OFF: Only access listed albums</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllAlbumsExceptListedBelow')}</p>
                       </div>
                       <label className={`relative inline-flex items-center ${canGrantAllAlbums ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                         <input
@@ -2435,7 +2441,7 @@ const isProfileEditable = useMemo(() => {
                           disabled={!canGrantAllAlbums}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
+                        <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                       </label>
                     </div>
 
@@ -2443,7 +2449,7 @@ const isProfileEditable = useMemo(() => {
                     <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                       <div className="relative">
                         <div className="flex items-center gap-1">
-                          <p className="font-medium text-gray-900">All People Access</p>
+                          <p className="font-medium text-gray-900">{t('editProfile.allPeopleAccess')}</p>
                           <div className="relative">
                             <HelpCircle 
                               className="w-3.5 h-3.5 text-gray-400 cursor-help"
@@ -2451,16 +2457,16 @@ const isProfileEditable = useMemo(() => {
                               onMouseLeave={() => setShowGroupsTooltip(false)}
                             />
                             {showGroupsTooltip && (
-                              <div className="absolute left-0 top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal">
-                                <div>Controls which people are visible in collection.</div>
-                                <div className="mt-1">Inaccessible: no face rectangles, hidden from collection.</div>
-                                <div className="mt-1">Without edit permission, empty people are hidden.</div>
-                                <div className="mt-1">Unassociated faces are only accessible with edit permission.</div>
+                              <div className={`absolute ${startClass('0')} top-6 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-normal`}>
+                                <div>{t('editProfile.controlsWhichPeopleAreVisibleInCollection')}</div>
+                                <div className="mt-1">{t('editProfile.inaccessibleNoFaceRectanglesHiddenFromCollection')}</div>
+                                <div className="mt-1">{t('editProfile.withoutEditPermissionEmptyAlbumsAreHidden')}</div>
+                                <div className="mt-1">{t('editProfile.unassociatedFacesAreOnlyAccessibleWithEditPermission')}</div>
                               </div>
                             )}
                           </div>
                         </div>
-                        <p className="text-sm text-gray-500">If ON: Access all groups except listed below. If OFF: Only access listed groups</p>
+                        <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllGroupsExceptListedBelow')}</p>
                       </div>
                       <div className="flex flex-col items-end">
                         <label className={`relative inline-flex items-center ${canGrantAllGroups && !disableAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableAllGroups ? allGroupsDisabledReason : undefined}>
@@ -2478,7 +2484,7 @@ const isProfileEditable = useMemo(() => {
                             disabled={!canGrantAllGroups || disableAllGroups}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
                         </label>
                         {disableAllGroups && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
@@ -2491,7 +2497,7 @@ const isProfileEditable = useMemo(() => {
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm">Select an event to configure event-specific authorizations</p>
+                    <p className="text-sm">{t('editProfile.selectEventToConfigure')}</p>
                   </div>
                 )}
               </div>
@@ -2501,28 +2507,28 @@ const isProfileEditable = useMemo(() => {
               {!isCreating && selectedEventId && (
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     <ImageIcon className="w-5 h-5" />
-                    <span>Specific Photo Access ({profileImages.length})</span>
+                    <span>{t('editProfile.specificPhotoAccess')} ({profileImages.length})</span>
                   </h3>
                   {profileImages.length > 0 && (
                     <button
                       onClick={handleClearAllImages}
-                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center space-x-1"
+                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Clear All</span>
+                      <span>{t('editProfile.clearAll')}</span>
                     </button>
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {Boolean(editingProfile.all_images) 
-                    ? '🚫 These photos are FORBIDDEN to this profile' 
-                    : '✓ These are the ONLY photos accessible to this profile'}
+                    ? t('editProfile.thesePhotosAreForbiddenToThisProfile')
+                    : t('editProfile.theseAreTheOnlyPhotosAccessibleToThisProfile')}
                 </p>
                 {profileImages.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No specific photos configured
+                    {t('editProfile.noSpecificPhotosConfigured')}
                   </p>
                 ) : (
                   <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
@@ -2533,6 +2539,7 @@ const isProfileEditable = useMemo(() => {
                         eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
                         urlHelpers={dynamicUrlHelpers}
                         onRemove={() => handleRemoveImage(image.id)}
+                        title={t('editProfile.clickToRemove')}
                       />
                     ))}
                   </div>
@@ -2544,28 +2551,28 @@ const isProfileEditable = useMemo(() => {
               {!isCreating && selectedEventId && (
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     <FolderOpen className="w-5 h-5" />
-                    <span>Specific Album Access ({profileAlbums.length})</span>
+                    <span>{t('editProfile.specificAlbumAccess')} ({profileAlbums.length})</span>
                   </h3>
                   {profileAlbums.length > 0 && (
                     <button
                       onClick={handleClearAllAlbums}
-                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center space-x-1"
+                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Clear All</span>
+                      <span>{t('editProfile.clearAll')}</span>
                     </button>
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {Boolean(editingProfile.all_albums) 
-                    ? '🚫 These albums are FORBIDDEN to this profile' 
-                    : '✓ These are the ONLY albums accessible to this profile'}
+                    ? t('editProfile.theseAlbumsAreForbiddenToThisProfile')
+                    : t('editProfile.theseAreTheOnlyAlbumsAccessibleToThisProfile')}
                 </p>
                 {profileAlbums.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No specific albums configured
+                    {t('editProfile.noSpecificAlbumsConfigured')}
                   </p>
                 ) : (
                   <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
@@ -2576,6 +2583,7 @@ const isProfileEditable = useMemo(() => {
                         eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
                         urlHelpers={dynamicUrlHelpers}
                         onRemove={() => handleRemoveAlbum(album.id)}
+                        title={t('editProfile.clickToRemove')}
                       />
                     ))}
                   </div>
@@ -2587,28 +2595,28 @@ const isProfileEditable = useMemo(() => {
               {!isCreating && selectedEventId && (
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     <Users className="w-5 h-5" />
-                    <span>Specific Person Access ({profileGroups.length})</span>
+                    <span>{t('editProfile.specificPersonAccess')} ({profileGroups.length})</span>
                   </h3>
                   {profileGroups.length > 0 && (
                     <button
                       onClick={handleClearAllGroups}
-                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center space-x-1"
+                      className="text-sm text-red-600 hover:text-red-700 hover:underline flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Clear All</span>
+                      <span>{t('editProfile.clearAll')}</span>
                     </button>
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {Boolean(editingProfile.all_groups) 
-                    ? '🚫 These people are FORBIDDEN to this profile' 
-                    : '✓ These are the ONLY people accessible to this profile'}
+                    ? t('editProfile.thesePeopleAreForbiddenToThisProfile')
+                    : t('editProfile.theseAreTheOnlyPeopleAccessibleToThisProfile')}
                 </p>
                 {profileGroups.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No specific people configured
+                    {t('editProfile.noSpecificPeopleConfigured')}
                   </p>
                 ) : (
                   <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
@@ -2619,6 +2627,7 @@ const isProfileEditable = useMemo(() => {
                         eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
                         urlHelpers={dynamicUrlHelpers}
                         onRemove={() => handleRemoveGroup(group.id)}
+                        title={t('editProfile.clickToRemove')}
                       />
                     ))}
                   </div>
@@ -2636,13 +2645,13 @@ const isProfileEditable = useMemo(() => {
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
             <button
               onClick={onClose}
               disabled={loading}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Cancel
+              {t('editProfile.cancel')}
             </button>
             <button
               onClick={handleSave}
@@ -2659,17 +2668,17 @@ const isProfileEditable = useMemo(() => {
                 (!isProfileEditable && !isCreating && (!selectedEventId || !hasEventSpecificChanges)) ||
                 (isProfileEditable && !hasChanges && !hasEventSpecificChanges)
               }
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>{isCreating ? 'Creating...' : 'Saving...'}</span>
+                  <span>{isCreating ? t('editProfile.creating') : t('editProfile.saving')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  <span>{isCreating ? 'Create' : 'Save'}</span>
+                  <span>{isCreating ? t('editProfile.createProfile') : t('editProfile.save')}</span>
                 </>
               )}
             </button>
@@ -2683,17 +2692,17 @@ const isProfileEditable = useMemo(() => {
           const evtId = e.event_id || e.id;
           return evtId && String(evtId) === String(eventToRemove);
         });
-        const eventName = eventToRemoveObj?.name || 'this event';
+        const eventName = eventToRemoveObj?.name || t('profilesGallery.untitledEvent');
         return (
           <ConfirmDelete
             isOpen={!!eventToRemove}
             onClose={() => setEventToRemove(null)}
             onConfirm={handleConfirmRemoveEvent}
-            title="Remove Event from Profile"
-            message="Are you sure you want to remove"
+            title={t('editProfile.removeEventFromProfile')}
+            message={t('editProfile.areYouSureWantToRemove')}
             itemName={eventName}
-            confirmText="Remove Event"
-            caption="All profile authorizations for this event will be removed."
+            confirmText={t('editProfile.removeEvent')}
+            caption={t('editProfile.allProfileAuthorizationsForThisEventWillBeRemoved')}
             simpleMessage={false}
           />
         );
@@ -2714,7 +2723,7 @@ const isProfileEditable = useMemo(() => {
 }
 
 // ProfileImageThumb component for grid display
-function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove }) {
+function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove, title }) {
   const getUrl = () => {
     if (!urlHelpers) return null;
     return urlHelpers.getRelativeThumbnailUrl(imageId);
@@ -2726,13 +2735,13 @@ function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove }) {
       alt={imageId}
       onRemove={onRemove}
       size="medium"
-      title="Click to remove"
+      title={title}
     />
   );
 }
 
 // ProfileAlbumThumb component for grid display
-function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove }) {
+function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove, title }) {
   const getUrl = () => {
     if (!urlHelpers || !urlHelpers.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}`;
@@ -2747,13 +2756,13 @@ function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove }) {
       size="medium"
       withGradient={true}
       iconType="image"
-      title="Click to remove"
+      title={title}
     />
   );
 }
 
 // ProfileGroupThumb component for grid display
-function ProfileGroupThumb({ group, eventUrl, urlHelpers, onRemove }) {
+function ProfileGroupThumb({ group, eventUrl, urlHelpers, onRemove, title }) {
   const getUrl = () => {
     if (!urlHelpers || !urlHelpers.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('groups', group.id)}?v=${group.representative_face || 'none'}`;
@@ -2768,7 +2777,7 @@ function ProfileGroupThumb({ group, eventUrl, urlHelpers, onRemove }) {
       size="medium"
       withGradient={true}
       iconType="image"
-      title="Click to remove"
+      title={title}
     />
   );
 }

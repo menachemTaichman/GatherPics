@@ -390,6 +390,23 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
+    // During development/hot reload, context might not be ready yet
+    // Return a safe default instead of throwing to prevent crashes
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('useAuth called outside AuthProvider - returning default values');
+      return {
+        isAuthenticated: false,
+        isLoading: true,
+        showLoginModal: false,
+        loginError: null,
+        login: async () => ({ success: false, error: 'Not authenticated' }),
+        loginWithPublicCode: async () => ({ success: false, error: 'Not authenticated' }),
+        logout: async () => {},
+        requireAuth: () => {},
+        openLoginModal: () => {},
+        closeLoginModal: () => {},
+      };
+    }
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

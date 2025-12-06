@@ -41,6 +41,7 @@ function ImageViewerActions({
   imageActions,
   isUnassociatedGroup = false
 }) {
+  const { t } = useTranslation();
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [settingEventRepresentative, setSettingEventRepresentative] = useState(false);
   const permissions = usePermissions();
@@ -48,8 +49,8 @@ function ImageViewerActions({
 
   const isEventRepresentative = Boolean(eventInfo && imageId && eventInfo.representative_image === imageId);
   const eventRepresentativeTooltip = isEventRepresentative
-    ? 'Current event cover photo'
-    : 'Set as event cover photo';
+    ? t('imageViewer.currentEventCoverPhoto')
+    : t('imageViewer.setAsEventCoverPhoto');
 
   const handleSetEventRepresentative = async () => {
     if (!imageId || !eventUrl || settingEventRepresentative || isEventRepresentative) {
@@ -58,7 +59,7 @@ function ImageViewerActions({
     try {
       setSettingEventRepresentative(true);
       await eventsAPI.update(eventUrl, { representative_image: imageId });
-      showToast('Event cover updated', 'success');
+      showToast(t('imageViewer.eventCoverUpdated'), 'success');
     } catch (error) {
       showToast(formatErrorMessage('set event cover', error), 'error');
     } finally {
@@ -82,7 +83,7 @@ function ImageViewerActions({
 
   return (
     <>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-2">
         {/* Add to album */}
         {permissions.canEdit && (
           <PermissionGate requires="canEdit">
@@ -94,7 +95,8 @@ function ImageViewerActions({
         <button
           onClick={imageActions.toggleBucket}
           className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
-          title={imageActions.allInBucket ? 'Remove from bucket' : 'Add to bucket'}
+          title={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
+          aria-label={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
         >
           <ShoppingBag className={`w-4 h-4 ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
         </button>
@@ -107,7 +109,8 @@ function ImageViewerActions({
           <button
             onClick={imageActions.deleteImages}
             className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
-            title="Delete photo"
+            title={t('imageViewer.deletePhoto')}
+            aria-label={t('imageViewer.deletePhoto')}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -118,7 +121,8 @@ function ImageViewerActions({
           <button
             onClick={() => setShowManageAccessModal(true)}
             className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
-            title="Manage profile access"
+            title={t('imageViewer.manageProfileAccess')}
+            aria-label={t('imageViewer.manageProfileAccess')}
           >
             <Key className="w-4 h-4" />
           </button>
@@ -184,13 +188,13 @@ function ImageViewerActions({
           isOpen={imageActions.showDeleteConfirmModal}
           onClose={imageActions.onCancelDelete}
           onConfirm={imageActions.onConfirmDelete}
-          title="Delete Photo"
-          message="Are you sure you want to delete this photo?"
+          title={t('imageViewer.deletePhoto')}
+          message={t('imageViewer.areYouSureYouWantToDeleteThisPhoto')}
           simpleMessage={true}
           images={imageActions.deleteImagesList}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('imageViewer.delete')}
+          cancelText={t('imageViewer.cancel')}
+          caption={t('imageViewer.thisActionCannotBeUndone')}
         />
       )}
 
@@ -207,8 +211,9 @@ function ImageViewerActions({
 }
 
 function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false }) {
+  const { t } = useTranslation();
   const permissions = usePermissions(); // <-- add this near the top of the component
-  const { isRTL, ms, me } = useRTL();
+  const { isRTL, ms, me, startClass, endClass } = useRTL();
   const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
@@ -356,13 +361,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     switch (e.key) {
       case 'ArrowLeft':
         if (filteredImages.length > 1) {
-          handleNavigate('prev');
+          handleNavigate(isRTL ? 'next' : 'prev');
           return true; // Mark as handled (circular via handleNavigate)
         }
         break;
       case 'ArrowRight':
         if (filteredImages.length > 1) {
-          handleNavigate('next');
+          handleNavigate(isRTL ? 'prev' : 'next');
           return true; // Mark as handled (circular via handleNavigate)
         }
         break;
@@ -573,7 +578,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       const count = result?.len_added ?? 1;
       showToast(
         <span>
-          Removed {count} {count === 1 ? 'photo' : 'photos'} from{' '}
+          {t('imageViewer.removedFromAlbum', { count })} {' '}
           <a href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</a>
         </span>,
         'success'
@@ -1035,7 +1040,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       if (newDescription !== currentDescription) {
         await imagesAPI.update(imageId, { description: newDescription }, eventUrl);
         // Changes are automatically applied by apiService interceptor
-        showToast('Description updated', 'success');
+        showToast(t('imageViewer.descriptionUpdated', { defaultValue: 'Description updated' }), 'success');
       }
       
       setIsEditingDescription(false);
@@ -1205,13 +1210,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         >
 
           {/* Content */}
-          <div className={`flex h-full overflow-hidden min-h-0 ${isRTL ? '' : 'flex-row-reverse'}`}>
+          <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full overflow-hidden min-h-0">
             {/* Image Viewer */}
             <div 
               ref={containerRef}
               className="flex items-center justify-center bg-gray-900 relative overflow-hidden cursor-grab active:cursor-grabbing"
               style={{ 
-                width: 'calc(min(100vw - 2rem, 1024px))' // Always use base modal width for consistent image container
+                width: 'calc(min(100vw - 2rem, 1024px))', // Always use base modal width for consistent image container
+                order: isRTL ? 2 : 2
               }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -1219,7 +1225,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               onMouseLeave={handleMouseUp}
             >
               {loading ? (
-                <div className="text-white">Loading...</div>
+                <div className="text-white">{t('imageViewer.loading')}</div>
               ) : (
                 <motion.div
                   className="relative"
@@ -1309,7 +1315,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 handleTransferFace(face);
                               }}
                               className={`absolute -bottom-4 ${isRTL ? '-right-1' : '-left-1'} ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
-                              title="Transfer face to another group"
+                              title={t('imageViewer.transferFaceToAnotherGroup')}
+                              aria-label={t('imageViewer.transferFaceToAnotherGroup')}
                             >
                               <Edit className="w-2.5 h-2.5" />
                             </button>
@@ -1341,25 +1348,22 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {/* Close button - top-right in LTR, top-left in RTL */}
                   <button
                     onClick={onClose}
-                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${
-                      isRTL ? 'left-4' : 'right-4'
-                    }`}
-                    title="Close"
+                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${endClass('4')}`}
+                    title={t('imageViewer.close')}
+                    aria-label={t('imageViewer.close')}
                   >
                     <X className="w-5 h-5" />
                   </button>
 
                   {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
-                  <div className={`absolute bottom-5 pointer-events-auto flex items-center space-x-4 ${
-                    isRTL ? 'left-4' : 'right-4'
-                  }`}>
+                  <div className={`absolute bottom-5 pointer-events-auto flex items-center gap-4 ${endClass('4')}`}>
                     {(() => {
                       const favoriteTooltip = imageActions.isFavorite
-                        ? (permissions.canEdit ? 'Remove from Favorites' : 'In Favorites')
-                        : (permissions.canEdit ? 'Add to Favorites' : 'Favorites');
+                        ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
+                        : (permissions.canEdit ? t('imageViewer.addToFavorites') : t('imageViewer.favorites'));
                       const archiveTooltip = imageActions.isArchived
-                        ? (permissions.canEdit ? 'Remove from Archive' : 'In Archive')
-                        : (permissions.canEdit ? 'Move to Archive' : 'Archive');
+                        ? (permissions.canEdit ? t('imageViewer.removeFromArchive') : t('imageViewer.inArchive'))
+                        : (permissions.canEdit ? t('imageViewer.moveToArchive') : t('imageViewer.archive'));
                       
                       return (
                         <>
@@ -1376,6 +1380,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
                               }`}
                               title={favoriteTooltip}
+                              aria-label={favoriteTooltip}
                               aria-pressed={imageActions.isFavorite}
                               disabled={!permissions.canEdit}
                             >
@@ -1409,6 +1414,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
                               }`}
                               title={archiveTooltip}
+                              aria-label={archiveTooltip}
                               aria-pressed={imageActions.isArchived}
                               disabled={!permissions.canEdit}
                             >
@@ -1434,15 +1440,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
                   {/* Navigation - top-center */}
                   {filteredImages.length > 1 && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
                       <button
                         onClick={() => handleNavigate('prev')}
                         className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
-                        title="Previous"
+                        title={t('imageViewer.previous')}
+                        aria-label={t('imageViewer.previous')}
                       >
-                        <ArrowLeft className="w-4 h-4" />
+                        {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
                       </button>
-                      <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center">
+                      <div dir="ltr" className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center">
                         {isEditingIndex ? (
                           <input
                             type="text"
@@ -1476,7 +1483,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <span
                             className="w-8 inline-block text-center cursor-text"
                             style={{width: '2rem'}}
-                            title="Click to edit"
+                            title={t('imageViewer.clickToEdit')}
                             onClick={() => setIsEditingIndex(true)}
                           >
                             {effectiveIndex + 1}
@@ -1488,78 +1495,141 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       <button
                         onClick={() => handleNavigate('next')}
                         className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
-                        title="Next"
+                        title={t('imageViewer.next')}
+                        aria-label={t('imageViewer.next')}
                       >
-                        <ArrowRight className="w-4 h-4" />
+                        {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                       </button>
                     </div>
                   )}
 
                   {/* Zoom - bottom-center */}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 pointer-events-auto">
-                    <button
-                      onClick={handleZoomOut}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
-                      title="Zoom out"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center space-x-1">
-                      <input
-                        type="text"
-                        id="image-viewer-zoom"
-                        name="image-viewer-zoom"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
-                        onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
-                        onBlur={e => {
-                          let val = parseInt(e.target.value, 10);
-                          if (isNaN(val)) val = 100;
-                          val = Math.max(50, Math.min(300, val));
-                          setZoom(val / 100);
-                          setZoomInputValue(undefined);
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.target.blur();
-                          } else if (e.key === 'Escape') {
-                            setZoomInputValue(undefined);
-                          }
-                        }}
-                        className="w-10 text-center bg-transparent focus:outline-none"
-                        style={{width: '2.5rem'}}
-                      />
-                    </div>
-                    <button
-                      onClick={handleZoomIn}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
-                      title="Zoom in"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleReset}
-                      className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
-                      title="Reset zoom"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+                    {isRTL ? (
+                      <>
+                        <button
+                          onClick={handleReset}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.resetZoom')}
+                          aria-label={t('imageViewer.resetZoom')}
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={handleZoomIn}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.zoomIn')}
+                          aria-label={t('imageViewer.zoomIn')}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center gap-1">
+                          <input
+                            type="text"
+                            id="image-viewer-zoom"
+                            name="image-viewer-zoom"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
+                            onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                            onBlur={e => {
+                              let val = parseInt(e.target.value, 10);
+                              if (isNaN(val)) val = 100;
+                              val = Math.max(50, Math.min(300, val));
+                              setZoom(val / 100);
+                              setZoomInputValue(undefined);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.target.blur();
+                              } else if (e.key === 'Escape') {
+                                setZoomInputValue(undefined);
+                              }
+                            }}
+                            className="w-10 text-center bg-transparent focus:outline-none"
+                            style={{width: '2.5rem'}}
+                          />
+                        </div>
+                        <button
+                          onClick={handleZoomOut}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.zoomOut')}
+                          aria-label={t('imageViewer.zoomOut')}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleZoomOut}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.zoomOut')}
+                          aria-label={t('imageViewer.zoomOut')}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <div className="bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center gap-1">
+                          <input
+                            type="text"
+                            id="image-viewer-zoom"
+                            name="image-viewer-zoom"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={zoomInputValue !== undefined ? zoomInputValue : Math.round(zoom * 100)}
+                            onChange={e => setZoomInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                            onBlur={e => {
+                              let val = parseInt(e.target.value, 10);
+                              if (isNaN(val)) val = 100;
+                              val = Math.max(50, Math.min(300, val));
+                              setZoom(val / 100);
+                              setZoomInputValue(undefined);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.target.blur();
+                              } else if (e.key === 'Escape') {
+                                setZoomInputValue(undefined);
+                              }
+                            }}
+                            className="w-10 text-center bg-transparent focus:outline-none"
+                            style={{width: '2.5rem'}}
+                          />
+                        </div>
+                        <button
+                          onClick={handleZoomIn}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.zoomIn')}
+                          aria-label={t('imageViewer.zoomIn')}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={handleReset}
+                          className="bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow"
+                          title={t('imageViewer.resetZoom')}
+                          aria-label={t('imageViewer.resetZoom')}
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
 
 
                   {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
-                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${
-                      isRTL ? 'right-4' : 'left-4'
-                    }`}
-                    title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${startClass('4')}`}
+                    title={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
+                    aria-label={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
                   >
                     {sidebarVisible ? (
-                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
-                    ) : (
+                      // When visible, point in direction to close (left in RTL, right in LTR)
                       isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+                    ) : (
+                      // When hidden, point in direction to open (right in RTL, left in LTR)
+                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
                     )}
                   </button>
                 </div>
@@ -1571,7 +1641,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         {sidebarVisible && (
         <div className={`w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
           isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'
-        }`}>
+        }`} style={{ order: isRTL ? 1 : 1 }}>
           {/* Controls */}
           <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
                 <ImageViewerActions
@@ -1588,23 +1658,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   isUnassociatedGroup={isUnassociatedGroup}
                 />
 
-                {/* Details Section */}
+                    {/* Details Section */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-1">Photo Details</h4>
+                  <h4 className="text-xs font-medium text-gray-700 mb-1">{t('imageViewer.photoDetails')}</h4>
                   <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className="font-semibold">Name:</span> {storeImageInfo?.label || imageMeta.label}</div>
-                    <div><span className="font-semibold">Date:</span> {formatDateTime(storeImageInfo?.date_taken)}</div>
-                    <div><span className="font-semibold">Original size:</span> {(() => {
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.name')}</span> {storeImageInfo?.label || imageMeta.label}</div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.date')}</span> <span dir="ltr">{formatDateTime(storeImageInfo?.date_taken)}</span></div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalSize')}</span> <span dir="ltr">{(() => {
                       const size = storeImageInfo?.file_size;
-                      if (!size) return 'Unknown';
+                      if (!size) return t('imageViewer.unknown');
                       if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
                       if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
                       return (size / 1024).toFixed(1) + ' KB';
-                    })()}</div>
-                    <div><span className="font-semibold">Original resolution:</span> {storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : 'Unknown'}</div>
+                    })()}</span></div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalResolution')}</span> <span dir="ltr">{storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : t('imageViewer.unknown')}</span></div>
                     <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
                       <div className="flex items-start">
-                        <span className={`font-semibold flex-shrink-0 ${me('2')}`}>Description:</span>
+                        <span className={`font-semibold flex-shrink-0 ${me('2')}`}>{t('imageViewer.description')}</span>
                         {isEditingDescription && permissions.canEdit ? (
                           <div className="flex-1 min-w-0">
                             <textarea
@@ -1618,20 +1688,20 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                               disabled={isSavingDescription}
                               style={{ minHeight: '4rem' }}
                             />
-                            <div className="flex items-center justify-end space-x-2 mt-2">
+                            <div className="flex items-center justify-end gap-2 mt-2">
                               <button
                                 onClick={handleDescriptionCancel}
                                 className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
                                 disabled={isSavingDescription}
                               >
-                                Cancel
+                                {t('imageViewer.cancel')}
                               </button>
                               <button
                                 onClick={handleDescriptionSave}
                                 className="text-xs text-primary-600 hover:text-primary-800 px-2 py-1 rounded hover:bg-primary-50 transition-colors"
                                 disabled={isSavingDescription}
                               >
-                                {isSavingDescription ? 'Saving...' : 'Save'}
+                                {isSavingDescription ? t('imageViewer.saving') : t('imageViewer.save')}
                               </button>
                             </div>
                           </div>
@@ -1639,12 +1709,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <div
                             onClick={handleDescriptionClick}
                             className={`flex-1 min-w-0 text-gray-500 ${permissions.canEdit ? 'cursor-text hover:text-gray-700' : ''} transition-colors`}
-                            title={permissions.canEdit ? 'Click to edit description' : ''}
+                            title={permissions.canEdit ? t('imageViewer.clickToEditDescription') : ''}
                           >
                             {storeImageInfo?.description ? (
                               <span className="whitespace-pre-wrap break-words">{storeImageInfo.description}</span>
                             ) : (
-                              <span className="text-gray-400 italic">{permissions.canEdit ? 'Click to add description...' : 'No description'}</span>
+                              <span className="text-gray-400 italic">{permissions.canEdit ? t('imageViewer.clickToAddDescription') : t('imageViewer.noDescription')}</span>
                             )}
                           </div>
                         )}
@@ -1656,25 +1726,26 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     <div className="flex items-center justify-between">
                       <div className="text-xs text-gray-500 flex-1 min-w-0">
-                        <span className="font-semibold">Moment:</span>
+                        <span className={`font-semibold ${me('2')}`}>{t('imageViewer.moment')}</span>
                         {momentInfo ? (
                           <a
                             href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
                             onClick={handleMomentLinkClick}
                             className={`${ms('1')} text-primary-600 hover:text-primary-700 hover:underline cursor-pointer`}
-                            title="Jump to moment"
+                            title={t('imageViewer.jumpToMoment')}
                           >
                             {momentInfo.label}
                           </a>
                         ) : (
-                          <span className={ms('1')}>None</span>
+                          <span className={ms('1')}>{t('imageViewer.none')}</span>
                         )}
                       </div>
                       <PermissionGate requires="canEdit">
                         <button
                           onClick={() => setShowMoveToMomentModal(true)}
                           className={`w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ${ms('2')}`}
-                          title="Edit moment"
+                          title={t('imageViewer.editMoment')}
+                          aria-label={t('imageViewer.editMoment')}
                         >
                           <Edit2 className="w-3 h-3 text-gray-600" />
                         </button>
@@ -1690,11 +1761,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
                   <div className="flex flex-col min-h-0">
                     <div className="flex items-center justify-between px-4 pt-4">
-                      <h3 className="font-semibold text-gray-900">Albums ({albumsList.length})</h3>
+                      <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
                       <button
                         onClick={() => setAlbumsOpen(v => !v)}
                         className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
-                        title={albumsOpen ? 'Hide albums' : 'Show albums'}
+                        title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
+                        aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
                       >
                         {albumsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
@@ -1743,7 +1815,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                     <button
                                       onClick={() => handleRemoveFromAlbum(album)}
                                       className={`${ms('3')} p-1.5 hover:bg-red-100 rounded-lg transition-colors`}
-                                      title={`Remove from ${album.label}`}
+                                      title={t('imageViewer.removeFromAlbum', { album: album.label })}
+                                      aria-label={t('imageViewer.removeFromAlbum', { album: album.label })}
                                     >
                                       <Minus className="w-4 h-4 text-red-600" />
                                     </button>
@@ -1771,8 +1844,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 {permissions.has_groups && (
                   <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
                     <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-semibold text-gray-900">Faces ({facesList.length})</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
                         <button
                           onClick={() => {
                             if (showRectangles) {
@@ -1781,7 +1854,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             setShowRectangles(v => !v);
                           }}
                           className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
-                          title={showRectangles ? 'Hide face tags' : 'Show face tags'}
+                          title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
+                          aria-label={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
                         >
                           {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
@@ -1789,7 +1863,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       <button
                         onClick={() => setFacesOpen(v => !v)}
                         className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
-                        title={facesOpen ? 'Hide faces' : 'Show faces'}
+                        title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
+                        aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
                       >
                         {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
@@ -1798,7 +1873,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       <div className="faces-list-container overflow-y-auto">
                         <div className="px-4">
                           {facesList.length === 0 ? (
-                            <p className="text-gray-500 text-sm">No faces detected in this photo.</p>
+                            <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
                           ) : (
                             <div className="space-y-2">
                               {facesList.map((face, index) => (
@@ -1827,7 +1902,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                       href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
                                       onClick={(e) => handlePersonLinkClick(e, face)}
                                       className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                      title="Go to person page"
+                                      title={t('imageViewer.goToPersonPage')}
                                     >
                                       <User className="w-4 h-4 text-gray-600" />
                                     </a>

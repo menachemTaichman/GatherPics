@@ -4,11 +4,15 @@ import { X, Star } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 /**
  * Modal for selecting which face to use as representative when an image has multiple faces from the same group
  */
 export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpers, groupLabel, onSelect }) {
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const [selectedFaceId, setSelectedFaceId] = useState(null);
   const [modalId] = useState(() => `select-face-rep-modal-${Math.random().toString(36).slice(2)}`);
 
@@ -128,15 +132,18 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">
-              Select Face for {groupLabel}
+              {t('selectFaceForRep.selectFaceFor')} {groupLabel}
             </h2>
             <button
               onClick={handleCancel}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title={t('selectFaceForRep.cancel')}
+              aria-label={t('selectFaceForRep.cancel')}
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
@@ -145,13 +152,13 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
           {/* Content */}
           <div className="p-6">
             <p className="text-sm text-gray-600 mb-4">
-              This image contains multiple faces from {groupLabel}. Select which one to use as the representative.
+              {t('selectFaceForRep.thisImageContainsMultipleFacesFrom')} {groupLabel}. {t('selectFaceForRep.selectWhichOneToUseAsTheRepresentative')}
             </p>
             
             {faces.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <p>No faces found in this image.</p>
-                <p className="text-xs mt-2">This may happen when using filters with OR operator.</p>
+                <p>{t('selectFaceForRep.noFacesFoundInThisImage')}</p>
+                <p className="text-xs mt-2">{t('selectFaceForRep.thisMayHappenWhenUsingFiltersWithOrOperator')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3 max-h-96 overflow-y-auto">
@@ -194,15 +201,15 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end space-x-3 px-6 pb-6">
+          <div className="flex items-center justify-end gap-3 px-6 pb-6">
             <button
               type="button"
               onClick={handleSelect}
-              className="btn-primary flex items-center space-x-2"
+              className="btn-primary flex items-center gap-2"
               disabled={!selectedFaceId || faces.length === 0}
             >
               <Star className="w-4 h-4" />
-              <span>Set as Representative</span>
+              <span>{t('selectFaceForRep.setAsRepresentative')}</span>
             </button>
           </div>
         </motion.div>

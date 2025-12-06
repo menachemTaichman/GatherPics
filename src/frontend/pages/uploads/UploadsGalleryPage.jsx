@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Eye, Trash2, Edit2, Save, RotateCcw, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
+import { Upload, Eye, Trash2, Plus } from 'lucide-react';
 import { uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
@@ -18,11 +20,11 @@ import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function UploadsGallery({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const eventId = useEventId(eventUrl);
   const [sortBy, setSortBy] = useState(() => getPreference('UploadsGallery.sortBy', 'started_at'));
   const [sortDir, setSortDir] = useState(() => getPreference('UploadsGallery.sortDir', 'desc'));
-  const [editingNotes, setEditingNotes] = useState(null);
-  const [notesValue, setNotesValue] = useState('');
   const [deleteUpload, setDeleteUpload] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   
@@ -80,34 +82,12 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
     }
   };
 
-  const handleEditNotes = (upload) => {
-    setEditingNotes(upload.id);
-    setNotesValue(upload.notes || '');
-  };
-
-  const handleSaveNotes = async (uploadId) => {
-    try {
-      await uploadsAPI.update(uploadId, { notes: notesValue }, eventUrl);
-      showToast('Notes updated', 'success');
-      setEditingNotes(null);
-      setNotesValue('');
-    } catch (error) {
-      console.error('Failed to update notes:', error);
-      showToast(formatErrorMessage('update notes', error), 'error');
-    }
-  };
-
-  const handleCancelEditNotes = () => {
-    setEditingNotes(null);
-    setNotesValue('');
-  };
-
   const handleDeleteConfirm = async () => {
     if (!deleteUpload) return;
     
     try {
       await uploadsAPI.delete(deleteUpload.id, eventUrl);
-      showToast('Upload deleted', 'success');
+      showToast(t('uploadsGallery.uploadDeleted'), 'success');
       setDeleteUpload(null);
     } catch (error) {
       console.error('Failed to delete upload:', error);
@@ -128,21 +108,21 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className="w-full">
+      <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sticky Header */}
         <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                   <Upload className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Uploads History</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{t('uploadsGallery.uploadsHistory')}</h1>
                   <p className="text-sm text-gray-500">
                     {sortedUploads.length === 0 
-                      ? 'No uploads yet'
-                      : `${sortedUploads.length} upload${sortedUploads.length !== 1 ? 's' : ''}`
+                      ? t('uploadsGallery.noUploadsYet')
+                      : `${sortedUploads.length} ${sortedUploads.length === 1 ? t('uploadsGallery.upload') : t('uploadsGallery.uploadsPlural')}`
                     }
                   </p>
                 </div>
@@ -160,9 +140,9 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
               className="text-center py-12"
             >
               <Upload className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No uploads yet</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{t('uploadsGallery.noUploadsYet')}</h3>
               <p className="text-gray-500">
-                Upload some photos to get started
+                {t('uploadsGallery.uploadSomePhotosToGetStarted')}
               </p>
             </motion.div>
           ) : (
@@ -172,14 +152,14 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                 columns={[
                   {
                     key: 'id',
-                    label: 'ID',
+                    label: t('uploadsGallery.id'),
                     align: 'left',
                     cellClassName: 'text-xs text-gray-500 font-mono',
                     renderCell: (upload) => upload.id,
                   },
                   {
                     key: 'started_at',
-                    label: 'Started',
+                    label: t('uploadsGallery.started'),
                     sortable: true,
                     align: 'left',
                     cellClassName: 'text-gray-900',
@@ -187,15 +167,15 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                   },
                   {
                     key: 'profile_label',
-                    label: 'Profile',
+                    label: t('uploadsGallery.profile'),
                     sortable: true,
                     align: 'left',
                     cellClassName: 'text-gray-700',
-                    renderCell: (upload) => upload.profile_label || 'Unknown',
+                    renderCell: (upload) => upload.profile_label || t('uploadsGallery.unknown'),
                   },
                   {
                     key: 'images_count',
-                    label: 'Images',
+                    label: t('uploadsGallery.images'),
                     sortable: true,
                     align: 'center',
                     cellClassName: 'text-gray-700',
@@ -203,7 +183,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                   },
                   {
                     key: 'faces_count',
-                    label: 'Faces',
+                    label: t('uploadsGallery.faces'),
                     sortable: true,
                     align: 'center',
                     cellClassName: 'text-gray-700',
@@ -211,7 +191,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                   },
                   {
                     key: 'clusters_count',
-                    label: 'Groups',
+                    label: t('uploadsGallery.groups'),
                     sortable: true,
                     align: 'center',
                     cellClassName: 'text-gray-700',
@@ -219,7 +199,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                   },
                   {
                     key: 'status',
-                    label: 'Status',
+                    label: t('uploadsGallery.status'),
                     sortable: true,
                     align: 'left',
                     renderCell: (upload) => (
@@ -230,73 +210,40 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                           ? 'bg-red-100 text-red-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {upload.status || 'unknown'}
+                        {upload.status || t('uploadsGallery.unknown')}
                       </span>
                     ),
                   },
                   {
                     key: 'notes',
-                    label: 'Notes',
+                    label: t('uploadsGallery.notes'),
                     align: 'left',
                     cellClassName: 'text-gray-700',
-                    renderCell: (upload) =>
-                      editingNotes === upload.id ? (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={notesValue}
-                            onChange={(e) => setNotesValue(e.target.value)}
-                            className="flex-1 border rounded px-2 py-1 text-sm"
-                            placeholder="Add notes..."
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => handleSaveNotes(upload.id)}
-                            className="p-1 hover:bg-green-100 rounded transition-colors"
-                            title="Save"
-                          >
-                            <Save className="w-4 h-4 text-green-600" />
-                          </button>
-                          <button
-                            onClick={handleCancelEditNotes}
-                            className="p-1 hover:bg-red-100 rounded transition-colors"
-                            title="Cancel"
-                          >
-                            <RotateCcw className="w-4 h-4 text-red-600" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-2 group">
-                          <span className="flex-1 truncate max-w-xs">
-                            {upload.notes || <span className="text-gray-400 italic">No notes</span>}
-                          </span>
-                          <button
-                            onClick={() => handleEditNotes(upload)}
-                            className="p-1 hover:bg-blue-100 rounded transition-colors opacity-0 group-hover:opacity-100"
-                            title="Edit notes"
-                          >
-                            <Edit2 className="w-4 h-4 text-blue-600" />
-                          </button>
-                        </div>
-                      ),
+                    renderCell: (upload) => (
+                      <span className="truncate max-w-xs">
+                        {upload.notes || <span className="text-gray-400 italic">{t('uploadsGallery.noNotes')}</span>}
+                      </span>
+                    ),
                   },
                   {
                     key: 'actions',
-                    label: 'Actions',
+                    label: t('uploadsGallery.actions'),
                     align: 'right',
                     renderCell: (upload) => (
-                      <div className="flex items-center justify-end space-x-2">
+                      <div className="flex items-center justify-end gap-2">
                         <Link
                           to={`/${eventUrl}/uploads/${upload.id}`}
                           className="p-2 hover:bg-blue-100 rounded-lg transition-colors inline-flex"
-                          title="View upload"
+                          title={t('uploadsGallery.viewUpload')}
+                          aria-label={t('uploadsGallery.viewUpload')}
                         >
                           <Eye className="w-4 h-4 text-blue-600" />
                         </Link>
                         <button
                           onClick={() => setDeleteUpload(upload)}
                           className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                          title="Delete upload"
+                          title={t('uploadsGallery.deleteUpload')}
+                          aria-label={t('uploadsGallery.deleteUpload')}
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
@@ -310,15 +257,15 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                 onSort={handleSort}
                 emptyState={{
                   icon: Upload,
-                  title: 'No uploads yet',
-                  message: 'Upload some photos to get started',
+                  title: t('uploadsGallery.noUploadsYet'),
+                  message: t('uploadsGallery.uploadSomePhotosToGetStarted'),
                 }}
                 getRowKey={(upload) => upload.id}
               />
               
               {/* Note about data changes */}
               <div className="mt-4 text-xs text-gray-500 italic text-center">
-                Note: Data may have changed since these uploads were created
+                {t('uploadsGallery.dataMayHaveChanged')}
               </div>
             </>
           )}
@@ -331,12 +278,12 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
           isOpen={!!deleteUpload}
           onClose={() => setDeleteUpload(null)}
           onConfirm={handleDeleteConfirm}
-          title="Delete Upload"
-          message="Are you sure you want to delete this upload?"
+          title={t('uploadsGallery.deleteUploadTitle')}
+          message={t('uploadsGallery.deleteUploadMessage')}
           simpleMessage={true}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone. The upload record will be deleted, but the images will remain."
+          confirmText={t('account.delete')}
+          cancelText={t('account.cancel')}
+          caption={t('uploadsGallery.deleteUploadCaption')}
         />
       )}
 
@@ -358,7 +305,8 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
           className="w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center group"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          title="Upload new photos"
+          title={t('uploadsGallery.uploadNewPhotos')}
+          aria-label={t('uploadsGallery.uploadNewPhotos')}
         >
           <Plus className="w-8 h-8" />
         </motion.button>

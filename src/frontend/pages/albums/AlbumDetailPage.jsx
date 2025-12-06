@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   ArrowLeft, 
   ArrowUp,
@@ -37,6 +38,9 @@ import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { PermissionGate } from '../../components/common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
+import { APP_CONFIG } from '../../config/appConfig';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -46,6 +50,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const navigate = useNavigate();
   const urlHelpers = injectedUrlHelpers;
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   const [album, setAlbum] = useState(null);
   const permissions = usePermissions();
   const { isAuthenticated } = useAuth();
@@ -276,6 +282,15 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     }
   }, [currentAlbums, album?.id]);
 
+  // Set document title
+  useEffect(() => {
+    if (album?.label) {
+      document.title = `${album.label} - ${t('albumDetail.album')} | ${APP_CONFIG.name}`;
+    } else {
+      document.title = `${t('albumDetail.album')} | ${APP_CONFIG.name}`;
+    }
+  }, [album?.label, i18n.language]);
+
   // Load album data
   useEffect(() => {
     async function loadAlbumData() {
@@ -434,7 +449,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       await albumsAPI.removeImages(album.id, Array.from(selectedImages), eventUrl);
       // Changes are automatically applied by apiService interceptor
       clearSelection();
-      showToast(`${selectedImages.size} removed from album`, 'success');
+      showToast(`${selectedImages.size} ${t('albumDetail.removedFromAlbum')}`, 'success');
     } catch (error) {
       console.error('Error removing from album:', error);
       showToast(formatErrorMessage('remove from album', error), 'error');
@@ -448,7 +463,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     try {
       await albumsAPI.delete(album.id, eventUrl);
       // Changes are automatically applied by apiService interceptor
-      showToast(`Album "${album.label}" deleted`, 'success');
+      showToast(`${t('albumDetail.albumDeleted')}: "${album.label}"`, 'success');
       navigate(`/${eventUrl}/albums`);
     } catch (error) {
       console.error('Error deleting album:', error);
@@ -479,7 +494,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       const conflictResult = await albumsAPI.checkName(editingTitle.trim(), album.id, eventUrl);
       
       if (conflictResult.conflict) {
-        showToast('An album with this name already exists', 'error');
+        showToast(t('albumDetail.albumNameAlreadyExists'), 'error');
         setNameConflict(true);
         return;
       }
@@ -505,7 +520,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       
       setIsEditingTitle(false);
       setNameConflict(false);
-      showToast('Album name updated', 'success');
+      showToast(t('albumDetail.albumNameUpdated'), 'success');
     } catch (error) {
       console.error('Error updating album name:', error);
       showToast(formatErrorMessage('update album name', error), 'error');
@@ -541,19 +556,20 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Pinned Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-4">
             <Link
               to={`/${eventUrl}/albums`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Back to all albums"
+              title={t('albumDetail.backToAllAlbums')}
+              aria-label={t('albumDetail.backToAllAlbums')}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <div className="relative">
               <div 
                 className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
@@ -567,22 +583,23 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                         e.stopPropagation();
                         try {
                           await albumsAPI.update(album.id, { representative_image: null }, eventUrl);
-                          showToast('Representative removed', 'success');
+                          showToast(t('albumDetail.removeRepresentative'), 'success');
                         } catch (error) {
                           showToast(formatErrorMessage('remove representative', error), 'error');
                         }
                       }}
-                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
-                      title="Remove representative"
+                      className={`absolute -bottom-1 ${isRTL ? '-left-1' : '-right-1'} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
+                      title={t('albumDetail.removeRepresentative')}
+                      aria-label={t('albumDetail.removeRepresentative')}
                     >
                       <Minus className="w-3 h-3" />
                     </button>
                   </PermissionGate>
                 )}
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 {isEditingTitle ? (
-                  <div className="flex items-center space-x-2" onBlur={(e) => {
+                  <div className="flex items-center gap-2" onBlur={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget)) {
                       handleTitleCancel();
                     }
@@ -592,6 +609,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                         type="text"
                         id="edit-album-title"
                         name="edit-album-title"
+                        dir={isRTL ? 'rtl' : 'ltr'}
                         value={editingTitle}
                         onChange={(e) => {
                           setEditingTitle(e.target.value);
@@ -610,41 +628,45 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                         autoFocus
                       />
                       {nameConflict && (
-                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                        <div className={`absolute top-full ${isRTL ? 'right-0' : 'left-0'} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
                           <AlertTriangle className="w-3 h-3" />
-                          <span>Name already exists</span>
+                          <span>{t('albumDetail.nameAlreadyExists')}</span>
                         </div>
                       )}
                     </div>
                     <button
                       onClick={handleTitleSave}
                       className="p-1 hover:bg-green-100 rounded transition-colors"
+                      title={t('albumDetail.save')}
+                      aria-label={t('albumDetail.save')}
                     >
                       <Check className="w-4 h-4 text-green-600" />
                     </button>
                     <button
                       onClick={handleTitleCancel}
                       className="p-1 hover:bg-red-100 rounded transition-colors"
+                      title={t('albumDetail.cancel')}
+                      aria-label={t('albumDetail.cancel')}
                     >
                       <X className="w-4 h-4 text-red-600" />
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <h1 
                       className={`text-3xl font-bold text-gray-900 w-[200px] ${
                         (isDefaultAlbum || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
                       onClick={(isDefaultAlbum || !permissions.canEdit) ? undefined : handleTitleEdit}
                     >
-                      {album.label || `Album ${album.id}`}
+                      {album.label || `${t('albumDetail.album')} ${album.id}`}
                     </h1>
                   </div>
                 )}
               </div>
               <div className="relative">
                 <p className="text-gray-600">
-                  {sortedImages.length} photos
+                  {sortedImages.length} {t('albumDetail.photos')}
                 </p>
               </div>
               </div>
@@ -655,11 +677,12 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
         <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: Sort */}
-            <div className="flex items-center space-x-3 px-4">
+            <div className="flex items-center gap-3 px-4">
             <button
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
-              title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+              title={t('albumsGallery.sort') + ' ' + (sortOrder === 'asc' ? t('albumsGallery.ascending') : t('albumsGallery.descending'))}
+              aria-label={t('albumsGallery.sort') + ' ' + (sortOrder === 'asc' ? t('albumsGallery.ascending') : t('albumsGallery.descending'))}
             >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="w-4 h-4" />
@@ -670,7 +693,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             </div>
             
             {/* Group 2: Zoom */}
-            <div className="flex items-center space-x-3 px-4">
+            <div className="flex items-center gap-3 px-4">
             <button
               onClick={() => {
                 const currentPercent = Math.round(imageSize * 100);
@@ -682,7 +705,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               }}
               disabled={imageSize <= 0.5}
               className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Decrease size"
+              title={t('albumDetail.decreaseSize')}
+              aria-label={t('albumDetail.decreaseSize')}
             >
               <Minus className="w-4 h-4" />
             </button>
@@ -692,6 +716,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 name="album-detail-image-size"
               inputMode="numeric"
               pattern="[0-9]*"
+              dir={isRTL ? 'rtl' : 'ltr'}
               value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
               onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => {
@@ -721,7 +746,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               }}
               disabled={imageSize >= 3}
               className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Increase size"
+              title={t('albumDetail.increaseSize')}
+              aria-label={t('albumDetail.increaseSize')}
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -729,7 +755,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
             {/* Group 3: Selection Mode Toggle */}
             {sortedImages.length > 0 && (
-              <div className="flex items-center space-x-3 px-4">
+              <div className="flex items-center gap-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -737,7 +763,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                       ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
+                  title={selectionMode ? t('albumDetail.cancelSelectionMode') : t('albumDetail.showCheckboxes')}
+                  aria-label={selectionMode ? t('albumDetail.cancelSelectionMode') : t('albumDetail.showCheckboxes')}
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
@@ -745,13 +772,14 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             )}
 
             {/* Group 4: Delete Album (custom only) & Manage Access (all albums) */}
-            <div className="flex items-center space-x-3 px-4">
+            <div className="flex items-center gap-3 px-4">
               {!isDefaultAlbum && (
                 <PermissionGate requires="canEdit">
                   <button
                     onClick={() => setShowDeleteModal(true)}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-red-100 text-red-700 flex items-center justify-center"
-                    title="Delete album"
+                    title={t('albumDetail.deleteAlbum')}
+                    aria-label={t('albumDetail.deleteAlbum')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -761,7 +789,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 <button
                   onClick={() => setShowManageAccessModal(true)}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
-                  title="Manage profile access"
+                  title={t('albumDetail.manageProfileAccess')}
+                  aria-label={t('albumDetail.manageProfileAccess')}
                 >
                   <Key className="w-4 h-4" />
                 </button>
@@ -777,7 +806,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2">Loading photos...</p>
+            <p className="text-gray-500 mt-2">{t('albumDetail.loadingPhotos')}</p>
           </div>
         ) : sortedImages.length === 0 ? (
           <motion.div
@@ -787,10 +816,10 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
           >
             <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No photos in this album
+              {t('albumDetail.noPhotosInThisAlbum')}
             </h3>
             <p className="text-gray-500">
-              Use image actions to add to this album
+              {t('albumDetail.useImageActionsToAdd')}
             </p>
           </motion.div>
         ) : (
@@ -880,18 +909,18 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
           isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}
           onConfirm={handleDeleteAlbum}
-          title="Delete Album"
-          message="Are you sure you want to delete"
-          itemName={album.label || 'this album'}
-          confirmText="Delete"
-          cancelText="Cancel"
+          title={t('albumDetail.deleteAlbum')}
+          message={t('albumDetail.areYouSureYouWantToDeleteThisAlbum')}
+          itemName={album.label || t('albumDetail.album')}
+          confirmText={t('albumDetail.deleteAlbum')}
+          cancelText={t('albumDetail.cancel')}
           imageUrl={
             album?.representative_image && urlHelpers?.getRepresentativeUrl
               ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image}`
               : null
           }
-          imageAlt={album.label || 'Album'}
-          caption="Note: Images will not be deleted, only the album."
+          imageAlt={album.label || t('albumDetail.album')}
+          caption={t('albumDetail.noteImagesNotDeleted')}
         />
       )}
 

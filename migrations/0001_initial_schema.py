@@ -772,7 +772,8 @@ step(
             ('SettingsPage', 'auditFilterSeverity', 'str', 'all'),
             ('SettingsPage', 'auditFilterAction', 'str', 'all'),
             ('SettingsPage', 'auditSortBy', 'str', 'timestamp'),
-            ('SettingsPage', 'auditSortDir', 'str', 'desc')
+            ('SettingsPage', 'auditSortDir', 'str', 'desc'),
+            ('general', 'language', 'str', 'en')
         ON CONFLICT (preference_group, preference_key) DO NOTHING;
         """,
         """

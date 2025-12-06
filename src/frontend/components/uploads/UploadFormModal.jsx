@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, Loader2, Check, AlertCircle, Trash2, Image as ImageIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { imagesAPI, eventsAPI } from '../../utils/apiService';
@@ -26,6 +28,8 @@ export default function UploadFormModal({
   const dragCounter = useRef(0);
   const timeUpdateIntervalRef = useRef(null);
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const eventId = useEventId(eventUrl);
   useApplyScopes(isOpen && eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
   const eventData = useEventGeneralById(eventId);
@@ -139,12 +143,12 @@ export default function UploadFormModal({
     );
 
     if (jpgFiles.length === 0) {
-      showToast('Please select JPG files only', 'error');
+      showToast(t('upload.pleaseSelectJpgFilesOnly'), 'error');
       return;
     }
 
     if (jpgFiles.length !== fileArray.length) {
-      showToast(`${fileArray.length - jpgFiles.length} non-JPG file(s) were skipped`, 'warning');
+      showToast(`${fileArray.length - jpgFiles.length} ${t('upload.nonJpgFilesWereSkipped')}`, 'warning');
     }
 
     // Check count limit
@@ -152,7 +156,7 @@ export default function UploadFormModal({
       const totalFiles = selectedFiles.length + jpgFiles.length;
       if (totalFiles > eventLimits.available_images_count) {
         showToast(
-          `Cannot add ${jpgFiles.length} files. You can only upload ${eventLimits.available_images_count} more image(s). Limit: ${eventLimits.images_count_limit || '∞'}`, 
+          `${t('upload.cannotAddFiles')} ${jpgFiles.length} ${t('upload.filesYouCanOnlyUpload')} ${eventLimits.available_images_count} ${t('upload.moreImage')} ${eventLimits.images_count_limit || '∞'}`, 
           'error'
         );
         return;
@@ -164,7 +168,7 @@ export default function UploadFormModal({
       const oversizedFiles = jpgFiles.filter(file => file.size > eventLimits.image_size_limit_bytes);
       if (oversizedFiles.length > 0) {
         const maxSizeMB = (eventLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1);
-        showToast(`${oversizedFiles.length} file(s) exceed the ${maxSizeMB}MB size limit`, 'error');
+        showToast(`${oversizedFiles.length} ${t('upload.filesExceedTheSizeLimit')} ${maxSizeMB}${t('upload.mbSizeLimit')}`, 'error');
         return;
       }
     }
@@ -266,7 +270,7 @@ export default function UploadFormModal({
 
   const handleStartUpload = async () => {
     if (selectedFiles.length === 0) {
-      showToast('Please select files to upload', 'error');
+      showToast(t('upload.pleaseSelectFilesToUpload'), 'error');
       return;
     }
 
@@ -329,7 +333,7 @@ export default function UploadFormModal({
         }
       );
       
-      const successMsg = `Successfully processed ${result.images_processed} image(s), detected ${result.faces_detected} face(s), created ${result.groups_created} group(s)`;
+      const successMsg = `${t('upload.successfullyProcessed')} ${result.images_processed} ${result.images_processed === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${result.faces_detected} ${result.faces_detected === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${result.groups_created} ${result.groups_created === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
       
       const finalElapsed = Date.now() - startTime;
       setUploadProgress({ 
@@ -352,7 +356,7 @@ export default function UploadFormModal({
 
       if (result.errors && result.errors.length > 0) {
         console.warn('Upload errors:', result.errors);
-        showToast(`${result.errors.length} image(s) failed to process`, 'warning');
+        showToast(`${result.errors.length} ${t('upload.imageFailedToProcess')}`, 'warning');
       }
 
       try {
@@ -418,23 +422,26 @@ export default function UploadFormModal({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
+            dir={isRTL ? 'rtl' : 'ltr'}
             className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
                   <Upload className="w-5 h-5 text-primary-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Upload Photos</h2>
-                  <p className="text-sm text-gray-500">Select or drag JPG files to upload</p>
+                  <h2 className="text-xl font-semibold text-gray-900">{t('upload.uploadPhotos')}</h2>
+                  <p className="text-sm text-gray-500">{t('upload.selectOrDragJpgFiles')}</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 disabled={uploading}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+                title={t('account.cancelEsc')}
+                aria-label={t('account.cancelEsc')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -457,7 +464,7 @@ export default function UploadFormModal({
                       ? 'bg-red-50 border-red-200'
                       : 'bg-blue-50 border-blue-200'
                   }`}>
-                    <div className="flex items-start space-x-3">
+                    <div className="flex items-start gap-3">
                       {uploadProgress.step === 'complete' ? (
                         <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                       ) : uploadProgress.step === 'error' ? (
@@ -494,10 +501,10 @@ export default function UploadFormModal({
                         {(uploadProgress.elapsedTime !== undefined || uploadProgress.estimatedTimeRemaining !== undefined) && (
                           <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-2">
                             {uploadProgress.elapsedTime !== undefined && uploadProgress.elapsedTime > 0 && (
-                              <span className="whitespace-nowrap">Time elapsed: {formatDuration(uploadProgress.elapsedTime)}</span>
+                              <span className="whitespace-nowrap">{t('upload.timeElapsed')}: {formatDuration(uploadProgress.elapsedTime)}</span>
                             )}
                             {uploadProgress.estimatedTimeRemaining !== undefined && uploadProgress.estimatedTimeRemaining > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
-                              <span className="whitespace-nowrap">Est. time left: {formatDuration(uploadProgress.estimatedTimeRemaining)}</span>
+                              <span className="whitespace-nowrap">{t('upload.estTimeLeft')}: {formatDuration(uploadProgress.estimatedTimeRemaining)}</span>
                             )}
                           </div>
                         )}
@@ -514,13 +521,13 @@ export default function UploadFormModal({
               {eventLimits && (
                 <div className="mb-4 text-sm text-gray-600 bg-gray-50 px-4 py-3 rounded-lg">
                   <div className="flex justify-between mb-1">
-                    <span>Images:</span>
+                    <span>{t('upload.images')}:</span>
                     <span className="font-medium">
                       {eventLimits.current_images_count} / {eventLimits.images_count_limit > 0 ? eventLimits.images_count_limit : '∞'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Max size per image:</span>
+                    <span>{t('upload.maxSizePerImage')}:</span>
                     <span className="font-medium">
                       {eventLimits.image_size_limit_bytes > 0 
                         ? `${(eventLimits.image_size_limit_bytes / (1024 * 1024)).toFixed(1)}MB` 
@@ -547,9 +554,9 @@ export default function UploadFormModal({
                     <Upload className={`w-8 h-8 ${isDragging ? 'text-primary-600' : 'text-gray-400'}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        {isDragging ? 'Drop files here' : 'Drag and drop files'}
+                        {isDragging ? t('upload.dropFilesHere') : t('upload.dragAndDropFiles')}
                       </p>
-                      <p className="text-xs text-gray-500">JPG files only</p>
+                      <p className="text-xs text-gray-500">{t('upload.jpgFilesOnly')}</p>
                     </div>
                   </div>
                   <div className="flex-shrink-0">
@@ -566,8 +573,10 @@ export default function UploadFormModal({
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
                       className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      title={t('upload.selectFiles')}
+                      aria-label={t('upload.selectFiles')}
                     >
-                      Select Files
+                      {t('upload.selectFiles')}
                     </button>
                   </div>
                 </div>
@@ -578,14 +587,16 @@ export default function UploadFormModal({
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-900">
-                      Selected Files ({selectedFiles.length})
+                      {t('upload.selectedFiles')} ({selectedFiles.length})
                     </h3>
                     {!uploading && (
                       <button
                         onClick={() => setSelectedFiles([])}
                         className="text-xs text-red-600 hover:text-red-700 font-medium"
+                        title={t('upload.clearAll')}
+                        aria-label={t('upload.clearAll')}
                       >
-                        Clear All
+                        {t('upload.clearAll')}
                       </button>
                     )}
                   </div>
@@ -595,7 +606,7 @@ export default function UploadFormModal({
                     {selectedFiles.map((fileItem) => (
                       <div
                         key={fileItem.id}
-                        className="flex items-center space-x-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                        className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
                       >
                         <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
                           <ImageIcon className="w-6 h-6 text-blue-600" />
@@ -608,7 +619,8 @@ export default function UploadFormModal({
                           <button
                             onClick={() => handleRemoveFile(fileItem.id)}
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
-                            title="Remove file"
+                            title={t('upload.removeFile')}
+                            aria-label={t('upload.removeFile')}
                           >
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </button>
@@ -622,10 +634,10 @@ export default function UploadFormModal({
               {/* Assign moments toggle */}
               <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mt-4">
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">Auto-assign to Moments</p>
-                  <p className="text-xs text-gray-500">Assign images to moments by capture time</p>
+                  <p className="font-medium text-gray-900 text-sm">{t('upload.autoAssignToMoments')}</p>
+                  <p className="text-xs text-gray-500">{t('upload.assignImagesToMomentsByCaptureTime')}</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className="relative inline-flex items-center gap-3 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={assignMoments}
@@ -633,34 +645,42 @@ export default function UploadFormModal({
                     disabled={uploading}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 peer-disabled:opacity-50"></div>
+                  <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:bg-primary-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${
+                    isRTL 
+                      ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
+                      : 'after:left-[2px] peer-checked:after:translate-x-5'
+                  } after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:border-white`}></div>
                 </label>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
               <button
                 onClick={onClose}
                 disabled={uploading}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={uploading ? t('upload.uploading') : t('account.cancelEsc')}
+                aria-label={uploading ? t('upload.uploading') : t('account.cancelEsc')}
               >
-                {uploading ? 'Uploading...' : 'Cancel'}
+                {uploading ? t('upload.uploading') : t('account.cancel')}
               </button>
               <button
                 onClick={handleStartUpload}
                 disabled={uploading || selectedFiles.length === 0}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={uploading ? t('upload.processing') : t('upload.startUpload')}
+                aria-label={uploading ? t('upload.processing') : t('upload.startUpload')}
               >
                 {uploading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Processing...</span>
+                    <span>{t('upload.processing')}</span>
                   </>
                 ) : (
                   <>
                     <Upload className="w-4 h-4" />
-                    <span>Start Upload</span>
+                    <span>{t('upload.startUpload')}</span>
                   </>
                 )}
               </button>

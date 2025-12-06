@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, User, AlertCircle, Home } from 'lucide-react';
+import { X, Lock, User, AlertCircle, Home, Eye, EyeOff } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
+import { useRTL } from '../../hooks/useRTL';
 import RequestPasswordResetModal from './RequestPasswordResetModal';
 
 export default function LoginModal({ isOpen, onClose, onLogin, error }) {
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAutofilled, setIsAutofilled] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const labelInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -211,6 +216,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', duration: 0.3 }}
               className="bg-white rounded-2xl shadow-2xl max-w-md w-full pointer-events-auto"
+              dir={isRTL ? 'rtl' : 'ltr'}
               tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
             >
@@ -218,19 +224,19 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">
-                    {isOnProtectedPage ? 'Authentication Required' : 'Welcome Back'}
+                    {isOnProtectedPage ? t('auth.authenticationRequired') : t('auth.welcomeBack')}
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
                     {isOnProtectedPage 
-                      ? 'You must sign in to view this page' 
-                      : 'Sign in to access the gallery'}
+                      ? t('auth.youMustSignInToViewThisPage') 
+                      : t('auth.signInToAccessTheGallery')}
                   </p>
                 </div>
                 {!isOnProtectedPage && (
                   <button
                     onClick={handleClose}
                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                    aria-label="Close"
+                    aria-label={t('auth.close')}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -254,19 +260,19 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                 {/* Profile Label Input */}
                 <div>
                   <label htmlFor="label" className="block text-sm font-medium text-gray-700 mb-2">
-                    Profile Name
+                    {t('auth.profileName')}
                   </label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <User className={`absolute ${startClass('3')} top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400`} />
                     <input
                       ref={labelInputRef}
                       id="label"
                       type="text"
                       value={label}
                       onChange={(e) => setLabel(e.target.value)}
-                      placeholder="Enter your profile name"
+                      placeholder={t('auth.enterYourProfileName')}
                       autoComplete="username"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+                      className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all`}
                       required
                       disabled={isLoading}
                     />
@@ -276,20 +282,34 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                 {/* Password Input */}
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                    Password
+                    {t('auth.password')}
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Lock className={`absolute ${startClass('3')} top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400`} />
                     <input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
+                      placeholder={t('auth.enterYourPassword')}
                       autoComplete="current-password"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+                      className={`w-full ${isRTL ? 'pr-10 pl-12' : 'pl-10 pr-12'} py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all`}
                       disabled={isLoading}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors`}
+                      title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                      aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                      tabIndex={0}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -302,10 +322,10 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                   {isLoading ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Signing in...
+                      {t('auth.signingIn')}
                     </>
                   ) : (
-                    'Sign In'
+                    t('auth.signIn')
                   )}
                 </button>
 
@@ -315,7 +335,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                   onClick={() => setShowResetModal(true)}
                   className="w-full text-sm text-blue-600 hover:text-blue-700 text-center mt-2"
                 >
-                  Forgot password or need to set one up?
+                  {t('auth.forgotPasswordOrNeedToSetOneUp')}
                 </button>
 
                 {/* Go to Home Link - shown on protected pages */}
@@ -325,7 +345,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                     className="w-full py-3 px-4 bg-gray-100 text-gray-700 font-medium rounded-lg flex items-center justify-center gap-2 no-underline cursor-default"
                   >
                     <Home className="w-5 h-5" />
-                    Go to Home
+                    {t('auth.goToHome')}
                   </Link>
                 )}
               </form>

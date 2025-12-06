@@ -21,6 +21,8 @@ import { useState } from 'react';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useEventId } from '../../utils/storeUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function FloatingSelectionControls({
   selectedCount,
@@ -56,6 +58,8 @@ export default function FloatingSelectionControls({
   const eventId = useEventId(eventUrl);
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const permissions = usePermissions();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
 
   // Use the centralized ImageActions hook for selected images
   const selectedImageActions = useImageActions({
@@ -111,8 +115,8 @@ export default function FloatingSelectionControls({
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center space-x-3 z-30">
-        <span className="text-sm text-gray-700">{selectedCount} selected</span>
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-full px-4 py-2 flex items-center gap-3 z-30" dir={isRTL ? 'rtl' : 'ltr'}>
+        <span className="text-sm text-gray-700">{selectedCount} {t('floatingSelectionControls.selected')}</span>
       
       {/* Select all button - only visible when not all are selected */}
       {selectedCount < totalCount && (
@@ -125,7 +129,8 @@ export default function FloatingSelectionControls({
                 ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                 : 'hover:bg-gray-100 text-gray-700'
             }`}
-            title="Select all photos (Ctrl+A)"
+            title={t('floatingSelectionControls.selectAllPhotos')}
+            aria-label={t('floatingSelectionControls.selectAllPhotos')}
           >
             <CheckCheck className="w-4 h-4" />
           </button>
@@ -137,7 +142,8 @@ export default function FloatingSelectionControls({
         <button
           onClick={onClearSelection}
           className="w-8 h-8 rounded-md bg-red-100 text-red-700 hover:bg-red-200 flex items-center justify-center"
-          title="Clear selection"
+          title={t('floatingSelectionControls.clearSelection')}
+          aria-label={t('floatingSelectionControls.clearSelection')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -159,7 +165,8 @@ export default function FloatingSelectionControls({
                     ? 'bg-red-100 text-red-700 hover:bg-red-200' 
                     : 'hover:bg-red-50 text-red-600'
                 }`}
-                title={shouldShowFavorited ? "Remove selected from favorites" : "Add selected to favorites"}
+                title={shouldShowFavorited ? t('floatingSelectionControls.removeFromFavorites') : t('floatingSelectionControls.addToFavorites')}
+                aria-label={shouldShowFavorited ? t('floatingSelectionControls.removeFromFavorites') : t('floatingSelectionControls.addToFavorites')}
               >
                 <HeartIcon className={`w-4 h-4 ${shouldShowFavorited ? 'fill-current' : ''}`} />
               </button>
@@ -176,7 +183,8 @@ export default function FloatingSelectionControls({
                     ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' 
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
-                title={shouldShowArchived ? "Remove selected from archive" : "Move selected to archive"}
+                title={shouldShowArchived ? t('floatingSelectionControls.removeFromArchive') : t('floatingSelectionControls.moveToArchive')}
+                aria-label={shouldShowArchived ? t('floatingSelectionControls.removeFromArchive') : t('floatingSelectionControls.moveToArchive')}
               >
                 <svg viewBox="0 0 24 24" className="w-4 h-4" fill={shouldShowArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
                   <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
@@ -203,7 +211,8 @@ export default function FloatingSelectionControls({
             <button
               onClick={selectedImageActions.toggleBucket}
               className={`w-8 h-8 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-700`}
-              title={selectedImageActions.allInBucket ? "Remove selected from bucket" : "Add selected to bucket"}
+              title={selectedImageActions.allInBucket ? t('floatingSelectionControls.removeFromBucket') : t('floatingSelectionControls.addToBucket')}
+              aria-label={selectedImageActions.allInBucket ? t('floatingSelectionControls.removeFromBucket') : t('floatingSelectionControls.addToBucket')}
             >
               <ShoppingBag className={`w-4 h-4 ${selectedImageActions.allInBucket ? 'fill-blue-400' : ''}`} />
             </button>
@@ -218,7 +227,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={selectedImageActions.deleteImages}
                 className="w-8 h-8 rounded-md hover:bg-red-100 flex items-center justify-center text-red-600"
-                title="Delete selected photos"
+                title={t('floatingSelectionControls.deleteSelectedPhotos')}
+                aria-label={t('floatingSelectionControls.deleteSelectedPhotos')}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -231,7 +241,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={() => setShowManageAccessModal(true)}
                 className="w-8 h-8 rounded-md hover:bg-blue-100 flex items-center justify-center text-blue-600"
-                title="Manage profile access"
+                title={t('floatingSelectionControls.manageProfileAccess')}
+                aria-label={t('floatingSelectionControls.manageProfileAccess')}
               >
                 <Key className="w-4 h-4" />
               </button>
@@ -259,7 +270,8 @@ export default function FloatingSelectionControls({
                     ? 'text-orange-600'
                     : 'text-yellow-600'
                 }`}
-                title={isFacesMode ? 'Set as representative' : selectedImageActions.representativeTooltip}
+                title={isFacesMode ? t('floatingSelectionControls.setAsRepresentative') : (selectedImageActions.isRepresentative ? t('floatingSelectionControls.currentRepresentative') : t('floatingSelectionControls.setAsRepresentative'))}
+                aria-label={isFacesMode ? t('floatingSelectionControls.setAsRepresentative') : (selectedImageActions.isRepresentative ? t('floatingSelectionControls.currentRepresentative') : t('floatingSelectionControls.setAsRepresentative'))}
               >
                 <Star className={`w-4 h-4 ${selectedImageActions.isRepresentative ? 'fill-current' : ''}`} />
               </button>
@@ -272,7 +284,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onTransferFaces}
                 className="w-8 h-8 rounded-md hover:bg-orange-100 text-orange-700 flex items-center justify-center"
-                title="Transfer selected faces to different person"
+                title={t('floatingSelectionControls.transferFaces')}
+                aria-label={t('floatingSelectionControls.transferFaces')}
               >
                 <Users className="w-4 h-4" />
               </button>
@@ -285,7 +298,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onRemoveFromMoment}
                 className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
-                title="Remove selected from moment"
+                title={t('floatingSelectionControls.removeFromMoment')}
+                aria-label={t('floatingSelectionControls.removeFromMoment')}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -298,7 +312,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onMoveToMoment}
                 className="w-8 h-8 rounded-md hover:bg-blue-100 text-blue-700 flex items-center justify-center"
-                title="Move or remove selected from moment"
+                title={t('floatingSelectionControls.moveOrRemoveFromMoment')}
+                aria-label={t('floatingSelectionControls.moveOrRemoveFromMoment')}
               >
                 <Clock className="w-4 h-4" />
               </button>
@@ -311,7 +326,8 @@ export default function FloatingSelectionControls({
               <button
                 onClick={onRemoveFromAlbum}
                 className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
-                title="Remove selected from album"
+                title={t('floatingSelectionControls.removeFromAlbum')}
+                aria-label={t('floatingSelectionControls.removeFromAlbum')}
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -339,13 +355,13 @@ export default function FloatingSelectionControls({
           isOpen={selectedImageActions.showDeleteConfirmModal}
           onClose={selectedImageActions.onCancelDelete}
           onConfirm={selectedImageActions.onConfirmDelete}
-          title="Delete Photos"
-          message={`Are you sure you want to delete ${selectedImageActions.deleteCount} ${selectedImageActions.deleteCount === 1 ? 'photo' : 'photos'}?`}
+          title={t('floatingSelectionControls.deletePhotos')}
+          message={`${t('floatingSelectionControls.deleteConfirmation', { count: selectedImageActions.deleteCount })} ${selectedImageActions.deleteCount === 1 ? t('floatingSelectionControls.photo') : t('floatingSelectionControls.photos')}?`}
           simpleMessage={true}
           images={selectedImageActions.deleteImagesList}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('floatingSelectionControls.delete')}
+          cancelText={t('floatingSelectionControls.cancel')}
+          caption={t('floatingSelectionControls.cannotBeUndone')}
         />
       )}
 

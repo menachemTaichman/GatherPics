@@ -8,23 +8,12 @@ import { urlHelpers, downloadAPI, imagesAPI } from '../../utils/apiService';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { RemovableThumbnail } from '../common';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
-  const { i18n } = useTranslation();
-  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
-  
-  // Update RTL state when language changes
-  useEffect(() => {
-    const updateDirection = () => {
-      setIsRTL(document.documentElement.dir === 'rtl');
-    };
-    updateDirection();
-    i18n.on('languageChanged', updateDirection);
-    return () => {
-      i18n.off('languageChanged', updateDirection);
-    };
-  }, [i18n]);
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   
   useEffect(() => {
     if (!note) return;
@@ -98,7 +87,7 @@ export default function BucketDrawer() {
         const already = new Set(downloaded);
         const toDownload = excludeAlready ? queue.filter(id => !already.has(id)) : queue.slice();
         if (toDownload.length === 0) {
-          setNote('Nothing to download: all in list and excluded');
+          setNote(t('bucketDrawer.nothingToDownload'));
           return;
         }
         const blob = await downloadAPI.download(toDownload, 'zip', eventUrl, { quality });
@@ -122,7 +111,7 @@ export default function BucketDrawer() {
       const alreadyUp = new Set(uploaded);
       const toUpload = excludeAlready ? queue.filter(id => !alreadyUp.has(id)) : queue.slice();
       if (toUpload.length === 0) {
-        setNote('Nothing to upload: all in list and excluded');
+        setNote(t('bucketDrawer.nothingToUpload'));
         return;
       }
       markUploaded(toUpload);
@@ -140,18 +129,20 @@ export default function BucketDrawer() {
           animate={{ x: 0 }}
           exit={{ x: isRTL ? '100%' : '-100%' }}
           transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-          className={`fixed top-16 h-[calc(100vh-4rem)] w-[360px] bg-white shadow-xl z-[100] flex flex-col ${
-            isRTL 
-              ? 'right-0 border-l border-gray-200' 
-              : 'left-0 border-r border-gray-200'
-          }`}
+          dir={isRTL ? 'rtl' : 'ltr'}
+          className={`fixed top-16 h-[calc(100vh-4rem)] w-[360px] bg-white shadow-xl z-[100] flex flex-col ${startClass('0')} ${isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'}`}
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               {mode === 'download' ? <Download className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-              <span>Bucket</span>
+              <span>{t('bucketDrawer.bucket')}</span>
             </h3>
-            <button onClick={close} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button 
+              onClick={close} 
+              className="p-2 hover:bg-gray-100 rounded-lg"
+              title={t('account.close')}
+              aria-label={t('account.close')}
+            >
               <X className="w-5 h-5 text-gray-600" />
             </button>
           </div>
@@ -159,53 +150,55 @@ export default function BucketDrawer() {
           {/* Preferences */}
           <div className="p-4 space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700">Mode</label>
+              <label className="text-sm font-medium text-gray-700">{t('bucketDrawer.mode')}</label>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setMode('download')}
-                  className={`px-3 py-2 rounded-md border text-sm flex items-center justify-center space-x-2 ${mode === 'download' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
+                  className={`px-3 py-2 rounded-md border text-sm flex items-center justify-center gap-2 ${mode === 'download' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download</span>
+                  <span>{t('bucketDrawer.download')}</span>
                 </button>
                 <button
                   onClick={() => setMode('upload')}
-                  className={`px-3 py-2 rounded-md border text-sm flex items-center justify-center space-x-2 ${mode === 'upload' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
+                  className={`px-3 py-2 rounded-md border text-sm flex items-center justify-center gap-2 ${mode === 'upload' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Upload</span>
+                  <span>{t('bucketDrawer.upload')}</span>
                 </button>
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Quality</label>
+              <label className="text-sm font-medium text-gray-700">{t('bucketDrawer.quality')}</label>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setQuality('high')}
                   className={`px-3 py-2 rounded-md border text-sm ${quality === 'high' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
                 >
-                  High quality
+                  {t('bucketDrawer.highQuality')}
                 </button>
                 <button
                   onClick={() => setQuality('original')}
                   className={`px-3 py-2 rounded-md border text-sm ${quality === 'original' ? 'bg-primary-100 text-primary-700 border-primary-200' : 'hover:bg-gray-50 border-gray-300'}`}
                 >
-                  Original
+                  {t('bucketDrawer.original')}
                 </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-700">
-                {mode === 'download' ? 'Exclude already downloaded' : 'Exclude already uploaded'}
+                {mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               </span>
               <button
                 onClick={() => setExcludeAlready(!excludeAlready)}
                 className={`w-10 h-6 rounded-full relative transition-colors ${excludeAlready ? 'bg-primary-600' : 'bg-gray-300'}`}
                 aria-pressed={excludeAlready}
+                title={mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
+                aria-label={mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               >
-                <span className={`absolute top-0.5 ${excludeAlready ? 'left-5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all`} />
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${excludeAlready ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
               </button>
             </div>
           </div>
@@ -213,16 +206,21 @@ export default function BucketDrawer() {
           {/* Queue */}
           <div className="px-4 pb-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-gray-700">Queue ({queue.length})</h4>
-              <button onClick={clearQueue} className="text-xs text-red-600 hover:underline flex items-center space-x-1">
+              <h4 className="text-sm font-medium text-gray-700">{t('bucketDrawer.queue')} ({queue.length})</h4>
+              <button 
+                onClick={clearQueue} 
+                className="text-xs text-red-600 hover:underline flex items-center gap-1"
+                title={t('bucketDrawer.clear')}
+                aria-label={t('bucketDrawer.clear')}
+              >
                 <Trash2 className="w-3 h-3" />
-                <span>Clear</span>
+                <span>{t('bucketDrawer.clear')}</span>
               </button>
             </div>
           </div>
           <div className="px-4 flex-1 overflow-y-auto">
             {queue.length === 0 ? (
-              <p className="text-sm text-gray-500">No items in queue.</p>
+              <p className="text-sm text-gray-500">{t('bucketDrawer.noItemsInQueue')}</p>
             ) : (
               <div className="grid grid-cols-6 gap-2">
                 {queue.map((id) => (
@@ -236,17 +234,19 @@ export default function BucketDrawer() {
           <div className="p-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-gray-700">
-                {mode === 'download' ? 'Already downloaded' : 'Already uploaded'} ({alreadyList.length})
+                {mode === 'download' ? t('bucketDrawer.alreadyDownloaded') : t('bucketDrawer.alreadyUploaded')} ({alreadyList.length})
               </h4>
               <button
                 onClick={mode === 'download' ? clearDownloaded : clearUploaded}
                 className="text-xs text-gray-600 hover:underline"
+                title={t('bucketDrawer.clearList')}
+                aria-label={t('bucketDrawer.clearList')}
               >
-                Clear list
+                {t('bucketDrawer.clearList')}
               </button>
             </div>
             {alreadyList.length === 0 ? (
-              <p className="text-xs text-gray-400">Nothing yet.</p>
+              <p className="text-xs text-gray-400">{t('bucketDrawer.nothingYet')}</p>
             ) : (
               <div className="grid grid-cols-6 gap-2">
                 {compactList.map((id) => (
@@ -264,10 +264,10 @@ export default function BucketDrawer() {
             <button
               disabled={queue.length === 0}
               onClick={handlePrimaryAction}
-              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-medium ${queue.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
+              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-medium gap-2 ${queue.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
             >
-              {mode === 'download' ? <Download className="w-4 h-4 mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-              {mode === 'download' ? 'Download as ZIP' : 'Upload to Google Photos'}
+              {mode === 'download' ? <Download className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+              <span>{mode === 'download' ? t('bucketDrawer.downloadAsZip') : t('bucketDrawer.uploadToGooglePhotos')}</span>
             </button>
           </div>
         </motion.aside>
@@ -278,6 +278,8 @@ export default function BucketDrawer() {
 
 function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' }) {
   const [imageUrl, setImageUrl] = useState('');
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
 
   useEffect(() => {
     const loadUrl = async () => {
@@ -317,7 +319,7 @@ function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' 
         alt={imageId}
         onRemove={handleRemove}
         size={size}
-        title="Click to remove from queue"
+        title={t('bucketDrawer.clickToRemoveFromQueue')}
       />
     );
   }
@@ -330,22 +332,24 @@ function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' 
         className="w-full h-full object-cover"
         alt={imageId}
       />
-      {/* Add back to queue button (top-right) */}
+      {/* Add back to queue button (top-end in LTR, top-start in RTL) */}
       <button
         onClick={handleAddBack}
-        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 text-white text-[10px] leading-[14px] hover:bg-green-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        title="Add back to queue"
+        className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} w-4 h-4 rounded-full bg-green-500 text-white text-[10px] leading-[14px] hover:bg-green-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10`}
+        title={t('bucketDrawer.addBackToQueue')}
+        aria-label={t('bucketDrawer.addBackToQueue')}
       >
         +
       </button>
-      {/* Remove from list button (top-left) */}
+      {/* Remove from list button (top-start in LTR, top-end in RTL) */}
       <button
         onClick={(e) => {
           e.stopPropagation();
           handleRemove();
         }}
-        className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        title={removeFrom === 'downloaded' ? 'Remove from downloaded list' : 'Remove from uploaded list'}
+        className={`absolute -top-1 ${isRTL ? '-right-1' : '-left-1'} w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-[14px] hover:bg-red-600 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10`}
+        title={removeFrom === 'downloaded' ? t('bucketDrawer.removeFromDownloadedList') : t('bucketDrawer.removeFromUploadedList')}
+        aria-label={removeFrom === 'downloaded' ? t('bucketDrawer.removeFromDownloadedList') : t('bucketDrawer.removeFromUploadedList')}
       >
         ×
       </button>

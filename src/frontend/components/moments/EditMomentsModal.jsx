@@ -13,10 +13,14 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { EditMomentImagesModal } from './';
 import { ConfirmDelete } from '../modals';
 import { formatDateTimeLocale, formatDateDDMMYYYY, parseDatabaseTimestamp } from '../../utils/dateUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   const eventId = useEventId(eventUrl);
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   
   const MODAL_ID = 'edit-moments-modal';
   
@@ -140,7 +144,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     // Check if any moments have name conflicts
     const hasConflicts = Array.from(changedMoments).some(momentId => nameConflicts.get(momentId));
     if (hasConflicts) {
-      onToast('Cannot save: One or more moments have duplicate names.', 'error');
+      onToast(t('moments.cannotSaveDuplicateNames'), 'error');
       return;
     }
     
@@ -193,7 +197,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       
       // Check for name conflict before saving
       if (nameConflicts.get(momentId)) {
-        onToast('Cannot save: A moment with this name already exists.', 'error');
+        onToast(t('moments.cannotSaveNameExists'), 'error');
         return;
       }
       
@@ -290,9 +294,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       
       if (onToast) {
         if (String(moment.id || moment.moment_id).startsWith('temp-')) {
-          onToast('Moment created successfully.', 'success');
+          onToast(t('moments.momentCreated'), 'success');
         } else {
-          onToast('Moment updated successfully.', 'success');
+          onToast(t('moments.momentUpdated'), 'success');
         }
       }
       
@@ -332,7 +336,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       
       // Show success message
       if (onToast) {
-        onToast('Moment deleted successfully.', 'success');
+        onToast(t('moments.momentDeleted'), 'success');
       }
     } catch (error) {
       console.error('Error deleting moment:', error);
@@ -497,7 +501,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     
     const newMoment = {
       moment_id: `temp-${Date.now()}-${tempMomentCounter}`,
-      label: 'New Moment',
+      label: t('moments.newMoment'),
       start_date: now.toISOString().slice(0, 16).replace('T', ' '),
       end_date: oneHourLater.toISOString().slice(0, 16).replace('T', ' '),
       description: ''
@@ -576,22 +580,25 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           exit={{ scale: 0.9, opacity: 0 }}
           className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">Edit Moments</h3>
-            <div className="flex space-x-2">
+            <h3 className="text-lg font-bold">{t('moments.editMoments')}</h3>
+            <div className="flex gap-2">
               <button 
                 onClick={addMoment} 
                 className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
-                title="Add Moment"
+                title={t('moments.addMoment')}
+                aria-label={t('moments.addMoment')}
               >
                 <Plus className="w-4 h-4" />
               </button>
               <button 
                 onClick={handleClose} 
                 className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-                title="Close"
+                title={t('moments.close')}
+                aria-label={t('moments.close')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -604,7 +611,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       {editingMoments.filter(m => m && (m.id || m.moment_id)).map((moment, index) => (
               <div key={moment.id || moment.moment_id} data-moment-moment_id={moment.id || moment.moment_id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-3 flex-1">
+                  <div className="flex items-center gap-3 flex-1">
                     {/* Representative image */}
                     <div className="relative">
                       <div className="w-16 h-16 rounded-lg overflow-hidden border">
@@ -627,7 +634,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                             try {
                               await momentsAPI.update(moment.id || moment.moment_id, { representative_image: null }, eventUrl);
                               if (onToast) {
-                                onToast('Representative removed', 'success');
+                                onToast(t('moments.representativeRemoved'), 'success');
                               }
                             } catch (error) {
                               if (onToast) {
@@ -635,8 +642,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                               }
                             }
                           }}
-                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
-                          title="Remove representative"
+                          className={`absolute -bottom-1 ${endClass('1')} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
+                          title={t('moments.representativeRemoved')}
+                          aria-label={t('moments.representativeRemoved')}
                         >
                           <Minus className="w-3 h-3" />
                         </button>
@@ -667,16 +675,17 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                                 : 'border-transparent focus:border-primary-500'
                             }`}
                             autoFocus
+                            dir={isRTL ? 'rtl' : 'ltr'}
                           />
                           {nameConflicts.get(moment.id || moment.moment_id) && (
-                            <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                            <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
                               <AlertTriangle className="w-3 h-3" />
-                              <span>Name already exists</span>
+                              <span>{t('moments.nameAlreadyExists')}</span>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2">
                           <div
                             onClick={() => startTitleEdit(moment.id || moment.moment_id, moment.label)}
                             onKeyDown={(e) => {
@@ -688,10 +697,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                             tabIndex={0}
                             className="text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors"
                           >
-                            {moment.label || `Moment ${index + 1}`}
+                            {moment.label || `${t('moments.newMoment')} ${index + 1}`}
                           </div>
                           {nameConflicts.get(moment.id || moment.moment_id) && (
-                            <AlertTriangle className="w-4 h-4 text-red-500" title="Name already exists" />
+                            <AlertTriangle className="w-4 h-4 text-red-500" title={t('moments.nameAlreadyExists')} />
                           )}
                         </div>
                       )}
@@ -699,14 +708,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     {changedMoments.has(moment.id || moment.moment_id) && (
                       <>
                         <button 
                           onClick={() => handleSaveMoment(moment)}
                           disabled={nameConflicts.get(moment.id || moment.moment_id)}
                           className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-green-100 text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={nameConflicts.get(moment.id || moment.moment_id) ? "Cannot save: Name already exists" : "Save Moment"}
+                          title={nameConflicts.get(moment.id || moment.moment_id) ? t('moments.cannotSaveNameExists') : t('moments.saveMoment')}
+                          aria-label={nameConflicts.get(moment.id || moment.moment_id) ? t('moments.cannotSaveNameExists') : t('moments.saveMoment')}
                         >
                           <Save className="w-4 h-4" />
                         </button>
@@ -747,7 +757,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                             }
                           }}
                           className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
-                          title="Discard Changes"
+                          title={t('moments.discardChanges')}
+                          aria-label={t('moments.discardChanges')}
                         >
                           <RotateCcw className="w-4 h-4" />
                         </button>
@@ -756,7 +767,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     <button
                       onClick={() => setEditingImagesForMoment(moment)}
                       className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
-                      title="Edit photos"
+                      title={t('moments.editPhotos')}
+                      aria-label={t('moments.editPhotos')}
                     >
                       <Image className="w-4 h-4" />
                     </button>
@@ -767,7 +779,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         representative_image: moment.representative_image
                       })}
                       className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-red-100 text-red-700"
-                      title="Delete Moment"
+                      title={t('moments.deleteMoment')}
+                      aria-label={t('moments.deleteMoment')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -777,7 +790,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                 {/* Compact Details Row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('moments.description')}</label>
                     <textarea
                       moment_id={`moment-description-${moment.id || moment.moment_id}`}
                       name={`moment-description-${moment.id || moment.moment_id}`}
@@ -785,13 +798,14 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       onChange={(e) => updateMoment(moment.id || moment.moment_id, { description: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm resize-none"
                       rows="2"
-                      placeholder="Add description..."
+                      placeholder={t('moments.addDescription')}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                     />
                   </div>
                   
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">{t('moments.startTime')}</label>
                       <input
                         type="datetime-local"
                         moment_id={`moment-start-${moment.id || moment.moment_id}`}
@@ -799,11 +813,12 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         value={convertToInputFormat(moment.start_date || moment.start)}
                         onChange={(e) => updateMoment(moment.id || moment.moment_id, { start_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
+                        dir="ltr"
                       />
                     </div>
                     
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">End Time</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">{t('moments.endTime')}</label>
                       <input
                         type="datetime-local"
                         moment_id={`moment-end-${moment.id || moment.moment_id}`}
@@ -811,6 +826,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         value={convertToInputFormat(moment.end_date || moment.end)}
                         onChange={(e) => updateMoment(moment.id || moment.moment_id, { end_date: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
+                        dir="ltr"
                       />
                     </div>
                   </div>
@@ -842,18 +858,18 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           isOpen={!!deletingMoment}
           onClose={() => setDeletingMoment(null)}
           onConfirm={() => handleDeleteConfirm(deletingMoment.id)}
-          title="Delete Moment"
-          message="Are you sure you want to delete"
-          itemName={deletingMoment.label || 'this moment'}
-          confirmText="Delete"
-          cancelText="Cancel"
+          title={t('moments.deleteMoment')}
+          message={t('moments.areYouSureDelete')}
+          itemName={deletingMoment.label || t('moments.thisMoment')}
+          confirmText={t('moments.delete')}
+          cancelText={t('moments.cancel')}
           imageUrl={
             !String(deletingMoment.id).startsWith('temp-') && deletingMoment.representative_image && urlHelpers?.getRepresentativeUrl
               ? `${urlHelpers.getRepresentativeUrl('moments', deletingMoment.id)}?v=${deletingMoment.representative_image}`
               : null
           }
-          imageAlt={deletingMoment.label || 'Moment'}
-          caption="Note: Images will not be deleted, only the moment."
+          imageAlt={deletingMoment.label || t('moments.newMoment')}
+          caption={t('moments.noteImagesNotDeleted')}
         />
       )}
     </div>

@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Edit2, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { useToast } from '../../contexts/ToastContext';
 import { profilesAPI, eventsAPI, getEventUrlById } from '../../utils/apiService';
 import { formatErrorMessage, getErrorExplanation } from '../../utils/errorHandler';
@@ -19,10 +21,13 @@ import { useParams } from 'react-router-dom';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
+import i18n from '../../i18n';
 
 const FILTER_ALL_EVENTS = 'dashboard';
 
 export default function ProfilesGalleryPage() {
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const params = useParams();
   const eventUrl = params.eventUrl || null;
   const { urlHelpers } = eventUrl ? useEventUrls(eventUrl) : { urlHelpers: null };
@@ -79,8 +84,8 @@ export default function ProfilesGalleryPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Profiles | ${APP_CONFIG.name}`;
-  }, []);
+    document.title = `${t('profilesGallery.profiles')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {
@@ -429,14 +434,14 @@ export default function ProfilesGalleryPage() {
       
       // Show success toast
       const incompleteCount = result.incomplete_events?.length || 0;
-      const profileLabel = profileToDuplicate?.label || 'Profile';
+      const profileLabel = profileToDuplicate?.label || t('profilesGallery.profile');
       if (incompleteCount > 0) {
         showToast(
-          `Profile duplicated successfully. Note: ${incompleteCount} event${incompleteCount === 1 ? '' : 's'} could not be fully duplicated due to permissions.`,
+          t('profilesGallery.profileDuplicatedWithWarning', { count: incompleteCount }),
           'warning'
         );
       } else {
-        showToast(`Profile "${profileLabel}" duplicated successfully`, 'success');
+        showToast(t('profilesGallery.profileDuplicatedSuccessfully', { profileLabel }), 'success');
       }
       
       // Fetch the new profile and open it in the modal
@@ -480,7 +485,7 @@ export default function ProfilesGalleryPage() {
     
     const emailValue = duplicateEmail.trim();
     if (!emailValue) {
-      showToast('Email is required for non-public profiles', 'error');
+      showToast(t('profilesGallery.duplicateEmailModal.emailIsRequiredForNonPublicProfiles'), 'error');
       return;
     }
     
@@ -518,7 +523,7 @@ export default function ProfilesGalleryPage() {
       // If event filter is active, targetEventUrl stays null to delete from general
       
       await profilesAPI.delete(profileToDelete.id, targetEventUrl);
-      showToast(`Profile "${profileToDelete.label}" deleted`, 'success');
+      showToast(t('profilesGallery.profileDeleted'), 'success');
     } catch (error) {
       console.error('Failed to delete profile:', error);
       // Get user-friendly error message (already includes context, no need for "Failed to..." prefix)
@@ -543,9 +548,9 @@ export default function ProfilesGalleryPage() {
       // Check if profile was completely deleted (if it was restricted to this event)
       const wasCompletelyDeleted = result.deleted_ids && result.deleted_ids.includes(profileToRemoveFromEvent.id);
       if (wasCompletelyDeleted) {
-        showToast(`Profile "${profileToRemoveFromEvent.label}" deleted`, 'success');
+        showToast(t('profilesGallery.profileDeleted'), 'success');
       } else {
-        showToast(`Profile "${profileToRemoveFromEvent.label}" removed from event`, 'success');
+        showToast(t('profilesGallery.profileRemovedFromEvent'), 'success');
       }
     } catch (error) {
       console.error('Failed to remove profile from event:', error);
@@ -566,7 +571,7 @@ export default function ProfilesGalleryPage() {
         publicCode = await fetchPublicAccessCode(profile.id, { notifyOnError: true });
       }
       if (!publicCode) {
-        showToast('No public access code available. Generate one first.', 'error');
+        showToast(t('profilesGallery.noPublicAccessCodeAvailable'), 'error');
         return;
       }
       
@@ -585,23 +590,23 @@ export default function ProfilesGalleryPage() {
       }
       
       if (!targetEventUrl) {
-        showToast('Cannot generate public link: event URL is required. Please open this profile from an event page.', 'error');
+        showToast(t('profilesGallery.cannotGeneratePublicLink'), 'error');
         return;
       }
       
       const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${publicCode}`;
       await navigator.clipboard.writeText(publicUrl);
-      showToast('Public link copied to clipboard', 'success');
+      showToast(t('profilesGallery.publicLinkCopiedToClipboard'), 'success');
     } catch (error) {
       console.error('Failed to copy link:', error);
-      showToast('Failed to copy link', 'error');
+      showToast(t('profilesGallery.failedToCopyLink'), 'error');
     }
   };
 
   const handleResetPublicCode = async (profile) => {
     try {
       const result = await profilesAPI.resetPublicAccessCode(profile.id);
-      showToast('Public access code reset', 'success');
+      showToast(t('profilesGallery.publicAccessCodeReset'), 'success');
       
       if (result.public_code) {
         // Determine the event URL to use
@@ -622,13 +627,13 @@ export default function ProfilesGalleryPage() {
           const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${result.public_code}`;
           try {
             await navigator.clipboard.writeText(publicUrl);
-            showToast('Public link copied to clipboard', 'success');
+            showToast(t('profilesGallery.publicLinkCopiedToClipboard'), 'success');
           } catch (copyError) {
             console.error('Failed to copy link:', copyError);
-            showToast('Link created but failed to copy', 'warning');
+            showToast(t('profilesGallery.linkCreatedButFailedToCopy'), 'warning');
           }
         } else {
-          showToast('Public access code reset, but cannot generate link: event URL is required.', 'warning');
+          showToast(t('profilesGallery.publicAccessCodeResetButCannotGenerateLink'), 'warning');
         }
       }
       
@@ -649,7 +654,7 @@ export default function ProfilesGalleryPage() {
   const handleRemovePublicCode = async (profile) => {
     try {
       await profilesAPI.removePublicAccessCode(profile.id);
-      showToast('Public access code removed', 'success');
+      showToast(t('profilesGallery.publicAccessCodeRemoved'), 'success');
       setPublicAccessCodes((prev) => ({
         ...prev,
         [profile.id]: null,
@@ -673,23 +678,23 @@ export default function ProfilesGalleryPage() {
 
   // Get selected event name for display
   const selectedEventName = useMemo(() => {
-    if (!filterEventId || filterEventId === FILTER_ALL_EVENTS) return 'All Events';
+    if (!filterEventId || filterEventId === FILTER_ALL_EVENTS) return t('profilesGallery.allEvents');
     const event = eventsList.find(e => {
       const evtId = e.event_id || e.id;
       return evtId && String(evtId) === String(filterEventId);
     });
-    return event?.name || 'Untitled Event';
-  }, [filterEventId, eventsList]);
+    return event?.name || t('profilesGallery.untitledEvent');
+  }, [filterEventId, eventsList, t]);
 
   // Filter events based on search term
   const filteredEvents = useMemo(() => {
     if (!eventSearchTerm.trim()) return eventsList;
     const searchLower = eventSearchTerm.toLowerCase();
     return eventsList.filter(event => {
-      const evtName = event?.name || 'Untitled Event';
+      const evtName = event?.name || t('profilesGallery.untitledEvent');
       return evtName.toLowerCase().includes(searchLower);
     });
-  }, [eventsList, eventSearchTerm]);
+  }, [eventsList, eventSearchTerm, t]);
 
   // Reset highlighted index when filtered events change
   useEffect(() => {
@@ -709,15 +714,15 @@ export default function ProfilesGalleryPage() {
   const selectableOptions = useMemo(() => {
     const options = [];
     if (!eventSearchTerm) {
-      options.push({ id: null, name: 'All Events', isPlaceholder: true });
+      options.push({ id: null, name: t('profilesGallery.allEvents'), isPlaceholder: true });
     }
     filteredEvents.forEach(event => {
       const evtId = event?.event_id || event?.id;
-      const evtName = event?.name || 'Untitled Event';
+      const evtName = event?.name || t('profilesGallery.untitledEvent');
       options.push({ id: evtId, name: evtName, isPlaceholder: false });
     });
     return options;
-  }, [filteredEvents, eventSearchTerm]);
+  }, [filteredEvents, eventSearchTerm, t]);
 
   // Handle keyboard navigation
   const handleEventInputKeyDown = (e) => {
@@ -761,7 +766,7 @@ export default function ProfilesGalleryPage() {
         e.preventDefault();
         e.stopPropagation();
         setShowEventDropdown(false);
-        setEventSearchTerm(selectedEventName);
+        setEventSearchTerm(selectedEventName || '');
         break;
     }
   };
@@ -834,7 +839,7 @@ export default function ProfilesGalleryPage() {
     const baseColumns = [
       {
         key: 'label',
-        label: 'Name',
+        label: t('profilesGallery.name'),
         sortable: true,
         align: 'left',
         headerClassName: 'w-48 min-w-[192px]',
@@ -843,12 +848,12 @@ export default function ProfilesGalleryPage() {
           profile.isPlaceholder ? (
             <span className="text-gray-400 italic">—</span>
           ) : (
-            profile.label || 'Untitled Profile'
+            profile.label || t('profilesGallery.untitledProfile')
           ),
       },
       {
         key: 'hierarchy_rank',
-        label: 'Rank',
+        label: t('profilesGallery.rank'),
         sortable: true,
         align: 'left',
         headerClassName: 'w-24 min-w-[96px]',
@@ -862,7 +867,7 @@ export default function ProfilesGalleryPage() {
       },
       {
         key: 'is_public',
-        label: 'Accessibility',
+        label: t('profilesGallery.accessibility'),
         sortable: true,
         align: 'left',
         headerClassName: 'w-36 min-w-[144px]',
@@ -878,7 +883,7 @@ export default function ProfilesGalleryPage() {
                   : 'bg-purple-100 text-purple-700'
               }`}
             >
-              {Boolean(profile.is_public) ? 'Public' : 'Private'}
+              {Boolean(profile.is_public) ? t('profilesGallery.public') : t('profilesGallery.private')}
             </span>
           ),
       },
@@ -887,7 +892,7 @@ export default function ProfilesGalleryPage() {
     if (Boolean(currentProfile?.can_manage_create_events)) {
       baseColumns.push({
         key: 'can_create_events',
-        label: 'Can Create Events',
+        label: t('profilesGallery.canCreateEvents'),
         sortable: true,
         align: 'left',
         headerClassName: 'w-40 min-w-[160px]',
@@ -903,7 +908,7 @@ export default function ProfilesGalleryPage() {
                   : 'bg-gray-100 text-gray-700'
               }`}
             >
-              {Boolean(profile.can_create_events) ? 'Yes' : 'No'}
+              {Boolean(profile.can_create_events) ? t('profilesGallery.yes') : t('profilesGallery.no')}
             </span>
           ),
       });
@@ -911,7 +916,7 @@ export default function ProfilesGalleryPage() {
 
     baseColumns.push({
       key: 'restricted_to_event_name',
-      label: 'Restricted To Event',
+      label: t('profilesGallery.restrictedToEvent'),
       sortable: true,
       align: 'left',
       cellClassName: 'text-gray-700',
@@ -927,7 +932,7 @@ export default function ProfilesGalleryPage() {
       baseColumns.push(
         {
           key: 'can_manage_event',
-          label: 'Can Manage',
+          label: t('profilesGallery.canManage'),
           sortable: true,
           align: 'left',
           renderCell: (profile) =>
@@ -941,13 +946,13 @@ export default function ProfilesGalleryPage() {
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {Boolean(profile.can_manage_event) ? 'Yes' : 'No'}
+                {Boolean(profile.can_manage_event) ? t('profilesGallery.yes') : t('profilesGallery.no')}
               </span>
             ),
         },
         {
           key: 'can_delete_event',
-          label: 'Can Delete',
+          label: t('profilesGallery.canDelete'),
           sortable: true,
           align: 'left',
           renderCell: (profile) =>
@@ -961,13 +966,13 @@ export default function ProfilesGalleryPage() {
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {Boolean(profile.can_delete_event) ? 'Yes' : 'No'}
+                {Boolean(profile.can_delete_event) ? t('profilesGallery.yes') : t('profilesGallery.no')}
               </span>
             ),
         },
         {
           key: 'can_edit',
-          label: 'Can Edit',
+          label: t('profilesGallery.canEdit'),
           sortable: true,
           align: 'left',
           renderCell: (profile) =>
@@ -981,7 +986,7 @@ export default function ProfilesGalleryPage() {
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
-                {Boolean(profile.can_edit) ? 'Yes' : 'No'}
+                {Boolean(profile.can_edit) ? t('profilesGallery.yes') : t('profilesGallery.no')}
               </span>
             ),
         }
@@ -990,21 +995,21 @@ export default function ProfilesGalleryPage() {
 
     baseColumns.push({
       key: 'actions',
-      label: 'Actions',
+      label: t('profilesGallery.actions'),
       align: 'right',
       renderCell: (profile) => (
-        <div className="flex items-center justify-end space-x-2">
+        <div className="flex items-center justify-end gap-2">
           {profile.isPlaceholder ? (
             <>
               <span
                 className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                title="Please log in to manage profiles"
+                title={t('profilesGallery.pleaseLogInToManageProfiles')}
               >
                 <Edit2 className="w-4 h-4" />
               </span>
               <span
                 className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                title="Please log in to manage profiles"
+                title={t('profilesGallery.pleaseLogInToManageProfiles')}
               >
                 <Trash2 className="w-4 h-4" />
               </span>
@@ -1018,21 +1023,21 @@ export default function ProfilesGalleryPage() {
                       <button
                         onClick={() => handleCopyPublicLink(profile)}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                        title="Copy public link"
+                        title={t('profilesGallery.copyPublicLink')}
                       >
                         <LinkIcon className="w-4 h-4 text-blue-600" />
                       </button>
                       <button
                         onClick={() => handleResetPublicCode(profile)}
                         className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
-                        title="Reset public access code"
+                        title={t('profilesGallery.resetPublicAccessCode')}
                       >
                         <RotateCcw className="w-4 h-4 text-yellow-600" />
                       </button>
                       <button
                         onClick={() => handleRemovePublicCode(profile)}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                        title="Remove public access code"
+                        title={t('profilesGallery.removePublicAccessCode')}
                       >
                         <Minus className="w-4 h-4 text-red-600" />
                       </button>
@@ -1041,7 +1046,7 @@ export default function ProfilesGalleryPage() {
                     <button
                       onClick={() => handleResetPublicCode(profile)}
                       className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                      title="Create public access code"
+                      title={t('profilesGallery.createPublicAccessCode')}
                     >
                       <LinkIcon className="w-4 h-4 text-green-600" />
                     </button>
@@ -1051,7 +1056,7 @@ export default function ProfilesGalleryPage() {
               <button
                 onClick={() => handleEditProfile(profile)}
                 className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                title="Edit profile"
+                title={t('profilesGallery.editProfile')}
               >
                 <Edit2 className="w-4 h-4 text-indigo-600" />
               </button>
@@ -1059,7 +1064,7 @@ export default function ProfilesGalleryPage() {
                 onClick={() => handleDuplicateProfile(profile)}
                 disabled={duplicatingProfileId === profile.id}
                 className="p-2 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Duplicate profile"
+                title={t('profilesGallery.duplicateProfile')}
               >
                 {duplicatingProfileId === profile.id ? (
                   <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
@@ -1072,7 +1077,7 @@ export default function ProfilesGalleryPage() {
                 <button
                   onClick={() => handleRemoveFromEvent(profile)}
                   className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
-                  title="Remove from event"
+                  title={t('profilesGallery.removeFromEvent')}
                 >
                   <X className="w-4 h-4 text-orange-600" />
                 </button>
@@ -1082,7 +1087,7 @@ export default function ProfilesGalleryPage() {
                 <button
                   onClick={() => handleDeleteProfile(profile)}
                   className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                  title="Delete profile"
+                  title={t('profilesGallery.deleteProfile')}
                 >
                   <Trash2 className="w-4 h-4 text-red-600" />
                 </button>
@@ -1094,29 +1099,29 @@ export default function ProfilesGalleryPage() {
     });
 
     return baseColumns;
-  }, [currentProfile, filterEventId, handleCopyPublicLink, handleResetPublicCode, handleRemovePublicCode, handleEditProfile, handleDuplicateProfile, handleDeleteProfile, handleRemoveFromEvent, duplicatingProfileId, selectedEventName]);
+  }, [currentProfile, filterEventId, handleCopyPublicLink, handleResetPublicCode, handleRemovePublicCode, handleEditProfile, handleDuplicateProfile, handleDeleteProfile, handleRemoveFromEvent, duplicatingProfileId, selectedEventName, t]);
 
   return (
     <>
-      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 ${!eventUrl ? 'pt-[4rem]' : ''}`}>
+      <div dir={isRTL ? 'rtl' : 'ltr'} className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50 ${!eventUrl ? 'pt-[4rem]' : ''}`}>
         {!eventUrl && <TopNavigationBar variant="light" showBackground={true} mode="full" />}
         <div className={`sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm`}>
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                   <User className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Profile Management</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{t('profilesGallery.profileManagement')}</h1>
                   <p className="text-sm text-gray-500">
                     {isAuthenticated
-                      ? `${stats.total} profile${stats.total === 1 ? '' : 's'}`
-                      : 'Loading...'}
+                      ? `${stats.total} ${stats.total === 1 ? t('profilesGallery.profile') : t('profilesGallery.profilesPlural')}`
+                      : t('profilesGallery.loading')}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 {/* Event Filter Combobox */}
                 {!isCurrentProfileRestricted && !eventUrl && (
                 <div className="relative" ref={eventInputRef}>
@@ -1136,7 +1141,7 @@ export default function ProfilesGalleryPage() {
                         setShowEventDropdown(true);
                       }}
                       onKeyDown={handleEventInputKeyDown}
-                      placeholder="Search events..."
+                      placeholder={t('profilesGallery.searchEvents')}
                       className="px-3 py-1.5 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
                     />
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1148,7 +1153,7 @@ export default function ProfilesGalleryPage() {
                     >
                       {selectableOptions.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">
-                          {eventSearchTerm ? 'No events found' : 'No events available'}
+                          {eventSearchTerm ? t('profilesGallery.noEventsFound') : t('profilesGallery.noEventsAvailable')}
                         </div>
                       ) : (
                         selectableOptions.map((option, index) => {
@@ -1192,8 +1197,8 @@ export default function ProfilesGalleryPage() {
 
           {loading && isAuthenticated ? (
             <div className="flex items-center justify-center py-16 text-gray-500">
-              <div className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
-              Loading profiles...
+              <div className={`${isRTL ? 'ml-3' : 'mr-3'} h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent`} />
+              {t('profilesGallery.loadingProfiles')}
             </div>
           ) : sortedProfiles.length === 0 ? (
             <motion.div
@@ -1202,15 +1207,15 @@ export default function ProfilesGalleryPage() {
               className="text-center py-12"
             >
               <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No profiles</h3>
-              <p className="text-gray-500 mb-4">Get started by creating a new profile.</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{t('profilesGallery.noProfiles')}</h3>
+              <p className="text-gray-500 mb-4">{t('profilesGallery.getStartedByCreatingNewProfile')}</p>
               {isAuthenticated && (
                 <button
                   onClick={handleCreateProfile}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Create Profile</span>
+                  <span>{t('profilesGallery.createProfile')}</span>
                 </button>
               )}
             </motion.div>
@@ -1224,8 +1229,8 @@ export default function ProfilesGalleryPage() {
               onSort={handleSort}
               emptyState={{
                 icon: User,
-                title: 'No profiles',
-                message: 'Get started by creating a new profile.',
+                title: t('profilesGallery.noProfiles'),
+                message: t('profilesGallery.getStartedByCreatingNewProfile'),
               }}
               getRowKey={(profile) => profile.id}
             />
@@ -1265,12 +1270,12 @@ export default function ProfilesGalleryPage() {
             setProfileToDelete(null);
           }}
           onConfirm={handleConfirmDeleteProfile}
-          title="Delete Profile"
-          message="Are you sure you want to delete profile"
+          title={t('profilesGallery.deleteConfirmModal.deleteProfile')}
+          message={t('profilesGallery.deleteConfirmModal.areYouSureDeleteProfile')}
           itemName={profileToDelete.label}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('profilesGallery.deleteConfirmModal.delete')}
+          cancelText={t('profilesGallery.deleteConfirmModal.cancel')}
+          caption={t('profilesGallery.deleteConfirmModal.thisActionCannotBeUndone')}
         />
       )}
 
@@ -1286,7 +1291,7 @@ export default function ProfilesGalleryPage() {
             >
               <div className="px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-gray-900">Duplicate Profile</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">{t('profilesGallery.duplicateEmailModal.duplicateProfile')}</h2>
                   <button
                     onClick={() => {
                       setShowDuplicateEmailModal(false);
@@ -1301,11 +1306,11 @@ export default function ProfilesGalleryPage() {
               </div>
               <div className="px-6 py-4">
                 <p className="text-sm text-gray-600 mb-4">
-                  Enter email for the duplicated profile "{profileToDuplicate.label}":
+                  {t('profilesGallery.duplicateEmailModal.enterEmailForDuplicatedProfile', { profileLabel: profileToDuplicate.label })}
                 </p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
+                    {t('profilesGallery.duplicateEmailModal.emailRequiredStar')}
                   </label>
                   <input
                     type="email"
@@ -1322,11 +1327,11 @@ export default function ProfilesGalleryPage() {
                     }}
                     autoFocus
                     className="w-full h-10 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter email (required)"
+                    placeholder={t('profilesGallery.duplicateEmailModal.enterEmailRequired')}
                   />
                 </div>
               </div>
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button
                   onClick={() => {
                     setShowDuplicateEmailModal(false);
@@ -1335,14 +1340,14 @@ export default function ProfilesGalleryPage() {
                   }}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                 >
-                  Cancel
+                  {t('profilesGallery.duplicateEmailModal.cancel')}
                 </button>
                 <button
                   onClick={handleConfirmDuplicateEmail}
                   disabled={!duplicateEmail.trim()}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Duplicate
+                  {t('profilesGallery.duplicateEmailModal.duplicate')}
                 </button>
               </div>
             </motion.div>
@@ -1358,12 +1363,12 @@ export default function ProfilesGalleryPage() {
             setProfileToRemoveFromEvent(null);
           }}
           onConfirm={handleConfirmRemoveFromEvent}
-          title="Remove Profile from Event"
-          message="Are you sure you want to remove profile"
+          title={t('profilesGallery.removeFromEventConfirmModal.removeProfileFromEvent')}
+          message={t('profilesGallery.removeFromEventConfirmModal.areYouSureRemoveProfile')}
           itemName={profileToRemoveFromEvent.label}
-          confirmText="Remove"
-          cancelText="Cancel"
-          caption={`This will remove the profile from "${selectedEventName}" event. The profile will still exist but won't have access to this event.`}
+          confirmText={t('profilesGallery.removeFromEventConfirmModal.remove')}
+          cancelText={t('profilesGallery.removeFromEventConfirmModal.cancel')}
+          caption={t('profilesGallery.removeFromEventConfirmModal.willRemoveFromEvent', { eventName: selectedEventName })}
         />
       )}
 
@@ -1374,7 +1379,7 @@ export default function ProfilesGalleryPage() {
             className="w-16 h-16 bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 hover:from-purple-600 hover:via-indigo-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            title="Create new profile"
+            title={t('profilesGallery.createProfile')}
           >
             <Plus className="w-8 h-8" />
           </motion.button>

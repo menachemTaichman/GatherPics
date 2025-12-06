@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { MessageSquare, Eye, Trash2, CheckCircle, XCircle, Clock, Trash } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { feedbacksAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useFeedbacksList } from '../../utils/dataManager';
@@ -17,9 +19,12 @@ import { TopNavigationBar } from '../../components/layout';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function FeedbacksGalleryPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const [deleteFeedback, setDeleteFeedback] = useState(null);
   const [deleteAll, setDeleteAll] = useState(false);
   const [sortBy, setSortBy] = useState(() => getPreference('FeedbacksGallery.sortBy', 'created_at'));
@@ -30,8 +35,8 @@ export default function FeedbacksGalleryPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Feedbacks | ${APP_CONFIG.name}`;
-  }, []);
+    document.title = `${t('feedbacksGallery.feedbacks')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {
@@ -98,7 +103,7 @@ export default function FeedbacksGalleryPage() {
     try {
       const feedbackId = deleteFeedback.feedback_id || deleteFeedback.id;
       await feedbacksAPI.delete(feedbackId);
-      showToast('Feedback deleted successfully', 'success');
+      showToast(t('feedbacksGallery.feedbackDeletedSuccessfully'), 'success');
     } catch (error) {
       console.error('Failed to delete feedback:', error);
       showToast(formatErrorMessage('delete feedback', error), 'error');
@@ -115,7 +120,8 @@ export default function FeedbacksGalleryPage() {
     try {
       const response = await feedbacksAPI.deleteAll();
       const deletedCount = response?.deleted_ids?.length || 0;
-      showToast(`Successfully deleted ${deletedCount} feedback${deletedCount !== 1 ? 's' : ''}`, 'success');
+      const feedbackText = deletedCount === 1 ? t('feedbacksGallery.feedbackSingular') : t('feedbacksGallery.feedbacksPlural');
+      showToast(`${t('feedbacksGallery.successfullyDeleted')} ${deletedCount} ${feedbackText}`, 'success');
     } catch (error) {
       console.error('Failed to delete feedbacks:', error);
       showToast(formatErrorMessage('delete feedbacks', error), 'error');
@@ -199,20 +205,20 @@ export default function FeedbacksGalleryPage() {
   }, [currentFeedbacks, isAuthenticated]);
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
       {/* Page Header */}
       <div className="bg-white border-b border-gray-200 pt-[4rem] flex-none z-30">
         <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                 <MessageSquare className="w-6 h-6 text-primary-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Feedbacks</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{t('feedbacksGallery.feedbacks')}</h1>
                 <p className="text-sm text-gray-500">
-                  {isAuthenticated ? `${stats.total} total, ${stats.open} open` : 'Loading...'}
+                  {isAuthenticated ? `${stats.total} ${t('feedbacksGallery.total')}, ${stats.open} ${t('feedbacksGallery.open')}` : t('feedbacksGallery.loading')}
                 </p>
               </div>
             </div>
@@ -220,7 +226,7 @@ export default function FeedbacksGalleryPage() {
 
           {/* Filters */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => handleFilterChange('all')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -229,7 +235,7 @@ export default function FeedbacksGalleryPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                All ({stats.total})
+                {t('feedbacksGallery.all')} ({stats.total})
               </button>
               <button
                 onClick={() => handleFilterChange('open')}
@@ -239,7 +245,7 @@ export default function FeedbacksGalleryPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Open ({stats.open})
+                {t('feedbacksGallery.open')} ({stats.open})
               </button>
               <button
                 onClick={() => handleFilterChange('closed')}
@@ -249,7 +255,7 @@ export default function FeedbacksGalleryPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Closed ({stats.closed})
+                {t('feedbacksGallery.closed')} ({stats.closed})
               </button>
               <button
                 onClick={() => handleFilterChange('solved')}
@@ -259,7 +265,7 @@ export default function FeedbacksGalleryPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Solved ({stats.solved})
+                {t('feedbacksGallery.solved')} ({stats.solved})
               </button>
             </div>
 
@@ -267,11 +273,12 @@ export default function FeedbacksGalleryPage() {
             {isAuthenticated && sortedFeedbacks.length > 0 && (
               <button
                 onClick={handleDeleteAll}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                title="Delete all feedbacks"
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                title={t('feedbacksGallery.deleteAllTooltip')}
+                aria-label={t('feedbacksGallery.deleteAllTooltip')}
               >
                 <Trash className="w-4 h-4" />
-                <span>Delete All</span>
+                <span>{t('feedbacksGallery.deleteAll')}</span>
               </button>
             )}
           </div>
@@ -285,21 +292,21 @@ export default function FeedbacksGalleryPage() {
           columns={[
             {
               key: 'feedback_id',
-              label: 'ID',
+              label: t('feedbacksGallery.id'),
               align: 'left',
               cellClassName: 'text-xs text-gray-500 font-mono',
               renderCell: (feedback) => feedback.feedback_id || feedback.id || 'N/A',
             },
             {
               key: 'sender_name',
-              label: 'Sender',
+              label: t('feedbacksGallery.senderName'),
               sortable: true,
               align: 'left',
               renderCell: (feedback) => feedback.sender_name,
             },
             {
               key: 'created_at',
-              label: 'Date',
+              label: t('feedbacksGallery.date'),
               sortable: true,
               align: 'left',
               cellClassName: 'text-gray-600',
@@ -307,34 +314,34 @@ export default function FeedbacksGalleryPage() {
             },
             {
               key: 'type',
-              label: 'Type',
+              label: t('feedbacksGallery.type'),
               sortable: true,
               align: 'left',
               renderCell: (feedback) => (
                 <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                   feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                 }`}>
-                  {feedback.type === 0 ? 'Bug' : 'Idea'}
+                  {feedback.type === 0 ? t('feedbacksGallery.bug') : t('feedbacksGallery.idea')}
                 </span>
               ),
             },
             {
               key: 'title',
-              label: 'Title',
+              label: t('feedbacksGallery.title'),
               align: 'left',
               cellClassName: 'text-gray-900 max-w-xs truncate',
               renderCell: (feedback) => feedback.title,
             },
             {
               key: 'status',
-              label: 'Status',
+              label: t('feedbacksGallery.status'),
               sortable: true,
               align: 'left',
               renderCell: (feedback) => {
                 const isClosed = Boolean(feedback.is_closed);
                 const isSolved = Boolean(feedback.solved);
                 return (
-                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                     isSolved
                       ? 'bg-green-100 text-green-700'
                       : isClosed
@@ -343,18 +350,18 @@ export default function FeedbacksGalleryPage() {
                   }`}>
                     {isSolved ? (
                       <>
-                        <CheckCircle className="inline mr-1 w-4 h-4 align-text-bottom text-green-600" />
-                        Solved
+                        <CheckCircle className="w-4 h-4 align-text-bottom text-green-600" />
+                        {t('feedbacksGallery.solved')}
                       </>
                     ) : isClosed ? (
                       <>
-                        <XCircle className="inline mr-1 w-4 h-4 align-text-bottom text-gray-600" />
-                        Closed
+                        <XCircle className="w-4 h-4 align-text-bottom text-gray-600" />
+                        {t('feedbacksGallery.closed')}
                       </>
                     ) : (
                       <>
-                        <Clock className="inline mr-1 w-4 h-4 align-text-bottom text-blue-600" />
-                        Open
+                        <Clock className="w-4 h-4 align-text-bottom text-blue-600" />
+                        {t('feedbacksGallery.open')}
                       </>
                     )}
                   </span>
@@ -363,21 +370,23 @@ export default function FeedbacksGalleryPage() {
             },
             {
               key: 'actions',
-              label: 'Actions',
+              label: t('feedbacksGallery.actions'),
               align: 'right',
               renderCell: (feedback, index) => (
-                <div className="flex items-center justify-end space-x-2">
+                <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={() => handleViewFeedback(feedback, index)}
                     className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                    title="View details"
+                    title={t('feedbacksGallery.viewDetails')}
+                    aria-label={t('feedbacksGallery.viewDetails')}
                   >
                     <Eye className="w-4 h-4 text-blue-600" />
                   </button>
                   <button
                     onClick={() => handleDeleteFeedback(feedback)}
                     className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                    title="Delete"
+                    title={t('feedbacksGallery.delete')}
+                    aria-label={t('feedbacksGallery.delete')}
                   >
                     <Trash2 className="w-4 h-4 text-red-600" />
                   </button>
@@ -391,8 +400,8 @@ export default function FeedbacksGalleryPage() {
           onSort={handleSort}
           emptyState={{
             icon: MessageSquare,
-            title: 'No feedbacks found',
-            message: 'No feedback submissions match your current filter.',
+            title: t('feedbacksGallery.noFeedbacksFound'),
+            message: t('feedbacksGallery.noFeedbacksMatchFilter'),
           }}
           getRowKey={(feedback) => feedback.feedback_id || feedback.id}
         />
@@ -414,12 +423,12 @@ export default function FeedbacksGalleryPage() {
           isOpen={!!deleteFeedback}
           onClose={() => setDeleteFeedback(null)}
           onConfirm={handleConfirmDelete}
-          title="Delete Feedback"
-          message="Are you sure you want to delete this feedback"
+          title={t('account.deleteFeedbackTitle')}
+          message={t('account.deleteFeedbackMessage')}
           itemName={deleteFeedback.sender_name}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('account.delete')}
+          cancelText={t('account.cancel')}
+          caption={t('account.thisActionCannotBeUndone')}
         />
       )}
 
@@ -429,12 +438,12 @@ export default function FeedbacksGalleryPage() {
           isOpen={deleteAll}
           onClose={() => setDeleteAll(false)}
           onConfirm={handleConfirmDeleteAll}
-          title="Delete All Feedbacks"
-          message={`Are you sure you want to delete all ${sortedFeedbacks.length} feedback${sortedFeedbacks.length !== 1 ? 's' : ''}?`}
+          title={t('feedbacksGallery.deleteAllTitle')}
+          message={`${t('feedbacksGallery.deleteAllMessage')} ${sortedFeedbacks.length} ${sortedFeedbacks.length === 1 ? t('feedbacksGallery.feedbackSingular') : t('feedbacksGallery.feedbacksPlural')}?`}
           simpleMessage={true}
-          confirmText="Delete All"
-          cancelText="Cancel"
-          caption="This action cannot be undone. All displayed feedbacks will be permanently deleted."
+          confirmText={t('feedbacksGallery.deleteAll')}
+          cancelText={t('account.cancel')}
+          caption={t('feedbacksGallery.deleteAllCaption')}
         />
       )}
 

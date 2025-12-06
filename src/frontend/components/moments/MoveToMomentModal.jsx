@@ -12,6 +12,8 @@ import { useModalStore } from '../../utils/modalManager';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortMoments } from '../../utils/sorting';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function MoveToMomentModal({ 
   isOpen, 
@@ -26,6 +28,8 @@ export default function MoveToMomentModal({
   const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { isRTL, startClass, ps, pe } = useRTL();
   const allMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId));
   const entities = useDataStore(state => state.entities?.[eventId]);
   const MODAL_ID = 'move-to-moment-modal';
@@ -200,7 +204,7 @@ export default function MoveToMomentModal({
     setIsLoading(true); // Set immediately
 
     if (!selectedImages || selectedImages.length === 0) {
-      setError('No images selected for move');
+      setError(t('moveToMoment.noImagesSelected'));
       setIsLoading(false);
       return;
     }
@@ -208,7 +212,7 @@ export default function MoveToMomentModal({
     // If only removing from current moment (no target selected)
     if (removeFromCurrent && !selectedMomentId && !newMomentName.trim()) {
       if (sourceMoments.length === 0) {
-        setError('No moment to remove from');
+        setError(t('moveToMoment.noMomentToRemoveFrom'));
         setIsLoading(false);
         return;
       }
@@ -244,7 +248,7 @@ export default function MoveToMomentModal({
     }
 
     if (!selectedMomentId && !newMomentName.trim()) {
-      setError('Please select a target moment or enter a new moment name');
+      setError(t('moveToMoment.selectTargetOrEnterName'));
       setIsLoading(false);
       return;
     }
@@ -253,7 +257,7 @@ export default function MoveToMomentModal({
     if (!selectedMomentId && newMomentName.trim()) {
       const exists = allMoments.some(m => m.label === newMomentName.trim());
       if (exists) {
-        setError('Moment name already exists. Please choose a different name.');
+        setError(t('moveToMoment.momentNameExists'));
         setIsLoading(false);
         return;
       }
@@ -398,27 +402,27 @@ export default function MoveToMomentModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" tabIndex={-1}>
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" tabIndex={-1} dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <Clock className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Move {Array.from(selectedImages).length} Photo{Array.from(selectedImages).length !== 1 ? 's' : ''}
+                {t('moveToMoment.move')} {Array.from(selectedImages).length} {Array.from(selectedImages).length !== 1 ? t('moveToMoment.photos') : t('moveToMoment.photo')}
               </h2>
               <p className="text-xs text-gray-500">
-                Choose destination moment or create new one
+                {t('moveToMoment.chooseDestination')}
               </p>
               {Array.from(selectedImages).length > 0 && (
                 <div className="mt-1 text-xs text-gray-600">
-                  From: {sourceMoments.length === 0
-                    ? 'Not in any moment'
+                  {t('moveToMoment.from')}: {sourceMoments.length === 0
+                    ? t('moveToMoment.notInAnyMoment')
                     : sourceMoments.length === 1
-                    ? sourceMoments[0]?.label || 'Unknown Moment'
-                    : `${sourceMoments.length} moments (${sourceMoments.map(m => m.label || `Moment ${m.id}`).join(', ')})`
+                    ? sourceMoments[0]?.label || t('moveToMoment.unknownMoment')
+                    : `${sourceMoments.length} ${t('moveToMoment.moments')} (${sourceMoments.map(m => m.label || `${t('moveToMoment.moment')} ${m.id}`).join(', ')})`
                   }
                 </div>
               )}
@@ -438,9 +442,9 @@ export default function MoveToMomentModal({
           {/* Loading state */}
           {isLoadingMoments && (
             <div className="text-center py-8">
-              <div className="inline-flex items-center space-x-2 text-gray-500">
+              <div className="inline-flex items-center gap-2 text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span>Loading moments...</span>
+                <span>{t('moveToMoment.loadingMoments')}</span>
               </div>
             </div>
           )}
@@ -451,14 +455,15 @@ export default function MoveToMomentModal({
             <div className={`mb-3 flex flex-col sm:flex-row gap-2 ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Search */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400`} />
               <input
                 type="text"
-                placeholder="Search moments..."
+                dir={isRTL ? 'rtl' : 'ltr'}
+                placeholder={t('moveToMoment.searchMoments')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 disabled={removeFromCurrent}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
               />
             </div>
             
@@ -470,14 +475,15 @@ export default function MoveToMomentModal({
                 disabled={removeFromCurrent}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="date">Sort by Date</option>
-                <option value="name">Sort by Name</option>
+                <option value="date">{t('moveToMoment.sortByDate')}</option>
+                <option value="name">{t('moveToMoment.sortByName')}</option>
               </select>
               <button
                 onClick={handleToggleSortOrder}
                 disabled={removeFromCurrent}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center disabled:opacity-50"
-                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                title={sortOrder === 'asc' ? t('moveToMoment.sortAscending') : t('moveToMoment.sortDescending')}
+                aria-label={sortOrder === 'asc' ? t('moveToMoment.sortAscending') : t('moveToMoment.sortDescending')}
               >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="w-4 h-4" />
@@ -490,7 +496,7 @@ export default function MoveToMomentModal({
 
           {/* Moments Grid */}
           <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Select existing moment:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('moveToMoment.selectExistingMoment')}</h3>
             <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-56 overflow-y-auto ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}>
               {filteredAndSortedMoments.map((moment) => (
                 <div
@@ -534,7 +540,7 @@ export default function MoveToMomentModal({
               ))}
               {filteredAndSortedMoments.length === 0 && (
                 <div className="col-span-full text-center py-8 text-gray-500">
-                  {searchTerm ? 'No moments found matching your search' : 'No moments available'}
+                  {searchTerm ? t('moveToMoment.noMomentsFound') : t('moveToMoment.noMomentsAvailable')}
                 </div>
               )}
             </div>
@@ -542,13 +548,14 @@ export default function MoveToMomentModal({
 
           {/* New Moment Creation */}
           <div className={`mb-4 ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Or create new moment:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('moveToMoment.orCreateNewMoment')}</h3>
             <div className="relative mb-1">
               <input
                 type="text"
+                dir={isRTL ? 'rtl' : 'ltr'}
                 value={newMomentName}
                 onChange={handleNewMomentNameChange}
-                placeholder="Enter new moment name..."
+                placeholder={t('moveToMoment.enterNewMomentName')}
                 disabled={removeFromCurrent}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   nameConflict ? 'border-red-500' : 'border-gray-300'
@@ -556,19 +563,19 @@ export default function MoveToMomentModal({
               />
             </div>
             {nameConflict && (
-              <div className="flex items-center space-x-1 text-red-500 text-xs mb-1">
+              <div className="flex items-center gap-1 text-red-500 text-xs mb-1">
                 <AlertTriangle className="w-3 h-3" />
-                <span>Name already exists</span>
+                <span>{t('moveToMoment.nameAlreadyExists')}</span>
               </div>
             )}
-            <p className="text-xs text-gray-500">Dates will be auto-detected from selected photos</p>
+            <p className="text-xs text-gray-500">{t('moveToMoment.datesAutoDetected')}</p>
           </div>
 
           {/* Remove from current moment option - show if any image has a moment */}
           {showRemoveOption && (
             <div className="mb-6 flex items-center justify-between">
               <div className="text-sm font-medium text-gray-900">
-                Remove from current {hasMultipleMoments ? 'moments' : 'moment'}
+                {t('moveToMoment.removeFromCurrent')} {hasMultipleMoments ? t('moveToMoment.moments') : t('moveToMoment.moment')}
               </div>
               <button
                 onClick={() => {
@@ -590,7 +597,7 @@ export default function MoveToMomentModal({
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-center space-x-2 text-red-600 text-sm">
+            <div className="flex items-center gap-2 text-red-600 text-sm">
               <AlertTriangle className="w-4 h-4" />
               <span>{error}</span>
             </div>
@@ -601,35 +608,35 @@ export default function MoveToMomentModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 px-4 py-3 border-t border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors"
             disabled={isLoading}
           >
-            Cancel
+            {t('moveToMoment.cancel')}
           </button>
           <button
             onClick={handleMove}
             disabled={isLoading || (!selectedMomentId && !newMomentName.trim() && !removeFromCurrent) || nameConflict}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 <span>
-                  {removeFromCurrent && (selectedMomentId || newMomentName.trim()) ? 'Moving...' : 
-                   removeFromCurrent ? 'Removing...' : 
-                   'Adding...'}
+                  {removeFromCurrent && (selectedMomentId || newMomentName.trim()) ? t('moveToMoment.moving') : 
+                   removeFromCurrent ? t('moveToMoment.removing') : 
+                   t('moveToMoment.adding')}
                 </span>
               </>
             ) : (
               <>
                 <Calendar className="w-4 h-4" />
                 <span>
-                  {removeFromCurrent && (selectedMomentId || newMomentName.trim()) ? 'Move' : 
-                   removeFromCurrent ? 'Remove' : 
-                   'Move'}
+                  {removeFromCurrent && (selectedMomentId || newMomentName.trim()) ? t('moveToMoment.move') : 
+                   removeFromCurrent ? t('moveToMoment.remove') : 
+                   t('moveToMoment.move')}
                 </span>
               </>
             )}

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Calendar, Image as ImageIcon, Upload, Settings, FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import PermissionGate from '../components/common/PermissionGate.jsx';
 import { EditEventModal } from '../components/events';
 import { APP_CONFIG } from '../config/appConfig';
@@ -12,11 +13,15 @@ import { useApplyScopes } from '../utils/storeUtils';
 import { useEventGeneralById } from '../utils/dataManager';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../contexts/authContext';
+import { useRTL } from '../hooks/useRTL';
+import i18n from '../i18n';
 
 export default function EventHomePage({ eventUrl, eventData }) {
   const [showEventSettings, setShowEventSettings] = useState(false);
   const { showToast } = useToast();
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const heroContainerRef = useRef(null);
   const textOverlayRef = useRef(null);
   const imageSectionRef = useRef(null);
@@ -43,7 +48,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
     });
   }, [isAuthenticated, eventUrl, eventId, storeEvent]);
 
-  const eventName = resolvedEvent?.name || 'Event';
+  const eventName = resolvedEvent?.name || t('eventHome.event');
   const permissions = usePermissions();
   const canSeeAlbums = Boolean(eventUrl) && (permissions.has_albums || permissions.hasArchiveAlbum || permissions.hasFavoritesAlbum || permissions.canEdit);
 
@@ -170,8 +175,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'timeline',
       to: `/${eventUrl}/timeline`,
       icon: Calendar,
-      title: 'Timeline',
-      description: 'Browse photos by moment',
+      title: t('eventHome.timeline'),
+      description: t('eventHome.browsePhotosByMoment'),
       iconBg: 'from-blue-100 to-blue-50',
       iconColor: 'text-blue-600',
       hoverBg: 'group-hover:from-blue-500 group-hover:to-blue-600',
@@ -184,8 +189,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'people',
       to: `/${eventUrl}/people`,
       icon: Users,
-      title: 'People',
-      description: 'View photos by person',
+      title: t('eventHome.people'),
+      description: t('eventHome.viewPhotosByPerson'),
       iconBg: 'from-emerald-100 to-emerald-50',
       iconColor: 'text-emerald-600',
       hoverBg: 'group-hover:from-emerald-500 group-hover:to-emerald-600',
@@ -198,8 +203,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'albums',
       to: `/${eventUrl}/albums`,
       icon: ImageIcon,
-      title: 'Albums',
-      description: 'Organized photo collections',
+      title: t('eventHome.albums'),
+      description: t('eventHome.organizePhotosIntoCollections'),
       iconBg: 'from-purple-100 to-purple-50',
       iconColor: 'text-purple-600',
       hoverBg: 'group-hover:from-purple-500 group-hover:to-purple-600',
@@ -213,8 +218,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'uploads',
       to: `/${eventUrl}/uploads`,
       icon: Upload,
-      title: 'Uploads',
-      description: 'Manage your contributions',
+      title: t('eventHome.uploads'),
+      description: t('eventHome.manageContributions'),
       iconBg: 'from-orange-100 to-orange-50',
       iconColor: 'text-orange-600',
       hoverBg: 'group-hover:from-orange-500 group-hover:to-orange-600',
@@ -227,8 +232,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'access-requests',
       to: `/${eventUrl}/requests`,
       icon: FileText,
-      title: 'Access Requests',
-      description: 'Review pending access requests',
+      title: t('eventHome.accessRequests'),
+      description: t('eventHome.reviewPendingRequests'),
       iconBg: 'from-sky-100 to-sky-50',
       iconColor: 'text-sky-700',
       hoverBg: 'group-hover:from-sky-500 group-hover:to-sky-600',
@@ -241,8 +246,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
       id: 'profiles',
       to: `/${eventUrl}/profiles`,
       icon: Users,
-      title: 'Profiles',
-      description: 'Manage user profiles and permissions',
+      title: t('eventHome.profiles'),
+      description: t('eventHome.manageUserProfiles'),
       iconBg: 'from-purple-100 to-purple-50',
       iconColor: 'text-purple-600',
       hoverBg: 'group-hover:from-purple-500 group-hover:to-purple-600',
@@ -254,8 +259,8 @@ export default function EventHomePage({ eventUrl, eventData }) {
     {
       id: 'event-settings',
       icon: Settings,
-      title: 'Event Settings',
-      description: 'Update event details and limits',
+      title: t('eventHome.eventSettings'),
+      description: t('eventHome.updateEventDetails'),
       iconBg: 'from-slate-100 to-slate-50',
       iconColor: 'text-slate-600',
       hoverBg: 'group-hover:from-slate-500 group-hover:to-slate-600',
@@ -337,6 +342,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
       transition={{ duration: 0.4 }}
       className="bg-gradient-to-b from-gray-50 to-white relative"
       style={{ minHeight: 'calc(100vh - 4rem)' }}
+      dir={isRTL ? 'rtl' : 'ltr'}
     >
       {/* Subtle animated background accent */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -392,7 +398,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
             )}
             {resolvedEvent?.images_count ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 backdrop-blur">
-                {resolvedEvent.images_count} photos
+                {resolvedEvent.images_count} {t('eventHome.photos')}
               </span>
             ) : null}
           </div>
@@ -428,7 +434,7 @@ export default function EventHomePage({ eventUrl, eventData }) {
                     width: 1600,
                     height: 640,
                     className: 'h-full w-full object-cover',
-                    alt: eventName ? `${eventName} highlight` : 'Event highlight',
+                    alt: eventName || t('eventHome.eventHighlight'),
                     loading: 'eager',
                   }
                 )}
@@ -490,14 +496,14 @@ export default function EventHomePage({ eventUrl, eventData }) {
               to="/about"
               className="hover:text-primary-600 transition-colors duration-200"
             >
-              About
+              {t('eventHome.about')}
             </Link>
             <span className="text-gray-400">•</span>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('feedback:open-form'))}
               className="hover:text-primary-600 transition-colors duration-200"
             >
-              Send Feedback
+              {t('eventHome.sendFeedback')}
             </button>
           </div>
           <p className="text-gray-400 text-xs mt-4">

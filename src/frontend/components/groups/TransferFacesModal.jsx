@@ -11,6 +11,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useModalStore } from '../../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/storeUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -27,6 +29,8 @@ export default function TransferFacesModal({
   const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { isRTL, startClass, ps, pe } = useRTL();
   const groups = useDataStore(state => storeSelectors.groupsAll(state, eventId));
   const MODAL_ID = 'transfer-faces-modal';
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -197,13 +201,13 @@ export default function TransferFacesModal({
     setIsLoading(true); // Set immediately
 
     if (!selectedFaces || selectedFaces.length === 0) {
-      setError('No faces selected for transfer');
+      setError(t('transferFaces.noFacesSelected'));
       setIsLoading(false);
       return;
     }
 
     if (!selectedGroupId && !newGroupName.trim()) {
-      setError('Please select a target person or enter a new person name');
+      setError(t('transferFaces.selectTargetOrEnterName'));
       setIsLoading(false);
       return;
     }
@@ -213,7 +217,7 @@ export default function TransferFacesModal({
       try {
         const conflictCheck = await groupsAPI.checkName(newGroupName.trim(), '', eventUrl);
         if (conflictCheck.conflict) {
-          setError('Person name already exists. Please choose a different name.');
+          setError(t('transferFaces.personNameExists'));
           setIsLoading(false);
           return;
         }
@@ -238,7 +242,7 @@ export default function TransferFacesModal({
       // Store has already been updated by apiService interceptor
       // Trust the result and read from the updated store
       const transferredCount = result.len_added || selectedFaces.length;
-      const imageText = transferredCount === 1 ? 'photo' : 'photos';
+      const imageText = transferredCount === 1 ? t('transferFaces.photo') : t('transferFaces.photos');
       const targetGroupId = result.target_group_id;
       
       // Get the target group name - try multiple sources
@@ -286,7 +290,7 @@ export default function TransferFacesModal({
         
         showToast(
           <span>
-            {transferredCount} {imageText} transferred to <a 
+            {transferredCount} {imageText} {t('transferFaces.transferredTo')} <a 
               href={link} 
               className="underline hover:text-gray-100" 
               onClick={(e) => {
@@ -303,7 +307,7 @@ export default function TransferFacesModal({
         );
       } else {
         // Fallback if group name couldn't be determined
-        showToast(`${transferredCount} ${imageText} transferred`, 'success');
+        showToast(`${transferredCount} ${imageText} ${t('transferFaces.transferred')}`, 'success');
       }
 
       if (onTransferComplete) {
@@ -314,7 +318,7 @@ export default function TransferFacesModal({
       const errorInfo = handleAPIError(error, 'Failed to transfer faces');
       // Surface clearer message for unique constraint
       if (String(errorInfo.message || '').toLowerCase().includes('unique')) {
-        setError('A person with this name already exists. Please choose a different name or select the existing person.');
+        setError(t('transferFaces.personNameExistsChooseDifferent'));
       } else {
         setError(errorInfo.message);
       }
@@ -344,25 +348,25 @@ export default function TransferFacesModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[94vh] overflow-y-auto" tabIndex={-1}>
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[94vh] overflow-y-auto" tabIndex={-1} dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
               <Users className="w-5 h-5 text-orange-600" />
             </div>
                          <div>
                <h2 className="text-xl font-semibold text-gray-900">
-                 Transfer {selectedFaces.length} Face{selectedFaces.length !== 1 ? 's' : ''}
+                 {t('transferFaces.transfer')} {selectedFaces.length} {selectedFaces.length !== 1 ? t('transferFaces.faces') : t('transferFaces.face')}
                </h2>
                <p className="text-sm text-gray-500">
-                 Choose destination person or create new one
+                 {t('transferFaces.chooseDestination')}
                </p>
                {selectedFaces.length > 0 && (
                  <div className="mt-2 text-xs text-gray-600">
-                   From: {sourceGroups.length === 1 
-                     ? sourceGroups[0]?.label || 'Unknown Person'
-                     : `${sourceGroups.length} people (${sourceGroups.map(g => g.label || `Person ${g.id}`).join(', ')})`
+                   {t('transferFaces.from')}: {sourceGroups.length === 1 
+                     ? sourceGroups[0]?.label || t('transferFaces.unknownPerson')
+                     : `${sourceGroups.length} ${t('transferFaces.people')} (${sourceGroups.map(g => g.label || `${t('transferFaces.person')} ${g.id}`).join(', ')})`
                    }
                  </div>
                )}
@@ -381,9 +385,9 @@ export default function TransferFacesModal({
           {/* Loading state */}
           {isLoadingGroups && (
             <div className="text-center py-8">
-              <div className="inline-flex items-center space-x-2 text-gray-500">
+              <div className="inline-flex items-center gap-2 text-gray-500">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
-                <span>Loading groups...</span>
+                <span>{t('transferFaces.loadingGroups')}</span>
               </div>
             </div>
           )}
@@ -394,13 +398,14 @@ export default function TransferFacesModal({
             <div className="mb-4 flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400`} />
               <input
                 type="text"
-                placeholder="Search people..."
+                dir={isRTL ? 'rtl' : 'ltr'}
+                placeholder={t('transferFaces.searchPeople')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className={`w-full ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent`}
               />
             </div>
             
@@ -411,13 +416,14 @@ export default function TransferFacesModal({
                 onChange={(e) => setSortBy(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               >
-                <option value="name">Sort by Name</option>
-                <option value="count">Sort by Count</option>
+                <option value="name">{t('transferFaces.sortByName')}</option>
+                <option value="count">{t('transferFaces.sortByCount')}</option>
               </select>
               <button
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
-                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                title={sortOrder === 'asc' ? t('transferFaces.sortAscending') : t('transferFaces.sortDescending')}
+                aria-label={sortOrder === 'asc' ? t('transferFaces.sortAscending') : t('transferFaces.sortDescending')}
               >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="w-4 h-4" />
@@ -430,7 +436,7 @@ export default function TransferFacesModal({
 
           {/* Groups Grid */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Select existing person:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('transferFaces.selectExistingPerson')}</h3>
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
               {filteredAndSortedGroups.map((group) => (
                 <div
@@ -472,7 +478,7 @@ export default function TransferFacesModal({
               ))}
               {filteredAndSortedGroups.length === 0 && (
                 <div className="col-span-full text-center py-8 text-gray-500">
-                  {searchTerm ? 'No people found matching your search' : 'No people available'}
+                  {searchTerm ? t('transferFaces.noPeopleFound') : t('transferFaces.noPeopleAvailable')}
                 </div>
               )}
             </div>
@@ -480,21 +486,22 @@ export default function TransferFacesModal({
 
           {/* New Group Creation */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Or create new person:</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('transferFaces.orCreateNewPerson')}</h3>
             <div className="relative">
               <input
                 type="text"
+                dir={isRTL ? 'rtl' : 'ltr'}
                 value={newGroupName}
                 onChange={handleNewGroupNameChange}
-                placeholder="Enter new person name..."
+                placeholder={t('transferFaces.enterNewPersonName')}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
                   nameConflict ? 'border-red-500' : 'border-gray-300'
                 }`}
               />
               {nameConflict && (
-                <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
                   <AlertTriangle className="w-3 h-3" />
-                  <span>Name already exists</span>
+                  <span>{t('transferFaces.nameAlreadyExists')}</span>
                 </div>
               )}
             </div>
@@ -502,7 +509,7 @@ export default function TransferFacesModal({
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-center space-x-2 text-red-600 text-sm mb-4">
+            <div className="flex items-center gap-2 text-red-600 text-sm mb-4">
               <AlertTriangle className="w-4 h-4" />
               <span>{error}</span>
             </div>
@@ -512,28 +519,28 @@ export default function TransferFacesModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors"
             disabled={isLoading}
           >
-            Cancel
+            {t('transferFaces.cancel')}
           </button>
           <button
             onClick={handleTransfer}
             disabled={isLoading || (!selectedGroupId && !newGroupName.trim()) || nameConflict}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>Transferring...</span>
+                <span>{t('transferFaces.transferring')}</span>
               </>
             ) : (
               <>
                 <User className="w-4 h-4" />
-                <span>Transfer</span>
+                <span>{t('transferFaces.transfer')}</span>
               </>
             )}
           </button>

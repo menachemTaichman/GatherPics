@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUp, ArrowDown, Image as ImageIcon, Minus, Plus, Check, X, AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
@@ -14,6 +15,9 @@ import { useModalManager } from '../../utils/modalManager';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -22,6 +26,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL, startClass, ps, pe } = useRTL();
   const [searchTerm, setSearchTerm] = useState('');
   const sortOrder = usePreference('AlbumsGallery.sortDir', 'asc');
   const setSortOrder = (value) => setPreference('AlbumsGallery.sortDir', value);
@@ -104,6 +110,11 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   
   useAuthRefresh(loadAlbums, [eventUrl]);
 
+  // Set document title
+  useEffect(() => {
+    document.title = `${t('albumsGallery.albums')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
+
   // Use albums from store or placeholders when not authenticated
   const currentAlbums = isAuthenticated ? storeAlbums : placeholderAlbums;
 
@@ -176,7 +187,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
     );
     
     if (existingAlbum) {
-      showToast('Album with this name already exists', 'error');
+      showToast(t('albumsGallery.albumWithThisNameAlreadyExists'), 'error');
       return;
     }
     
@@ -191,7 +202,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
         const link = `/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`;
         showToast(
           <span>
-            Album <a 
+            {t('albumsGallery.albumCreated')}: <a 
               href={link} 
               className="underline hover:text-gray-100"
               onClick={(e) => {
@@ -200,7 +211,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                   navigate(link);
                 }
               }}
-            >{trimmedName}</a> created
+            >{trimmedName}</a>
           </span>,
           'success'
         );
@@ -211,7 +222,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       }
     } catch (e) {
       console.error('Failed to create album:', e);
-      showToast(`Failed to create album: ${e.message || 'Unknown error'}`, 'error');
+      showToast(`${t('albumsGallery.failedToCreateAlbum')}: ${e.message || 'Unknown error'}`, 'error');
     } finally {
       setCreatingAlbumLoading(false);
     }
@@ -255,40 +266,41 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Sticky Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Albums
+              {t('albumsGallery.albums')}
             </h1>
             <p className="text-gray-600">
               {filteredAndSortedAlbums.length === currentAlbums.length
-                ? `${filteredAndSortedAlbums.length} albums`
-                : `${filteredAndSortedAlbums.length} of ${currentAlbums.length} albums`
+                ? `${filteredAndSortedAlbums.length} ${t('albumsGallery.albums')}`
+                : `${filteredAndSortedAlbums.length} ${t('albumsGallery.of')} ${currentAlbums.length} ${t('albumsGallery.albums')}`
               }
             </p>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`} />
               <input
                 type="text"
                 id="search-albums"
                 name="search-albums"
-                placeholder="Search albums..."
+                dir={isRTL ? 'rtl' : 'ltr'}
+                placeholder={t('albumsGallery.searchAlbums')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                className={`w-64 ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent`}
               />
             </div>
             
             <button
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
-              title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+              title={t('albumsGallery.sort') + ' ' + (sortOrder === 'asc' ? t('albumsGallery.ascending') : t('albumsGallery.descending'))}
             >
               {sortOrder === 'asc' ? (
                 <ArrowUp className="w-4 h-4" />
@@ -298,7 +310,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
             </button>
 
             {/* Size Control */}
-            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
               <button
                 onClick={() => {
                   const currentPercent = Math.round(cardSize * 100);
@@ -367,7 +379,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
           >
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
             <p className="text-gray-500">
-              Loading albums...
+              {t('albumsGallery.loadingAlbums')}
             </p>
           </motion.div>
         ) : (filteredAndSortedAlbums.length === 0 ? (
@@ -378,12 +390,12 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
           >
             <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm ? 'No albums found' : 'No albums yet'}
+              {searchTerm ? t('albumsGallery.noAlbumsFound') : t('albumsGallery.noAlbumsYet')}
             </h3>
             <p className="text-gray-500">
               {searchTerm 
-                ? 'Try adjusting your search terms' 
-                : 'Create an album from image actions'
+                ? t('albumsGallery.tryAdjustingSearchTerms')
+                : t('albumsGallery.createAlbumFromImageActions')
               }
             </p>
           </motion.div>
@@ -412,10 +424,10 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                   className={`photo-card ${imageClasses[album.id] || 'square'}`}
                   style={{ transition: 'transform 0.2s ease-out' }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
                   }}
                 >
                   <Link to={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="block group h-full">
@@ -438,7 +450,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                           {album.label}
                         </div>
                         <div className="text-xs text-white/90">
-                          {getAlbumImageCount(album)} images
+                          {getAlbumImageCount(album)} {t('albumsGallery.images')}
                         </div>
                       </div>
                     </div>
@@ -451,34 +463,35 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
       </div>
       
       {/* Floating Create Album Button */}
-      <div className="fixed bottom-8 right-8 z-40">
+      <div className={`fixed bottom-8 ${isRTL ? 'left-8' : 'right-8'} z-40`}>
         <AnimatePresence>
           {isCreatingAlbum && (
             <motion.div
               ref={modalRef}
-              initial={{ opacity: 0, scale: 0.9, x: 20 }}
+              initial={{ opacity: 0, scale: 0.9, x: isRTL ? -20 : 20 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.9, x: 20 }}
+              exit={{ opacity: 0, scale: 0.9, x: isRTL ? -20 : 20 }}
               transition={{ duration: 0.2 }}
-              className="absolute bottom-20 right-0 bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-2xl border border-blue-100 p-4 w-80"
+              className={`absolute bottom-20 ${isRTL ? 'left-0' : 'right-0'} bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-2xl border border-blue-100 p-4 w-80`}
             >
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <div className="flex-1 relative">
                   <input
                     ref={inputRef}
                     type="text"
+                    dir={isRTL ? 'rtl' : 'ltr'}
                     value={newAlbumName}
                     onChange={handleNewAlbumNameChange}
-                    placeholder="Enter album name..."
+                    placeholder={t('albumsGallery.enterAlbumName')}
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white ${
                       nameConflict ? 'border-red-500' : 'border-blue-200'
                     }`}
                     disabled={creatingAlbumLoading}
                   />
                   {nameConflict && (
-                    <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs whitespace-nowrap">
+                    <div className={`absolute top-full ${isRTL ? 'right-0' : 'left-0'} mt-1 flex items-center gap-1 text-red-500 text-xs whitespace-nowrap`}>
                       <AlertTriangle className="w-3 h-3" />
-                      <span>Album name already exists</span>
+                      <span>{t('albumsGallery.albumWithThisNameAlreadyExists')}</span>
                     </div>
                   )}
                 </div>
@@ -486,7 +499,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                   onClick={handleCreateAlbum}
                   disabled={!newAlbumName.trim() || creatingAlbumLoading || nameConflict}
                   className="w-10 h-10 flex items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 hover:from-purple-600 hover:via-blue-600 hover:to-indigo-700 text-white disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex-shrink-0"
-                  title="Create album (Enter)"
+                  title={t('albumsGallery.createAlbumEnter')}
+                  aria-label={t('albumsGallery.createAlbumEnter')}
                 >
                   {creatingAlbumLoading ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -498,7 +512,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                   onClick={handleCancelCreate}
                   disabled={creatingAlbumLoading}
                   className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-red-200 flex-shrink-0"
-                  title="Cancel (Esc)"
+                  title={t('account.cancelEsc')}
+                  aria-label={t('account.cancelEsc')}
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -514,7 +529,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
           whileTap={{ scale: 0.95 }}
           animate={{ rotate: isCreatingAlbum ? 45 : 0 }}
           transition={{ duration: 0.2 }}
-          title="Create new album"
+          title={t('albumsGallery.createAlbum')}
+          aria-label={t('albumsGallery.createAlbum')}
         >
           <Plus className="w-8 h-8" />
         </motion.button>

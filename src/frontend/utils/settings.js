@@ -7,12 +7,24 @@ import { STORAGE_KEYS } from './dataManager';
 
 const PREFERENCES = STORAGE_KEYS.PREFERENCES;
 
+// Flag to prevent API calls when preferences are being updated from API responses
+let isApplyingApiChanges = false;
+
+/**
+ * Set the flag to prevent API calls when applying changes from API responses
+ * @param {boolean} value - Whether we're currently applying API changes
+ */
+export const setIsApplyingApiChanges = (value) => {
+  isApplyingApiChanges = value;
+};
+
 // Default values for all settings
 const DEFAULT_PREFERENCES = {
   general: {
     select: false,
     size: 1.0,
-    includeArchived: false
+    includeArchived: false,
+    language: 'en'
   },
   ImageViewer: {
     albumsHeight: 200,
@@ -100,6 +112,34 @@ export const setPreferences = (preferences) => {
  */
 export const setPreference = async (path, value) => {
   const preferences = getPreferences();
+  const currentValue = getNestedValue(preferences, path);
+  
+  // Normalize falsy values for comparison (treat undefined, null, and empty string as equivalent for preferences)
+  const normalizeForComparison = (val) => {
+    // Treat undefined, null, and empty string as equivalent
+    if (val === undefined || val === null || val === '') {
+      return '';
+    }
+    return val;
+  };
+  
+  const normalizedCurrent = normalizeForComparison(currentValue);
+  const normalizedNew = normalizeForComparison(value);
+  
+  // Only update if value actually changed
+  if (normalizedCurrent === normalizedNew) {
+    return; // No change, skip update
+  }
+  
+  // Also check JSON stringify for deep equality of objects/arrays
+  try {
+    if (JSON.stringify(normalizedCurrent) === JSON.stringify(normalizedNew)) {
+      return; // No change, skip update
+    }
+  } catch (e) {
+    // If stringify fails (circular refs, etc.), fall through to update
+  }
+  
   setNestedValue(preferences, path, value);
   setPreferences(preferences);
   
@@ -109,19 +149,22 @@ export const setPreference = async (path, value) => {
   }));
   
   // Sync to backend if user is not public
-  try {
-    const pathParts = path.split('.');
-    if (pathParts.length >= 2) {
-      const preferenceGroup = pathParts[0];
-      const preferenceKey = pathParts.slice(1).join('.');
-      
-      await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
-    }
-  } catch (error) {
-    // Silently fail - profile is public or not logged in
-    // The preference is still saved locally, which is fine
-    if (error.response?.status !== 403) {
-      console.warn('Failed to sync preference to backend:', error);
+  // Skip API call if we're currently applying changes from API (prevents infinite loops)
+  if (!isApplyingApiChanges) {
+    try {
+      const pathParts = path.split('.');
+      if (pathParts.length >= 2) {
+        const preferenceGroup = pathParts[0];
+        const preferenceKey = pathParts.slice(1).join('.');
+        
+        await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
+      }
+    } catch (error) {
+      // Silently fail - profile is public or not logged in
+      // The preference is still saved locally, which is fine
+      if (error.response?.status !== 403) {
+        console.warn('Failed to sync preference to backend:', error);
+      }
     }
   }
 };

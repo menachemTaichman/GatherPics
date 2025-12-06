@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { CheckCircle } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
@@ -18,6 +20,8 @@ export default function CloseFeedbackModal({
   const [solved, setSolved] = useState(false);
   
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'close-feedback-modal';
   
@@ -49,7 +53,7 @@ export default function CloseFeedbackModal({
         closed_details: closeDetails.trim() || null
       });
       
-      showToast(`Feedback ${solved ? 'resolved' : 'closed'}`, 'success');
+      showToast(solved ? t('closeFeedback.feedbackResolved') : t('closeFeedback.feedbackClosed'), 'success');
       onClose(true); // Pass true to indicate success
     } catch (error) {
       console.error('Failed to close feedback:', error);
@@ -106,16 +110,17 @@ export default function CloseFeedbackModal({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
+        dir={isRTL ? 'rtl' : 'ltr'}
         className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Close Feedback</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('closeFeedback.closeFeedback')}</h3>
         
         <div className="space-y-4 mb-6">
-          <p className="text-gray-700">Close this feedback with optional notes.</p>
+          <p className="text-gray-700">{t('closeFeedback.closeThisFeedbackWithOptionalNotes')}</p>
           
           <div>
-            <label className={`relative inline-flex items-center ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
+            <label className={`relative inline-flex items-center gap-3 ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
               <input
                 type="checkbox"
                 checked={solved}
@@ -123,50 +128,59 @@ export default function CloseFeedbackModal({
                 disabled={loading}
                 className="sr-only peer"
               />
-              <div className={`w-10 h-5 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-green-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5 peer-checked:after:border-white`}></div>
-              <span className={`ml-3 text-sm font-medium ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
-                Mark as solved
+              <div className={`w-10 h-5 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-green-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${
+                isRTL 
+                  ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
+                  : 'after:left-[2px] peer-checked:after:translate-x-5'
+              } after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
+              <span className={`text-sm font-medium ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
+                {t('closeFeedback.markAsSolved')}
               </span>
             </label>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Closure Details (optional)
+              {t('closeFeedback.closureDetailsOptional')}
             </label>
             <textarea
               value={closeDetails}
               onChange={(e) => setCloseDetails(e.target.value)}
+              dir={isRTL ? 'rtl' : 'ltr'}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-              placeholder="Add closure details about this feedback to be shown to the user..."
+              placeholder={t('closeFeedback.addClosureDetailsAboutThisFeedback')}
               rows={3}
               disabled={loading}
             />
           </div>
         </div>
 
-        <div className="flex justify-end space-x-3">
+        <div className="flex justify-end gap-3">
           <button
             onClick={() => onClose(false)}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
             disabled={loading}
+            title={t('closeFeedback.cancel')}
+            aria-label={t('closeFeedback.cancel')}
           >
-            Cancel
+            {t('closeFeedback.cancel')}
           </button>
           <button
             onClick={handleCloseFeedback}
             disabled={loading}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
+            title={t('closeFeedback.closeFeedback')}
+            aria-label={t('closeFeedback.closeFeedback')}
           >
             {loading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Closing...</span>
+                <span>{t('closeFeedback.closing')}</span>
               </>
             ) : (
               <>
                 <CheckCircle className="w-4 h-4" />
-                <span>Close Feedback</span>
+                <span>{t('closeFeedback.closeFeedback')}</span>
               </>
             )}
           </button>

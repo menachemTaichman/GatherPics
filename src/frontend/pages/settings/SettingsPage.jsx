@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Settings as SettingsIcon, AlertCircle, HardDrive, Activity, Save, Calendar, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { settingsAPI, eventsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -16,6 +17,8 @@ import { APP_CONFIG } from '../../config/appConfig';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import ErrorDetailModal from '../../components/errors/ErrorDetailModal';
 import AuditLogDetailModal from '../../components/auditLogs/AuditLogDetailModal';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -28,6 +31,8 @@ function formatBytes(bytes) {
 export default function SettingsPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   
   const [settings, setSettings] = useState(null);
   const [settingsDraft, setSettingsDraft] = useState(null);
@@ -39,28 +44,28 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState(() => getPreference('SettingsPage.activeSection', 'limits'));
   
   // Filters for usage section
-  const [filterPeriod, setFilterPeriod] = useState(() => getPreference('SettingsPage.filterPeriod', 'all'));
-  const [filterDateFrom, setFilterDateFrom] = useState(() => getPreference('SettingsPage.filterDateFrom', ''));
-  const [filterDateTo, setFilterDateTo] = useState(() => getPreference('SettingsPage.filterDateTo', ''));
-  const [sortBy, setSortBy] = useState(() => getPreference('SettingsPage.sortBy', 'created_at'));
-  const [sortDir, setSortDir] = useState(() => getPreference('SettingsPage.sortDir', 'desc'));
+  const [filterPeriod, setFilterPeriod] = useState(() => getPreference('SettingsPage.usageFilterPeriod') ?? 'all');
+  const [filterDateFrom, setFilterDateFrom] = useState(() => getPreference('SettingsPage.usageFilterDateFrom') ?? '');
+  const [filterDateTo, setFilterDateTo] = useState(() => getPreference('SettingsPage.usageFilterDateTo') ?? '');
+  const [sortBy, setSortBy] = useState(() => getPreference('SettingsPage.usageSortBy') ?? 'created_at');
+  const [sortDir, setSortDir] = useState(() => getPreference('SettingsPage.usageSortDir') ?? 'desc');
   
   // Filters for errors section
-  const [errorFilterPeriod, setErrorFilterPeriod] = useState(() => getPreference('SettingsPage.errorFilterPeriod', 'all'));
-  const [errorFilterDateFrom, setErrorFilterDateFrom] = useState(() => getPreference('SettingsPage.errorFilterDateFrom', ''));
-  const [errorFilterDateTo, setErrorFilterDateTo] = useState(() => getPreference('SettingsPage.errorFilterDateTo', ''));
-  const [errorFilterType, setErrorFilterType] = useState(() => getPreference('SettingsPage.errorFilterType', 'all'));
-  const [errorSortBy, setErrorSortBy] = useState(() => getPreference('SettingsPage.errorSortBy', 'created_at'));
-  const [errorSortDir, setErrorSortDir] = useState(() => getPreference('SettingsPage.errorSortDir', 'desc'));
+  const [errorFilterPeriod, setErrorFilterPeriod] = useState(() => getPreference('SettingsPage.errorFilterPeriod') ?? 'all');
+  const [errorFilterDateFrom, setErrorFilterDateFrom] = useState(() => getPreference('SettingsPage.errorFilterDateFrom') ?? '');
+  const [errorFilterDateTo, setErrorFilterDateTo] = useState(() => getPreference('SettingsPage.errorFilterDateTo') ?? '');
+  const [errorFilterType, setErrorFilterType] = useState(() => getPreference('SettingsPage.errorFilterType') ?? 'all');
+  const [errorSortBy, setErrorSortBy] = useState(() => getPreference('SettingsPage.errorSortBy') ?? 'created_at');
+  const [errorSortDir, setErrorSortDir] = useState(() => getPreference('SettingsPage.errorSortDir') ?? 'desc');
   
   // Filters for audit logs section
-  const [auditFilterPeriod, setAuditFilterPeriod] = useState(() => getPreference('SettingsPage.auditFilterPeriod', 'all'));
-  const [auditFilterDateFrom, setAuditFilterDateFrom] = useState(() => getPreference('SettingsPage.auditFilterDateFrom', ''));
-  const [auditFilterDateTo, setAuditFilterDateTo] = useState(() => getPreference('SettingsPage.auditFilterDateTo', ''));
-  const [auditFilterSeverity, setAuditFilterSeverity] = useState(() => getPreference('SettingsPage.auditFilterSeverity', 'all'));
-  const [auditFilterAction, setAuditFilterAction] = useState(() => getPreference('SettingsPage.auditFilterAction', 'all'));
-  const [auditSortBy, setAuditSortBy] = useState(() => getPreference('SettingsPage.auditSortBy', 'timestamp'));
-  const [auditSortDir, setAuditSortDir] = useState(() => getPreference('SettingsPage.auditSortDir', 'desc'));
+  const [auditFilterPeriod, setAuditFilterPeriod] = useState(() => getPreference('SettingsPage.auditFilterPeriod') ?? 'all');
+  const [auditFilterDateFrom, setAuditFilterDateFrom] = useState(() => getPreference('SettingsPage.auditFilterDateFrom') ?? '');
+  const [auditFilterDateTo, setAuditFilterDateTo] = useState(() => getPreference('SettingsPage.auditFilterDateTo') ?? '');
+  const [auditFilterSeverity, setAuditFilterSeverity] = useState(() => getPreference('SettingsPage.auditFilterSeverity') ?? 'all');
+  const [auditFilterAction, setAuditFilterAction] = useState(() => getPreference('SettingsPage.auditFilterAction') ?? 'all');
+  const [auditSortBy, setAuditSortBy] = useState(() => getPreference('SettingsPage.auditSortBy') ?? 'timestamp');
+  const [auditSortDir, setAuditSortDir] = useState(() => getPreference('SettingsPage.auditSortDir') ?? 'desc');
   
   // Error detail modal state
   const [openErrorId, setOpenErrorId] = useState(null);
@@ -111,8 +116,8 @@ export default function SettingsPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Settings | ${APP_CONFIG.name}`;
-  }, []);
+    document.title = `${t('settings.settings')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {
@@ -136,7 +141,7 @@ export default function SettingsPage() {
         min_rank_to_create_event: loadedSettings.min_rank_to_create_event ?? 0,
       });
     } catch (err) {
-      const errorMessage = formatErrorMessage(err, 'Failed to load settings');
+      const errorMessage = formatErrorMessage(err, t('settings.failedToLoadSettings'));
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -188,7 +193,7 @@ export default function SettingsPage() {
 
       const response = await settingsAPI.update(updateData);
       const updatedSettings = response?.settings || {};
-      showToast('Settings saved successfully', 'success');
+      showToast(t('settings.settingsSavedSuccessfully'), 'success');
       
       // Smoothly update state instead of reloading (preserve rekognition_usage, errors, and audit_logs)
       setSettings((prev) => ({
@@ -205,7 +210,7 @@ export default function SettingsPage() {
         min_rank_to_create_event: updatedSettings.min_rank_to_create_event ?? 0,
       });
     } catch (err) {
-      const errorMessage = formatErrorMessage(err, 'Failed to save settings');
+      const errorMessage = formatErrorMessage(err, t('settings.failedToSaveSettings'));
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -339,41 +344,41 @@ export default function SettingsPage() {
     if (sortBy === field) {
       const newDir = sortDir === 'asc' ? 'desc' : 'asc';
       setSortDir(newDir);
-      setPreference('SettingsPage.sortDir', newDir);
+      setPreference('SettingsPage.usageSortDir', newDir);
     } else {
       setSortBy(field);
       setSortDir('desc');
-      setPreference('SettingsPage.sortBy', field);
-      setPreference('SettingsPage.sortDir', 'desc');
+      setPreference('SettingsPage.usageSortBy', field);
+      setPreference('SettingsPage.usageSortDir', 'desc');
     }
   };
 
   const handleFilterPeriodChange = (period) => {
     setFilterPeriod(period);
-    setPreference('SettingsPage.filterPeriod', period);
+    setPreference('SettingsPage.usageFilterPeriod', period);
     if (period !== 'custom') {
       setFilterDateFrom('');
       setFilterDateTo('');
-      setPreference('SettingsPage.filterDateFrom', '');
-      setPreference('SettingsPage.filterDateTo', '');
+      setPreference('SettingsPage.usageFilterDateFrom', '');
+      setPreference('SettingsPage.usageFilterDateTo', '');
     }
   };
 
   const handleDateFromChange = (date) => {
     setFilterDateFrom(date);
-    setPreference('SettingsPage.filterDateFrom', date);
+    setPreference('SettingsPage.usageFilterDateFrom', date);
     if (date) {
       setFilterPeriod('custom');
-      setPreference('SettingsPage.filterPeriod', 'custom');
+      setPreference('SettingsPage.usageFilterPeriod', 'custom');
     }
   };
 
   const handleDateToChange = (date) => {
     setFilterDateTo(date);
-    setPreference('SettingsPage.filterDateTo', date);
+    setPreference('SettingsPage.usageFilterDateTo', date);
     if (date) {
       setFilterPeriod('custom');
-      setPreference('SettingsPage.filterPeriod', 'custom');
+      setPreference('SettingsPage.usageFilterPeriod', 'custom');
     }
   };
 
@@ -747,7 +752,7 @@ export default function SettingsPage() {
   const columns = [
     {
       key: 'created_at',
-      label: 'Date',
+      label: t('settings.date'),
       sortable: true,
       align: 'left',
       renderCell: (usage) => (
@@ -758,7 +763,7 @@ export default function SettingsPage() {
     },
     {
       key: 'event_label',
-      label: 'Event',
+      label: t('settings.event'),
       sortable: true,
       align: 'left',
       renderCell: (usage) => (
@@ -772,7 +777,7 @@ export default function SettingsPage() {
     },
     {
       key: 'profile_label',
-      label: 'Profile',
+      label: t('settings.profile'),
       sortable: true,
       align: 'left',
       renderCell: (usage) => (
@@ -786,7 +791,7 @@ export default function SettingsPage() {
     },
     {
       key: 'calls_count',
-      label: 'Calls',
+      label: t('settings.calls'),
       sortable: true,
       align: 'right',
       renderCell: (usage) => (
@@ -800,7 +805,7 @@ export default function SettingsPage() {
   const errorColumns = [
     {
       key: 'created_at',
-      label: 'Date',
+      label: t('settings.date'),
       sortable: true,
       align: 'left',
       renderCell: (error) => (
@@ -811,7 +816,7 @@ export default function SettingsPage() {
     },
     {
       key: 'error_type',
-      label: 'Type',
+      label: t('settings.type'),
       sortable: true,
       align: 'left',
       renderCell: (error) => (
@@ -827,7 +832,7 @@ export default function SettingsPage() {
     },
     {
       key: 'error_message',
-      label: 'Message',
+      label: t('settings.message'),
       sortable: true,
       align: 'left',
       renderCell: (error) => (
@@ -838,7 +843,7 @@ export default function SettingsPage() {
     },
     {
       key: 'request_path',
-      label: 'Path',
+      label: t('settings.path'),
       sortable: true,
       align: 'left',
       renderCell: (error) => (
@@ -855,7 +860,7 @@ export default function SettingsPage() {
   const auditLogColumns = [
     {
       key: 'timestamp',
-      label: 'Date',
+      label: t('settings.date'),
       sortable: true,
       align: 'left',
       renderCell: (log) => (
@@ -866,7 +871,7 @@ export default function SettingsPage() {
     },
     {
       key: 'severity',
-      label: 'Severity',
+      label: t('settings.filterSeverity'),
       sortable: true,
       align: 'left',
       renderCell: (log) => (
@@ -881,7 +886,7 @@ export default function SettingsPage() {
     },
     {
       key: 'action',
-      label: 'Action',
+      label: t('settings.action'),
       sortable: true,
       align: 'left',
       renderCell: (log) => (
@@ -892,7 +897,7 @@ export default function SettingsPage() {
     },
     {
       key: 'actor_profile_label',
-      label: 'Actor',
+      label: t('settings.actor'),
       sortable: true,
       align: 'left',
       renderCell: (log) => (
@@ -906,7 +911,7 @@ export default function SettingsPage() {
     },
     {
       key: 'ip_address',
-      label: 'IP Address',
+      label: t('settings.ipAddress'),
       sortable: true,
       align: 'left',
       renderCell: (log) => (
@@ -915,12 +920,12 @@ export default function SettingsPage() {
     },
     {
       key: 'details',
-      label: 'Details',
+      label: t('settings.details'),
       sortable: false,
       align: 'left',
       renderCell: (log) => (
         log.details && Object.keys(log.details).length > 0 ? (
-          <span className="text-xs text-blue-600 font-medium">View Details</span>
+          <span className="text-xs text-blue-600 font-medium">{t('settings.viewDetails')}</span>
         ) : (
           <span className="text-xs text-gray-400">-</span>
         )
@@ -1006,20 +1011,20 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="h-screen bg-gray-50 flex flex-col overflow-hidden">
         <TopNavigationBar variant="light" showBackground={true} mode="full" />
         
         {/* Page Header */}
         <div className="bg-white border-b border-gray-200 pt-[4rem] flex-none z-30">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                   <SettingsIcon className="w-6 h-6 text-primary-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-                  <p className="text-sm text-gray-500">Manage system-wide configuration</p>
+                  <h1 className="text-2xl font-bold text-gray-900">{t('settings.settings')}</h1>
+                  <p className="text-sm text-gray-500">{t('settings.manageSystemWideConfiguration')}</p>
                 </div>
               </div>
               
@@ -1033,7 +1038,7 @@ export default function SettingsPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Limits
+                  {t('settings.limits')}
                 </button>
                 <button
                   onClick={() => handleSectionChange('usage')}
@@ -1043,7 +1048,7 @@ export default function SettingsPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Rekognition Usage
+                  {t('settings.rekognitionUsage')}
                 </button>
                 <button
                   onClick={() => handleSectionChange('errors')}
@@ -1053,7 +1058,7 @@ export default function SettingsPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Errors
+                  {t('settings.errors')}
                 </button>
                 <button
                   onClick={() => handleSectionChange('audit')}
@@ -1063,7 +1068,7 @@ export default function SettingsPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Audit Logs
+                  {t('settings.auditLogs')}
                 </button>
               </div>
             </div>
@@ -1075,7 +1080,7 @@ export default function SettingsPage() {
           <div className="w-full px-8 py-8">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="text-sm text-gray-500">Loading settings...</div>
+                <div className="text-sm text-gray-500">{t('settings.loadingSettings')}</div>
               </div>
             ) : error && !settingsDraft ? (
               <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800">
@@ -1096,12 +1101,12 @@ export default function SettingsPage() {
                 <form onSubmit={handleFormSubmit} className="rounded-lg bg-white border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <HardDrive className="h-5 w-5" />
-                    Limits
+                    {t('settings.limits')}
                   </h3>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Image Size Limit (bytes)
+                        {t('settings.imageSizeLimitBytes')}
                       </label>
                       <input
                         type="number"
@@ -1119,7 +1124,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Images Count Limit
+                        {t('settings.imagesCountLimit')}
                       </label>
                       <input
                         type="number"
@@ -1132,7 +1137,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Rekognition Calls Limit
+                        {t('settings.rekognitionCallsLimit')}
                       </label>
                       <input
                         type="number"
@@ -1145,7 +1150,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Minimum Rank to Create Event
+                        {t('settings.minimumRankToCreateEvent')}
                       </label>
                       <input
                         type="number"
@@ -1165,23 +1170,23 @@ export default function SettingsPage() {
                         disabled={saving}
                         className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Cancel
+                        {t('settings.cancel')}
                       </button>
                     )}
                     <button
                       type="submit"
                       disabled={!canSave}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {saving ? (
                         <>
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Saving...</span>
+                          <span>{t('settings.saving')}</span>
                         </>
                       ) : (
                         <>
                           <Save className="w-4 h-4" />
-                          <span>Save</span>
+                          <span>{t('settings.save')}</span>
                         </>
                       )}
                     </button>
@@ -1195,7 +1200,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <Activity className="h-5 w-5" />
-                      Rekognition Usage Tracking
+                      {t('settings.rekognitionUsageTracking')}
                     </h3>
                     <div className="flex items-center gap-3">
                       {/* Period Filter */}
@@ -1206,12 +1211,12 @@ export default function SettingsPage() {
                           onChange={(e) => handleFilterPeriodChange(e.target.value)}
                           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="all">All Time</option>
-                          <option value="last_month">Last Month</option>
-                          <option value="last_3_months">Last 3 Months</option>
-                          <option value="last_6_months">Last 6 Months</option>
-                          <option value="last_year">Last Year</option>
-                          <option value="custom">Custom Range</option>
+                          <option value="all">{t('settings.allTime')}</option>
+                          <option value="last_month">{t('settings.lastMonth')}</option>
+                          <option value="last_3_months">{t('settings.last3Months')}</option>
+                          <option value="last_6_months">{t('settings.last6Months')}</option>
+                          <option value="last_year">{t('settings.lastYear')}</option>
+                          <option value="custom">{t('settings.customRange')}</option>
                         </select>
                       </div>
                       
@@ -1223,15 +1228,15 @@ export default function SettingsPage() {
                             value={filterDateFrom}
                             onChange={(e) => handleDateFromChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="From"
+                            placeholder={t('settings.from')}
                           />
-                          <span className="text-gray-500">to</span>
+                          <span className="text-gray-500">{t('settings.to')}</span>
                           <input
                             type="date"
                             value={filterDateTo}
                             onChange={(e) => handleDateToChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="To"
+                            placeholder={t('settings.to')}
                           />
                         </div>
                       )}
@@ -1247,10 +1252,10 @@ export default function SettingsPage() {
                     onSort={handleSort}
                     emptyState={{
                       icon: Activity,
-                      title: 'No usage data',
+                      title: t('settings.noUsageData'),
                       message: filterPeriod !== 'all' || filterDateFrom || filterDateTo
-                        ? 'No usage data matches the current filters'
-                        : 'No rekognition usage data available yet'
+                        ? t('settings.noUsageDataMatchesFilters')
+                        : t('settings.noRekognitionUsageDataAvailable')
                     }}
                     getRowKey={(usage) => usage.usage_id || `usage-${usage.created_at}`}
                   />
@@ -1263,7 +1268,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <AlertTriangle className="h-5 w-5" />
-                      Error Log
+                      {t('settings.errorLog')}
                     </h3>
                     <div className="flex items-center gap-3">
                       {/* Error Type Filter */}
@@ -1272,7 +1277,7 @@ export default function SettingsPage() {
                         onChange={(e) => handleErrorFilterTypeChange(e.target.value)}
                         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="all">All Types</option>
+                        <option value="all">{t('settings.allTypes')}</option>
                         {errorTypes.map(type => (
                           <option key={type} value={type}>{type}</option>
                         ))}
@@ -1286,12 +1291,12 @@ export default function SettingsPage() {
                           onChange={(e) => handleErrorFilterPeriodChange(e.target.value)}
                           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="all">All Time</option>
-                          <option value="last_month">Last Month</option>
-                          <option value="last_3_months">Last 3 Months</option>
-                          <option value="last_6_months">Last 6 Months</option>
-                          <option value="last_year">Last Year</option>
-                          <option value="custom">Custom Range</option>
+                          <option value="all">{t('settings.allTime')}</option>
+                          <option value="last_month">{t('settings.lastMonth')}</option>
+                          <option value="last_3_months">{t('settings.last3Months')}</option>
+                          <option value="last_6_months">{t('settings.last6Months')}</option>
+                          <option value="last_year">{t('settings.lastYear')}</option>
+                          <option value="custom">{t('settings.customRange')}</option>
                         </select>
                       </div>
                       
@@ -1303,15 +1308,15 @@ export default function SettingsPage() {
                             value={errorFilterDateFrom}
                             onChange={(e) => handleErrorDateFromChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="From"
+                            placeholder={t('settings.from')}
                           />
-                          <span className="text-gray-500">to</span>
+                          <span className="text-gray-500">{t('settings.to')}</span>
                           <input
                             type="date"
                             value={errorFilterDateTo}
                             onChange={(e) => handleErrorDateToChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="To"
+                            placeholder={t('settings.to')}
                           />
                         </div>
                       )}
@@ -1328,10 +1333,10 @@ export default function SettingsPage() {
                     onRowClick={handleErrorRowClick}
                     emptyState={{
                       icon: AlertTriangle,
-                      title: 'No errors',
+                      title: t('settings.noErrors'),
                       message: errorFilterPeriod !== 'all' || errorFilterDateFrom || errorFilterDateTo || errorFilterType !== 'all'
-                        ? 'No errors match the current filters'
-                        : 'No errors logged yet'
+                        ? t('settings.noErrorsMatchFilters')
+                        : t('settings.noErrorsLoggedYet')
                     }}
                     getRowKey={(error) => error.error_id || `error-${error.created_at}`}
                   />
@@ -1344,7 +1349,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <Activity className="h-5 w-5" />
-                      Audit Logs
+                      {t('settings.auditLogs')}
                     </h3>
                     <div className="flex items-center gap-3">
                       {/* Severity Filter */}
@@ -1353,7 +1358,7 @@ export default function SettingsPage() {
                         onChange={(e) => handleAuditFilterSeverityChange(e.target.value)}
                         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="all">All Severities</option>
+                        <option value="all">{t('settings.allSeverities')}</option>
                         {AUDIT_SEVERITIES.map(severity => (
                           <option key={severity} value={severity}>{severity.charAt(0).toUpperCase() + severity.slice(1)}</option>
                         ))}
@@ -1365,7 +1370,7 @@ export default function SettingsPage() {
                         onChange={(e) => handleAuditFilterActionChange(e.target.value)}
                         className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="all">All Actions</option>
+                        <option value="all">{t('settings.allActions')}</option>
                         {filteredAuditActions.map(action => (
                           <option key={action} value={action}>{action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
                         ))}
@@ -1379,12 +1384,12 @@ export default function SettingsPage() {
                           onChange={(e) => handleAuditFilterPeriodChange(e.target.value)}
                           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="all">All Time</option>
-                          <option value="last_month">Last Month</option>
-                          <option value="last_3_months">Last 3 Months</option>
-                          <option value="last_6_months">Last 6 Months</option>
-                          <option value="last_year">Last Year</option>
-                          <option value="custom">Custom Range</option>
+                          <option value="all">{t('settings.allTime')}</option>
+                          <option value="last_month">{t('settings.lastMonth')}</option>
+                          <option value="last_3_months">{t('settings.last3Months')}</option>
+                          <option value="last_6_months">{t('settings.last6Months')}</option>
+                          <option value="last_year">{t('settings.lastYear')}</option>
+                          <option value="custom">{t('settings.customRange')}</option>
                         </select>
                       </div>
                       
@@ -1396,15 +1401,15 @@ export default function SettingsPage() {
                             value={auditFilterDateFrom}
                             onChange={(e) => handleAuditDateFromChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="From"
+                            placeholder={t('settings.from')}
                           />
-                          <span className="text-gray-500">to</span>
+                          <span className="text-gray-500">{t('settings.to')}</span>
                           <input
                             type="date"
                             value={auditFilterDateTo}
                             onChange={(e) => handleAuditDateToChange(e.target.value)}
                             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="To"
+                            placeholder={t('settings.to')}
                           />
                         </div>
                       )}
@@ -1421,10 +1426,10 @@ export default function SettingsPage() {
                     onRowClick={handleAuditLogRowClick}
                     emptyState={{
                       icon: Activity,
-                      title: 'No audit logs',
+                      title: t('settings.noAuditLogs'),
                       message: auditFilterPeriod !== 'all' || auditFilterDateFrom || auditFilterDateTo || auditFilterSeverity !== 'all' || auditFilterAction !== 'all'
-                        ? 'No audit logs match the current filters'
-                        : 'No audit logs available yet'
+                        ? t('settings.noAuditLogsMatchFilters')
+                        : t('settings.noAuditLogsAvailableYet')
                     }}
                     getRowKey={(log) => log.audit_log_id || `audit-${log.timestamp}`}
                   />

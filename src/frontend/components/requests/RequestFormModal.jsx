@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Search, ArrowUp, ArrowDown, AlertCircle, Clock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -23,6 +25,8 @@ export default function RequestFormModal({
   eventUrl,
   urlHelpers
 }) {
+  const { t } = useTranslation();
+  const { isRTL, startClass, me, ps, pe } = useRTL();
   const eventId = useEventId(eventUrl);
   
   // Helper function to get representative URL with fallback to local eventId
@@ -353,11 +357,11 @@ export default function RequestFormModal({
     if (currentStep === 1) {
       if (formData.requestType === 'new') {
         if (!formData.applicant_name.trim()) {
-          showToast('Profile name is required', 'error');
+          showToast(t('requestForm.profileNameIsRequired'), 'error');
           return;
         }
         if (!formData.applicant_email.trim()) {
-          showToast('Email is required for new profiles', 'error');
+          showToast(t('requestForm.emailIsRequiredForNewProfiles'), 'error');
           return;
         }
       }
@@ -575,7 +579,7 @@ export default function RequestFormModal({
     
     // Prevent submission if closed
     if (isClosed) {
-      showToast('Cannot modify closed requests', 'error');
+      showToast(t('requestForm.cannotModifyClosedRequests'), 'error');
       return;
     }
     
@@ -583,18 +587,18 @@ export default function RequestFormModal({
     // Allow removing all groups if there are closed (approved/denied) groups in the request
     const hasClosedGroups = approvedGroups.length > 0 || deniedGroups.length > 0;
     if (selectedGroups.size === 0 && (!isEditing || !hasClosedGroups)) {
-      showToast('Please select at least one group', 'error');
+      showToast(t('requestForm.pleaseSelectAtLeastOneGroup'), 'error');
       return;
     }
     
     // Validate required fields based on request type
     if (formData.requestType === 'new') {
       if (!formData.applicant_name.trim()) {
-        showToast('Profile name is required', 'error');
+        showToast(t('requestForm.profileNameIsRequired'), 'error');
         return;
       }
       if (!formData.applicant_email.trim()) {
-        showToast('Email is required for new profiles', 'error');
+        showToast(t('requestForm.emailIsRequiredForNewProfiles'), 'error');
         return;
       }
     }
@@ -616,7 +620,7 @@ export default function RequestFormModal({
         // Update existing request (using my-requests route)
         const requestId = request?.id || request?.access_request_id;
         if (!requestId) {
-          showToast('Cannot update request: ID not found', 'error');
+          showToast(t('requestForm.cannotUpdateRequestIdNotFound'), 'error');
           return;
         }
         
@@ -628,12 +632,12 @@ export default function RequestFormModal({
         submitData.groups_to_remove = groupsToRemove;
         
         await requestsAPI.updateMyRequest(requestId, submitData, eventUrl);
-        showToast('Request updated successfully', 'success');
+        showToast(t('requestForm.requestUpdatedSuccessfully'), 'success');
       } else {
         // Create new request
         submitData.group_ids = Array.from(selectedGroups);
         const result = await requestsAPI.create(submitData, eventUrl);
-        showToast('Request created successfully', 'success');
+        showToast(t('requestForm.requestCreatedSuccessfully'), 'success');
 
         // If submitted from a public profile, keep modal open and show created request section
         if (formData.requestType === 'new') {
@@ -682,38 +686,39 @@ export default function RequestFormModal({
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
+        dir={isRTL ? 'rtl' : 'ltr'}
         className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <FileText className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">
-                {request ? 'Edit Request' : 'Create Request'}
+                {request ? t('requestForm.editRequest') : t('requestForm.createRequest')}
               </h2>
-              <div className="flex items-center space-x-2 mt-1">
+              <div className="flex items-center gap-2 mt-1">
                 {formData.requestType === 'new' && (
                   <>
                     <div className={`w-2 h-2 rounded-full ${currentStep >= 1 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-                    <span className="text-sm text-gray-600">Profile</span>
+                    <span className="text-sm text-gray-600">{t('requestForm.profile')}</span>
                   </>
                 )}
                 <div className={`w-2 h-2 rounded-full ${currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-                <span className="text-sm text-gray-600">Groups</span>
+                <span className="text-sm text-gray-600">{t('requestForm.groups')}</span>
                 {currentStep >= 3 && (
                   <>
                     <div className={`w-2 h-2 rounded-full ${currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-                    <span className="text-sm text-gray-600">Submitted</span>
+                    <span className="text-sm text-gray-600">{t('requestForm.submitted')}</span>
                   </>
                 )}
               </div>
               {isClosed && requestData?.closed_at && (
-                <div className="flex items-center space-x-1 mt-1">
+                <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-500">Closed: {formatDateTimeLocale(requestData.closed_at)}</span>
+                  <span className="text-xs text-gray-500">{t('requestForm.closed')}: {formatDateTimeLocale(requestData.closed_at)}</span>
                 </div>
               )}
             </div>
@@ -722,6 +727,8 @@ export default function RequestFormModal({
             onClick={handleClose}
             disabled={loading}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+            title={t('requestForm.close')}
+            aria-label={t('requestForm.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -735,25 +742,25 @@ export default function RequestFormModal({
                 <div className="flex items-start gap-3 mb-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
                   <p className="text-sm text-gray-700">
-                    This information will not be accessible until the request is approved.
+                    {t('requestForm.informationNotAccessible')}
                   </p>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center">
-                    <span className="w-32 text-gray-500">Request ID</span>
+                    <span className={`w-32 text-gray-500 ${me('2')}`}>{t('requestForm.requestId')}</span>
                     <span className="font-medium">{createdRequestId}</span>
                   </div>
                   <div className="flex items-start">
-                    <span className="w-32 text-gray-500">Groups</span>
+                    <span className={`w-32 text-gray-500 ${me('2')}`}>{t('requestForm.groups')}</span>
                     <div className="flex-1">
                       {isLoadingCreatedRequest ? (
-                        <span className="text-gray-500">Loading…</span>
+                        <span className="text-gray-500">{t('requestForm.loading')}</span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {(() => {
                             const groupsObj = (createdRequest?.groups) || Object.fromEntries(Array.from(selectedGroups).map(id => [String(id), { approved: null }]));
                             const ids = Object.keys(groupsObj);
-                            if (ids.length === 0) return <span className="text-gray-500">None</span>;
+                            if (ids.length === 0) return <span className="text-gray-500">—</span>;
                             return ids.map((gid) => {
                               // Prefer label from request relation, fallback to allGroups
                               const groupData = groupsObj[gid];
@@ -768,7 +775,7 @@ export default function RequestFormModal({
                     </div>
                   </div>
                   <div className="flex items-start">
-                    <span className="w-32 text-gray-500">Details</span>
+                    <span className={`w-32 text-gray-500 ${me('2')}`}>{t('requestForm.details')}</span>
                     <span className="whitespace-pre-line flex-1">{createdRequest?.details || formData.details || '—'}</span>
                   </div>
                 </div>
@@ -783,15 +790,16 @@ export default function RequestFormModal({
                 {formData.requestType === 'new' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Profile Name *
+                      {t('requestForm.profileName')} *
                     </label>
                     <input
                       type="text"
                       value={formData.applicant_name}
                       onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_name', e.target.value)}
                       readOnly={isClosed || isPublicSubmissionView}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
-                      placeholder="Enter profile name"
+                      placeholder={t('requestForm.enterProfileName')}
                       required
                     />
                   </div>
@@ -802,32 +810,38 @@ export default function RequestFormModal({
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <Mail className="w-4 h-4 inline mr-1" />
-                        Email *
+                        <div className="flex items-center gap-1">
+                          <Mail className="w-4 h-4" />
+                          <span>{t('requestForm.email')} *</span>
+                        </div>
                       </label>
                       <input
                         type="email"
                         value={formData.applicant_email}
                         onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_email', e.target.value)}
                         readOnly={isClosed || isPublicSubmissionView}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
-                        placeholder="Enter email address"
+                        dir="ltr"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default ${isRTL ? '[&::placeholder]:[direction:rtl] [&::placeholder]:[text-align:right]' : ''}`}
+                        placeholder={t('requestForm.enterEmailAddress')}
                         required
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <Phone className="w-4 h-4 inline mr-1" />
-                        Phone
+                        <div className="flex items-center gap-1">
+                          <Phone className="w-4 h-4" />
+                          <span>{t('requestForm.phone')}</span>
+                        </div>
                       </label>
                       <input
                         type="tel"
                         value={formData.applicant_phone}
                         onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('applicant_phone', e.target.value)}
                         readOnly={isClosed || isPublicSubmissionView}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
-                        placeholder="Enter phone number"
+                        dir="ltr"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default ${isRTL ? '[&::placeholder]:[direction:rtl] [&::placeholder]:[text-align:right]' : ''}`}
+                        placeholder={t('requestForm.enterPhoneNumber')}
                       />
                     </div>
                   </>
@@ -841,8 +855,10 @@ export default function RequestFormModal({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    <Users className="w-4 h-4 inline mr-1" />
-                    Select Groups *
+                    <div className="flex items-center gap-1">
+                      <Users className="w-4 h-4" />
+                      <span>{t('requestForm.selectGroups')} *</span>
+                    </div>
                   </label>
                 
                 {/* Show approved/denied lists when closed, otherwise show selectable grid */}
@@ -851,11 +867,11 @@ export default function RequestFormModal({
                     {/* Approved Groups List */}
                     {approvedGroups.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
                           <CheckCircle className="w-4 h-4 text-green-600" />
-                          <span>Approved</span>
+                          <span>{t('requestForm.approved')}</span>
                         </h4>
-                        <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                        <div className="flex items-center gap-3 overflow-x-auto pb-1">
                           {approvedGroups.map(([groupId, groupData]) => {
                             // Use data from request relation first, fallback to allGroups
                             const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
@@ -890,11 +906,11 @@ export default function RequestFormModal({
                     {/* Denied Groups List */}
                     {deniedGroups.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center space-x-1.5">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
                           <XCircle className="w-4 h-4 text-red-600" />
-                          <span>Denied</span>
+                          <span>{t('requestForm.denied')}</span>
                         </h4>
-                        <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                        <div className="flex items-center gap-3 overflow-x-auto pb-1">
                           {deniedGroups.map(([groupId, groupData]) => {
                             // Use data from request relation first, fallback to allGroups
                             const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
@@ -929,7 +945,7 @@ export default function RequestFormModal({
                     {approvedGroups.length === 0 && deniedGroups.length === 0 && (
                       <div className="text-center py-8 text-gray-500">
                         <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm">No groups in this request</p>
+                        <p className="text-sm">{t('requestForm.noGroupsInRequest')}</p>
                       </div>
                     )}
                   </div>
@@ -938,9 +954,9 @@ export default function RequestFormModal({
                     {/* Loading state */}
                     {isLoadingGroups && (
                       <div className="text-center py-8">
-                        <div className="inline-flex items-center space-x-2 text-gray-500">
+                        <div className="inline-flex items-center gap-2 text-gray-500">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                          <span>Loading groups...</span>
+                          <span>{t('requestForm.loadingGroups')}</span>
                         </div>
                       </div>
                     )}
@@ -951,13 +967,14 @@ export default function RequestFormModal({
                     <div className="mb-3 flex flex-col sm:flex-row gap-2">
                       {/* Search */}
                       <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400`} />
                         <input
                           type="text"
-                          placeholder="Search groups..."
+                          placeholder={t('requestForm.searchGroups')}
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          dir={isRTL ? 'rtl' : 'ltr'}
+                          className={`w-full ${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                         />
                       </div>
                       
@@ -967,7 +984,8 @@ export default function RequestFormModal({
                           type="button"
                           onClick={handleToggleSortOrder}
                           className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
-                          title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                          title={sortOrder === 'asc' ? t('requestForm.sortAscending') : t('requestForm.sortDescending')}
+                          aria-label={sortOrder === 'asc' ? t('requestForm.sortAscending') : t('requestForm.sortDescending')}
                         >
                           {sortOrder === 'asc' ? (
                             <ArrowUp className="w-4 h-4" />
@@ -990,7 +1008,7 @@ export default function RequestFormModal({
                           }`}
                           onClick={(e) => handleGroupToggle(group.id, e)}
                         >
-                          <div className="flex flex-col items-center space-y-1">
+                            <div className="flex flex-col items-center gap-1">
                             {/* Representative image */}
                             <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-200">
                               {(() => {
@@ -1019,13 +1037,19 @@ export default function RequestFormModal({
                       ))}
                       {filteredAndSortedGroups.length === 0 && (
                         <div className="col-span-full text-center py-8 text-gray-500">
-                          {searchTerm ? 'No groups found matching your search' : 'No groups available'}
+                          {searchTerm ? t('requestForm.noGroupsFound') : t('requestForm.noGroupsAvailable')}
                         </div>
                       )}
                     </div>
                     
                     <p className="text-xs text-gray-500 mt-2">
-                      Selected {selectableGroupsCount} group{selectableGroupsCount !== 1 ? 's' : ''}
+                      {selectableGroupsCount === 1 && isRTL ? (
+                        // Hebrew singular: "נבחרה קבוצה אחת" (selected group one)
+                        `${t('requestForm.selectedSingular')} ${t('requestForm.group')} ${t('requestForm.one')}`
+                      ) : (
+                        // Plural or English singular: "נבחרו 2 קבוצות" or "Selected 1 group"
+                        `${selectableGroupsCount !== 1 ? t('requestForm.selectedPlural') : t('requestForm.selectedSingular')} ${selectableGroupsCount} ${selectableGroupsCount !== 1 ? t('requestForm.groupsPlural') : t('requestForm.group')}`
+                      )}
                     </p>
                       </>
                     )}
@@ -1036,11 +1060,11 @@ export default function RequestFormModal({
                         {/* Approved Groups List */}
                         {approvedGroups.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center space-x-1.5">
+                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
                               <CheckCircle className="w-4 h-4 text-green-600" />
-                              <span>Approved</span>
+                              <span>{t('requestForm.approved')}</span>
                             </h4>
-                            <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                            <div className="flex items-center gap-3 overflow-x-auto pb-1">
                               {approvedGroups.map(([groupId, groupData]) => {
                                 // Use data from request relation first, fallback to allGroups
                                 const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
@@ -1075,11 +1099,11 @@ export default function RequestFormModal({
                         {/* Denied Groups List */}
                         {deniedGroups.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center space-x-1.5">
+                            <h4 className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
                               <XCircle className="w-4 h-4 text-red-600" />
-                              <span>Denied</span>
+                              <span>{t('requestForm.denied')}</span>
                             </h4>
-                            <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                            <div className="flex items-center gap-3 overflow-x-auto pb-1">
                               {deniedGroups.map(([groupId, groupData]) => {
                                 // Use data from request relation first, fallback to allGroups
                                 const repFace = groupData?.representative_face || getGroupRepresentativeFace(groupId);
@@ -1119,8 +1143,10 @@ export default function RequestFormModal({
                 {/* Details field at bottom of groups step */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    <FileText className="w-4 h-4 inline mr-1" />
-                    Details
+                    <div className="flex items-center gap-1">
+                      <FileText className="w-4 h-4" />
+                      <span>{t('requestForm.details')}</span>
+                    </div>
                   </label>
                   <textarea
                     value={formData.details}
@@ -1128,15 +1154,16 @@ export default function RequestFormModal({
                     readOnly={isClosed || isPublicSubmissionView}
                     onKeyDown={handleKeyDown}
                     rows={2}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 read-only:bg-gray-50 read-only:cursor-default"
-                    placeholder="Additional information about the request"
+                    placeholder={t('requestForm.additionalInformationAboutRequest')}
                   />
                 </div>
                 
                 {/* Communication Consent - Show if new profile or current profile has email, but hide for public profiles */}
                 {(formData.requestType === 'new' || currentProfileHasEmail) && !currentProfileIsPublic && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <label className="flex items-start space-x-2 cursor-pointer group">
+                    <label className="flex items-start gap-2 cursor-pointer group">
                       <div className="flex items-center h-5">
                         <input
                           type="checkbox"
@@ -1148,10 +1175,10 @@ export default function RequestFormModal({
                       </div>
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          I would like to receive email updates about this request
+                          {t('requestForm.emailUpdatesConsent')}
                         </span>
                         <p className="text-xs text-gray-600 mt-0.5">
-                          You'll receive email notifications about your request status.
+                          {t('requestForm.emailNotificationsDescription')}
                         </p>
                       </div>
                     </label>
@@ -1172,6 +1199,8 @@ export default function RequestFormModal({
                           setShowNotesTooltip(true);
                         }}
                         onMouseLeave={() => setShowNotesTooltip(false)}
+                        title={t('requestForm.managerResponseNotes')}
+                        aria-label={t('requestForm.managerResponseNotes')}
                       />
                       <span
                         onMouseEnter={e => {
@@ -1182,7 +1211,7 @@ export default function RequestFormModal({
                           }
                         }}
                         onMouseLeave={() => setShowNotesTooltip(false)}
-                      >Manager Response Notes</span>
+                      >{t('requestForm.managerResponseNotes')}</span>
                       {showNotesTooltip &&
                         <span
                           className="fixed px-5 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-pre-line min-w-[250px] max-w-[400px] text-left pointer-events-auto z-[10000]"
@@ -1204,20 +1233,20 @@ export default function RequestFormModal({
         <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl">
           <div className="flex justify-between items-center">
             {/* Step Navigation */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               {currentStep === 2 && formData.requestType === 'new' && (
                 <button
                   type="button"
                   onClick={handlePrevStep}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  Back to Profile
+                  {t('requestForm.backToProfile')}
                 </button>
               )}
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               {currentStep !== 3 && (
                 <button
                   type="button"
@@ -1225,7 +1254,7 @@ export default function RequestFormModal({
                   disabled={loading}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
                 >
-                  Cancel
+                  {t('requestForm.cancel')}
                 </button>
               )}
               {currentStep === 3 && (
@@ -1234,7 +1263,7 @@ export default function RequestFormModal({
                   onClick={handleClose}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
-                  Close
+                  {t('requestForm.close')}
                 </button>
               )}
               
@@ -1245,7 +1274,7 @@ export default function RequestFormModal({
                   disabled={!canProceedToGroups() || isClosed || isPublicSubmissionView}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Next: Select Groups
+                  {t('requestForm.nextSelectGroups')}
                 </button>
               ) : (
                 (currentStep === 2 && !isClosed && !isPublicSubmissionView) && (
@@ -1253,12 +1282,12 @@ export default function RequestFormModal({
                     type="submit"
                     onClick={handleSubmit}
                     disabled={loading || (!isEditing && selectedGroups.size === 0) || (isEditing && !hasChanges)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
                   >
                     {loading && (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     )}
-                    <span>{request ? 'Update Request' : 'Create Request'}</span>
+                    <span>{request ? t('requestForm.updateRequest') : t('requestForm.createRequest')}</span>
                   </button>
                 )
               )}

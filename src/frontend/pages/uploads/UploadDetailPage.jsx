@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key } from 'lucide-react';
 import { uploadsAPI, groupsAPI, momentsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
@@ -28,6 +30,8 @@ import { formatDateTimeLocale, calculateDuration, formatDuration } from '../../u
 export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const uploadId = params.uploadId;
   const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
@@ -377,7 +381,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const handleSaveNotes = async () => {
     try {
       await uploadsAPI.update(uploadId, { notes: notesValue }, eventUrl);
-      showToast('Notes updated', 'success');
+      showToast(t('uploadDetail.notesUpdated'), 'success');
       setEditingNotes(false);
     } catch (error) {
       console.error('Failed to update notes:', error);
@@ -398,7 +402,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const handleSaveGroupLabel = async (groupId) => {
     try {
       await groupsAPI.update(groupId, { label: groupLabelValue }, eventUrl);
-      showToast('Person label updated', 'success');
+      showToast(t('uploadDetail.personLabelUpdated'), 'success');
       setEditingGroupLabel(null);
     } catch (error) {
       console.error('Failed to update group label:', error);
@@ -419,7 +423,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const handleSetFaceAsRep = async (groupId, faceId) => {
     try {
       await groupsAPI.update(groupId, { representative_face: faceId }, eventUrl);
-      showToast('Representative face updated', 'success');
+      showToast(t('uploadDetail.representativeFaceUpdated'), 'success');
     } catch (error) {
       console.error('Failed to set representative:', error);
       showToast(formatErrorMessage('set representative', error), 'error');
@@ -429,7 +433,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const handleSetMomentImageAsRep = async (momentId, imageId) => {
     try {
       await momentsAPI.update(momentId, { representative_image: imageId }, eventUrl);
-      showToast('Representative image updated', 'success');
+      showToast(t('uploadDetail.representativeImageUpdated'), 'success');
     } catch (error) {
       console.error('Failed to set representative:', error);
       showToast(formatErrorMessage('set representative', error), 'error');
@@ -648,26 +652,27 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   }, [upload?.started_at, upload?.completed_at]);
 
   return (
-    <div className="w-full">
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Sticky Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-4">
             <Link
               to={`/${eventUrl}/uploads`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Back to uploads"
+              title={t('uploadDetail.backToUploads')}
+              aria-label={t('uploadDetail.backToUploads')}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-primary-100 rounded-lg flex items-center justify-center">
                 <Upload className="w-7 h-7 text-primary-600" />
               </div>
               <div>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-3">
                   <div className="flex-1">
-                    <h1 className="text-3xl font-bold text-gray-900">Upload Details</h1>
+                    <h1 className="text-3xl font-bold text-gray-900">{t('uploadDetail.uploadDetails')}</h1>
                     <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm text-gray-600 mt-1">
                       <span className="text-xs">{upload?.started_at ? formatDateTimeLocale(upload.started_at) : 'Loading...'}</span>
                       {upload && upload.profile_label && (
@@ -686,7 +691,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             <>
                               <span className="text-gray-400">•</span>
                               <span className="text-xs text-gray-600">
-                                completed in {completionDuration}
+                                {t('uploadDetail.completedIn')} {completionDuration}
                               </span>
                             </>
                           )}
@@ -694,16 +699,16 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       )}
                     </div>
                   </div>
-                  {upload && upload.errors && Array.isArray(upload.errors) && upload.errors.length > 0 && (
+                      {upload && upload.errors && Array.isArray(upload.errors) && upload.errors.length > 0 && (
                     <div className="relative group">
-                      <div className="flex items-center space-x-1 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors">
+                      <div className="flex items-center gap-1 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors">
                         <AlertCircle className="w-4 h-4 text-red-600" />
                         <span className="text-xs font-medium text-red-600">
-                          {upload.errors.length} {upload.errors.length === 1 ? 'Error' : 'Errors'}
+                          {upload.errors.length} {upload.errors.length === 1 ? t('uploadDetail.error') : t('uploadDetail.errorsPlural')}
                         </span>
                       </div>
                       <div className="absolute right-0 top-full mt-2 w-96 bg-white border border-red-200 rounded-lg shadow-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                        <div className="text-xs font-semibold text-red-700 mb-2">Upload Errors:</div>
+                        <div className="text-xs font-semibold text-red-700 mb-2">{t('uploadDetail.uploadErrors')}:</div>
                         <div className="space-y-1 max-h-40 overflow-y-auto">
                           {upload.errors.map((error, idx) => (
                             <div key={idx} className="text-xs text-red-600 pl-2 border-l-2 border-red-300">
@@ -723,42 +728,42 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
         {/* Controls Row with Tabs */}
         <div className="mt-4 flex items-center justify-between">
           {/* Tabs */}
-          <div className="flex items-center divide-x divide-gray-200">
-            <div className="flex space-x-1 px-4">
+            <div className="flex items-center divide-x divide-gray-200">
+            <div className="flex gap-1 px-4">
               <button
                 onClick={() => handleModeChange('images')}
-                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'images'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <ImageIcon className="w-4 h-4" />
-                <span className="font-medium">Photos</span>
+                <span className="font-medium">{t('uploadDetail.photos')}</span>
                 <span className="font-medium">({uploadImages.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('groups')}
-                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'groups'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span className="font-medium">People</span>
+                <span className="font-medium">{t('uploadDetail.people')}</span>
                 <span className="font-medium">({uploadGroups.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('moments')}
-                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'moments'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <Clock className="w-4 h-4" />
-                <span className="font-medium">Moments</span>
+                <span className="font-medium">{t('uploadDetail.moments')}</span>
                 <span className="font-medium">({uploadMoments.length})</span>
               </button>
             </div>
@@ -766,18 +771,19 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             {/* Controls */}
             {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
               <>
-                <div className="flex items-center space-x-3 px-4">
+                <div className="flex items-center gap-3 px-4">
                   {/* Sort */}
                   <button
                     onClick={toggleSortDir}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
-                    title={`Sort ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+                    title={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
+                    aria-label={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
                   >
                     {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
                   </button>
                 </div>
 
-                <div className="flex items-center space-x-3 px-4">
+                <div className="flex items-center gap-3 px-4">
                   {/* Zoom Controls */}
                   <button
                     onClick={() => {
@@ -790,7 +796,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     }}
                     disabled={imageSize <= 0.5}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Decrease size"
+                    title={t('uploadDetail.decreaseSize')}
+                    aria-label={t('uploadDetail.decreaseSize')}
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -829,7 +836,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     }}
                     disabled={imageSize >= 3}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Increase size"
+                    title={t('uploadDetail.increaseSize')}
+                    aria-label={t('uploadDetail.increaseSize')}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -837,7 +845,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
                 {/* Selection Mode */}
                 {uploadImages.length > 0 && (
-                  <div className="flex items-center space-x-3 px-4">
+                  <div className="flex items-center gap-3 px-4">
                     <button
                       onClick={() => setSelectionMode(!selectionMode)}
                       className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -845,7 +853,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
                           : 'hover:bg-gray-100 text-gray-700'
                       }`}
-                      title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
+                      title={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
+                      aria-label={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
                     >
                       {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                     </button>
@@ -859,39 +868,43 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
           {upload && (
             <div className="mt-3 px-4 text-sm">
               {editingNotes ? (
-                <div className="flex items-center space-x-2">
-                  <span className="text-gray-600">Notes:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">{t('uploadDetail.notes')}:</span>
                   <input
                     type="text"
                     value={notesValue}
                     onChange={(e) => setNotesValue(e.target.value)}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                     className="flex-1 border rounded px-2 py-1 text-sm"
-                    placeholder="Add notes..."
+                    placeholder={t('uploadDetail.addNotes')}
                     autoFocus
                   />
                   <button
                     onClick={handleSaveNotes}
                     className="p-1 hover:bg-green-100 rounded transition-colors"
-                    title="Save"
+                    title={t('uploadDetail.save')}
+                    aria-label={t('uploadDetail.save')}
                   >
                     <Save className="w-4 h-4 text-green-600" />
                   </button>
                   <button
                     onClick={handleCancelEditNotes}
                     className="p-1 hover:bg-red-100 rounded transition-colors"
-                    title="Cancel"
+                    title={t('uploadDetail.cancel')}
+                    aria-label={t('uploadDetail.cancel')}
                   >
                     <RotateCcw className="w-4 h-4 text-red-600" />
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center space-x-2">
-                  <span className="text-gray-600">Notes:</span>
-                  <span className="text-gray-900">{upload.notes || <span className="text-gray-400 italic">No notes</span>}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">{t('uploadDetail.notes')}:</span>
+                  <span className="text-gray-900">{upload.notes || <span className="text-gray-400 italic">{t('uploadDetail.noNotes')}</span>}</span>
                   <button
                     onClick={handleEditNotes}
                     className="p-1 hover:bg-blue-100 rounded transition-colors"
-                    title="Edit notes"
+                    title={t('uploadDetail.editNotes')}
+                    aria-label={t('uploadDetail.editNotes')}
                   >
                     <Edit2 className="w-4 h-4 text-blue-600" />
                   </button>
@@ -916,7 +929,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               {uploadImages.length === 0 ? (
                 <div className="text-center py-12">
                   <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">No images in this upload</p>
+                  <p className="text-gray-500">{t('uploadDetail.noImagesInThisUpload')}</p>
                 </div>
               ) : (
                 <div 
@@ -975,7 +988,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               {uploadGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">No groups in this upload</p>
+                  <p className="text-gray-500">{t('uploadDetail.noGroupsInThisUpload')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1000,7 +1013,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             }
                           }}
                         >
-                          <div className="flex items-center space-x-3 flex-1">
+                          <div className="flex items-center gap-3 flex-1">
                             {ImageComponent(getGroupRepUrl(group.id), {
                               width: 48,
                               height: 48,
@@ -1050,13 +1063,13 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                     {group.label}
                                   </h4>
                                   <p className="text-sm text-gray-600">
-                                    {totalFacesCount} {totalFacesCount === 1 ? 'face' : 'faces'}, {uploadFacesCount} in this upload
+                                    {totalFacesCount} {totalFacesCount === 1 ? t('uploadDetail.face') : t('uploadDetail.facesPlural')}, {uploadFacesCount} {t('uploadDetail.inThisUpload')}
                                   </p>
                                 </div>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             {permissions.isProfilesManager && (
                               <button
                                 onClick={(e) => {
@@ -1064,7 +1077,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                   handleManageGroupAccess(group.id);
                                 }}
                                 className="w-8 h-8 rounded-md hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors"
-                                title="Manage profile access"
+                                title={t('uploadDetail.manageProfileAccess')}
+                                aria-label={t('uploadDetail.manageProfileAccess')}
                               >
                                 <Key className="w-4 h-4" />
                               </button>
@@ -1082,7 +1096,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                 });
                               }}
                               className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 flex items-center justify-center transition-colors"
-                              title="Go to person page"
+                              title={t('uploadDetail.goToPersonPage')}
+                              aria-label={t('uploadDetail.goToPersonPage')}
                             >
                               <User className="w-4 h-4" />
                             </a>
@@ -1096,7 +1111,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           <div className="border-t border-gray-200">
                             <div className="p-4">
                               {groupFaces.length === 0 ? (
-                                <p className="text-gray-500 text-sm text-center py-4">No faces from this upload</p>
+                                <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noFacesFromThisUpload')}</p>
                               ) : (
                                 <div 
                                   className="photo-gallery-grid"
@@ -1171,7 +1186,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               {uploadMoments.length === 0 ? (
                 <div className="text-center py-12">
                   <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">No moments in this upload</p>
+                  <p className="text-gray-500">{t('uploadDetail.noMomentsInThisUpload')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1196,7 +1211,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           }}
                           className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
                         >
-                          <div className="flex items-center space-x-3 flex-1">
+                          <div className="flex items-center gap-3 flex-1">
                             {ImageComponent(getMomentRepUrl(moment.id), {
                               width: 48,
                               height: 48,
@@ -1206,11 +1221,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             <div>
                               <h4 className="font-medium text-gray-900">{moment.label}</h4>
                               <p className="text-sm text-gray-600">
-                                {totalImagesCount} {totalImagesCount === 1 ? 'photo' : 'photos'}, {uploadImagesCount} in this upload
+                                {totalImagesCount} {totalImagesCount === 1 ? t('uploadDetail.photo') : t('uploadDetail.photosPlural')}, {uploadImagesCount} {t('uploadDetail.inThisUpload')}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <a
                               href={`/${eventUrl}/timeline?moment=${encodeURIComponent(moment.label)}`}
                               onClick={(e) => {
@@ -1227,7 +1242,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                 });
                               }}
                               className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 flex items-center justify-center transition-colors"
-                              title="Go to moment"
+                              title={t('uploadDetail.goToMoment')}
+                              aria-label={t('uploadDetail.goToMoment')}
                             >
                               <Clock className="w-4 h-4" />
                             </a>
@@ -1239,7 +1255,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                           <div className="border-t border-gray-200">
                             <div className="p-4">
                               {momentImages.length === 0 ? (
-                                <p className="text-gray-500 text-sm text-center py-4">No images from this upload</p>
+                                <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noImagesFromThisUpload')}</p>
                               ) : (
                                 <div 
                                   className="photo-gallery-grid"
@@ -1303,7 +1319,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
         {/* Note about data changes */}
         <div className="mt-6 text-xs text-gray-500 italic text-center">
-          Note: Data may have changed since this upload was created
+          {t('uploadDetail.dataMayHaveChanged')}
         </div>
       </div>
 

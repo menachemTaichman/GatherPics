@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 /**
  * Compact confirmation modal for delete actions
@@ -35,7 +37,16 @@ function ConfirmDelete({
   images = null,
   simpleMessage = false
 }) {
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const MODAL_ID = useState(() => `confirm-delete-${Math.random().toString(36).substr(2, 9)}`)[0];
+  
+  // Use translations if default values are used
+  const displayTitle = title === "Delete Confirmation" ? t('confirmDelete.deleteConfirmation') : title;
+  const displayMessage = message === "Are you sure you want to delete" ? t('confirmDelete.areYouSure') : message;
+  const displayItemName = itemName === "this item" ? t('confirmDelete.thisItem') : itemName;
+  const displayConfirmText = confirmText === "Delete" ? t('confirmDelete.delete') : confirmText;
+  const displayCancelText = cancelText === "Cancel" ? t('confirmDelete.cancel') : cancelText;
   
   const handleConfirm = () => {
     onConfirm();
@@ -100,17 +111,19 @@ function ConfirmDelete({
           transition={{ duration: 0.15 }}
           className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden"
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           {/* Header */}
           <div className="p-4 border-b flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{displayTitle}</h3>
             </div>
             <button 
               onClick={onClose} 
               className="w-8 h-8 rounded-lg transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-              title="Close"
+              title={t('confirmDelete.close')}
+              aria-label={t('confirmDelete.close')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -143,7 +156,7 @@ function ConfirmDelete({
               </div>
             )}
 
-            <div className="flex items-start space-x-4">
+            <div className="flex items-start gap-4">
               {/* Optional single representative image (legacy) */}
               {!images && imageUrl && (
                 <div className="flex-shrink-0">
@@ -158,10 +171,10 @@ function ConfirmDelete({
               {/* Message */}
               <div className="flex-1">
                 {simpleMessage ? (
-                  <p className="text-gray-700">{message}</p>
+                  <p className="text-gray-700">{displayMessage}</p>
                 ) : (
                   <p className="text-gray-700">
-                    {message} <span className="font-semibold text-gray-900">"{itemName}"</span>?
+                    {displayMessage} <span className="font-semibold text-gray-900">"{displayItemName}"</span>?
                   </p>
                 )}
                 {caption && (
@@ -174,19 +187,19 @@ function ConfirmDelete({
           </div>
 
           {/* Footer */}
-          <div className="p-4 bg-gray-50 flex justify-end space-x-3">
+          <div className="p-4 bg-gray-50 flex justify-end gap-3">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              {cancelText}
+              {displayCancelText}
             </button>
             <button
               onClick={handleConfirm}
               className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               autoFocus
             >
-              {confirmText}
+              {displayConfirmText}
             </button>
           </div>
         </motion.div>

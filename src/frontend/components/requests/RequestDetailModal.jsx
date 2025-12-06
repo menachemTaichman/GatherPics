@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { X, User, Mail, Phone, FileText, Users, CheckCircle, XCircle, Clock, Check, Save, AlertTriangle, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
@@ -46,6 +48,8 @@ export default function RequestDetailModal({
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const permissions = usePermissions();
   // Tooltip state
   const [showNotesTooltip, setShowNotesTooltip] = useState(false);
@@ -194,12 +198,12 @@ export default function RequestDetailModal({
     if (targetTagName !== 'input' && targetTagName !== 'textarea' && targetTagName !== 'select') {
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        handleNavigate('prev');
+        handleNavigate(isRTL ? 'next' : 'prev');
         return true; // Handled
       }
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        handleNavigate('next');
+        handleNavigate(isRTL ? 'prev' : 'next');
         return true; // Handled
       }
     }
@@ -210,7 +214,7 @@ export default function RequestDetailModal({
     }
     
     return false; // Not handled
-  }, [loading, onClose, handleNavigate]);
+  }, [loading, onClose, handleNavigate, isRTL]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
     modalId: modalId,
@@ -322,17 +326,17 @@ export default function RequestDetailModal({
     const deniedGroupIds = Object.keys(groupActions).filter(id => groupActions[id] === 'deny');
     
     if (approvedGroupIds.length === 0 && deniedGroupIds.length === 0) {
-      showToast('Please select at least one action', 'error');
+      showToast(t('requestDetail.pleaseSelectAtLeastOneAction'), 'error');
       return;
     }
 
     if (approvedGroupIds.length > 0 && !requestData?.applicant_profile_id) {
       if (!profileName || !profileName.trim()) {
-        showToast('Profile name is required for new profiles', 'error');
+        showToast(t('requestDetail.profileNameRequiredForNewProfiles'), 'error');
         return;
       }
       if (nameConflict) {
-        showToast('Cannot save: Profile name already exists', 'error');
+        showToast(t('requestDetail.cannotSaveProfileNameAlreadyExists'), 'error');
         return;
       }
     }
@@ -352,7 +356,7 @@ export default function RequestDetailModal({
         eventUrl
       );
       
-      showToast('Changes applied successfully', 'success');
+      showToast(t('requestDetail.changesAppliedSuccessfully'), 'success');
       
       // Check if we should navigate or close
       // If filtering by pending and we just approved/denied groups, auto-navigate
@@ -474,41 +478,44 @@ export default function RequestDetailModal({
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
+        dir={isRTL ? 'rtl' : 'ltr'}
         className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <FileText className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Request Details</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('requestDetail.requestDetails')}</h2>
               <p className="text-sm text-gray-500">
-                Review and process access request
+                {t('requestDetail.reviewAndProcessAccessRequest')}
                 {totalRequests > 1 && (
-                  <span className="ml-2">• {currentIndex + 1} of {totalRequests}</span>
+                  <span className={isRTL ? 'mr-2' : 'ml-2'}>• {currentIndex + 1} {t('requestDetail.of')} {totalRequests}</span>
                 )}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             {/* Navigation buttons */}
             {totalRequests > 1 && onNavigate && (
               <>
                 <button
                   onClick={() => handleNavigate('prev')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  title="Previous request (Left arrow)"
+                  title={t('requestDetail.previousRequest')}
+                  aria-label={t('requestDetail.previousRequest')}
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  {isRTL ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                 </button>
                 <button
                   onClick={() => handleNavigate('next')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  title="Next request (Right arrow)"
+                  title={t('requestDetail.nextRequest')}
+                  aria-label={t('requestDetail.nextRequest')}
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  {isRTL ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 </button>
               </>
             )}
@@ -516,6 +523,8 @@ export default function RequestDetailModal({
               onClick={handleClose}
               disabled={loading}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+              title={t('requestDetail.close')}
+              aria-label={t('requestDetail.close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -528,72 +537,72 @@ export default function RequestDetailModal({
             {/* Request Information */}
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Request Information</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-3">{t('requestDetail.requestInformation')}</h3>
                 <div className="space-y-3">
                   {requestData.profile_label && (
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center gap-3">
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{requestData.profile_label}</p>
-                      <p className="text-xs text-gray-500">Profile</p>
+                      <p className="text-xs text-gray-500">{t('requestDetail.profileName')}</p>
                     </div>
                   </div>
                   )}
                   
                   {isNewProfileRequest && requestData.applicant_name && (
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center gap-3">
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{requestData.applicant_name}</p>
-                      <p className="text-xs text-gray-500">Name Requested</p>
+                      <p className="text-xs text-gray-500">{t('requestDetail.nameRequested')}</p>
                     </div>
                   </div>
                   )}
                   
                   {requestData.applicant_email && !requestData.closed_at && (
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-3">
                       <Mail className="w-5 h-5 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{requestData.applicant_email}</p>
-                        <p className="text-xs text-gray-500">Email Address</p>
+                        <p className="text-xs text-gray-500">{t('requestDetail.emailAddress')}</p>
                       </div>
                     </div>
                   )}
                   
                   {requestData.applicant_phone && (
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-3">
                       <Phone className="w-5 h-5 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{requestData.applicant_phone}</p>
-                        <p className="text-xs text-gray-500">Phone Number</p>
+                        <p className="text-xs text-gray-500">{t('requestDetail.phoneNumber')}</p>
                       </div>
                     </div>
                   )}
                   
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center gap-3">
                     <Clock className="w-5 h-5 text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{formatDateTimeLocale(requestData.requested_at)}</p>
-                      <p className="text-xs text-gray-500">Requested At</p>
+                      <p className="text-xs text-gray-500">{t('requestDetail.requestedAt')}</p>
                     </div>
                   </div>
                   
                   {requestData.closed_at && (
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-3">
                       <Clock className="w-5 h-5 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{formatDateTimeLocale(requestData.closed_at)}</p>
-                        <p className="text-xs text-gray-500">Closed At</p>
+                        <p className="text-xs text-gray-500">{t('requestDetail.closedAt')}</p>
                       </div>
                     </div>
                   )}
                   
                   {requestData.details && (
-                    <div className="flex items-start space-x-3">
+                    <div className="flex items-start gap-3">
                       <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{requestData.details}</p>
-                        <p className="text-xs text-gray-500">Details</p>
+                        <p className="text-xs text-gray-500">{t('requestDetail.details')}</p>
                       </div>
                     </div>
                   )}
@@ -624,7 +633,7 @@ export default function RequestDetailModal({
                             }
                           }}
                           onMouseLeave={() => setShowNotesTooltip(false)}
-                        >Manager Response Notes</span>
+                        >{t('requestDetail.managerResponseNotes')}</span>
                         {showNotesTooltip &&
                           <span
                             className="fixed px-5 py-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-pre-line min-w-[250px] max-w-[400px] text-left pointer-events-auto z-[10000]"
@@ -642,10 +651,10 @@ export default function RequestDetailModal({
               {/* Profile Name for New Profiles */}
               {!requestData?.applicant_profile_id && !requestData?.closed_at && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">New Profile</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">{t('requestDetail.newProfile')}</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Profile Name *
+                      {t('requestDetail.profileNameRequired')}
                     </label>
                     <input
                       type="text"
@@ -661,19 +670,20 @@ export default function RequestDetailModal({
                           }, 300);
                         }
                       }}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                         nameConflict ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Enter profile name"
+                      placeholder={t('requestDetail.enterProfileName')}
                     />
                     {nameConflict ? (
-                      <div className="flex items-center space-x-1 text-red-500 text-xs mt-1">
+                      <div className="flex items-center gap-1 text-red-500 text-xs mt-1">
                         <AlertTriangle className="w-3 h-3" />
-                        <span>Name exists</span>
+                        <span>{t('requestDetail.nameExists')}</span>
                       </div>
                     ) : (
                       <p className="text-xs text-gray-500 mt-1">
-                        Name of the new profile to create
+                        {t('requestDetail.nameOfTheNewProfileToCreate')}
                       </p>
                     )}
                   </div>
@@ -683,16 +693,17 @@ export default function RequestDetailModal({
               {/* Closed Details */}
               {canApprove && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Closed Details</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">{t('requestDetail.closedDetails')}</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Details (optional)
+                      {t('requestDetail.detailsOptional')}
                     </label>
                     <textarea
                       value={closedDetails}
                       onChange={(e) => setClosedDetails(e.target.value)}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter details about closing this request"
+                      placeholder={t('requestDetail.enterDetailsAboutClosingThisRequest')}
                       rows={2}
                     />
                   </div>
@@ -702,16 +713,16 @@ export default function RequestDetailModal({
 
             {/* Groups Selection */}
             <div className="space-y-2">
-              <h3 className="text-lg font-medium text-gray-900">People</h3>
+              <h3 className="text-lg font-medium text-gray-900">{t('requestDetail.people')}</h3>
               
               {canApprove && (
                 <div className="space-y-0">
                   {/* "All pending" row */}
                   <div className="flex items-center px-2 py-0.5">
                     <div className="flex-1">
-                      <span className="text-xs text-gray-500 font-medium">All pending:</span>
+                      <span className="text-xs text-gray-500 font-medium">{t('requestDetail.allPending')}:</span>
                     </div>
-                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                       {(() => {
                         const state = getAllPendingActionState();
                         return (
@@ -727,7 +738,8 @@ export default function RequestDetailModal({
                                   ? 'bg-yellow-500 text-white shadow-sm'
                                   : 'bg-green-100 hover:bg-green-200 text-green-700'
                               }`}
-                              title="Approve all pending"
+                              title={t('requestDetail.approveAllPending')}
+                              aria-label={t('requestDetail.approveAllPending')}
                             >
                               <Check className="w-4 h-4" />
                             </button>
@@ -740,7 +752,8 @@ export default function RequestDetailModal({
                                   ? 'bg-yellow-500 text-white shadow-sm'
                                   : 'bg-red-100 hover:bg-red-200 text-red-700'
                               }`}
-                              title="Deny all pending"
+                              title={t('requestDetail.denyAllPending')}
+                              aria-label={t('requestDetail.denyAllPending')}
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -753,22 +766,24 @@ export default function RequestDetailModal({
                   {/* "All not selected" row */}
                   <div className="flex items-center px-2 py-0.5">
                     <div className="flex-1">
-                      <span className="text-xs text-gray-500 font-medium">All not selected:</span>
+                      <span className="text-xs text-gray-500 font-medium">{t('requestDetail.allNotSelected')}:</span>
                     </div>
-                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                       {/* Spacer to align with status icon column in group rows */}
                       <div className="w-5 h-5" />
                       <button
                         onClick={handleApproveNotSelected}
                         className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 rounded-lg transition-colors text-green-700"
-                        title="Approve all not selected"
+                        title={t('requestDetail.approveAllNotSelected')}
+                        aria-label={t('requestDetail.approveAllNotSelected')}
                       >
                         <Check className="w-4 h-4" />
                       </button>
                       <button
                         onClick={handleDenyNotSelected}
                         className="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 rounded-lg transition-colors text-red-700"
-                        title="Deny all not selected"
+                        title={t('requestDetail.denyAllNotSelected')}
+                        aria-label={t('requestDetail.denyAllNotSelected')}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -780,7 +795,7 @@ export default function RequestDetailModal({
               {/* Pending Groups List */}
               {(!requestData.closed_at) && (
                 <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-1">Pending</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-1">{t('requestDetail.pending')}</h4>
                 <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
                   {pendingGroups.length > 0 ? (
                   <div className="divide-y divide-gray-100">
@@ -800,7 +815,7 @@ export default function RequestDetailModal({
                             !isAccessible ? 'opacity-50' : ''
                           }`}
                         >
-                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
                             {group?.representative_face && group?.id ? (
                               <img
                                 src={`${getRepresentativeUrl(urlHelpers, 'groups', group.id)}?v=${group.representative_face}`}
@@ -817,7 +832,7 @@ export default function RequestDetailModal({
                             </div>
                           </div>
                           
-                          <div className="flex items-center space-x-2 flex-shrink-0">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                               {canApprove && isAccessible && (
                               <>
                                 <button
@@ -827,6 +842,8 @@ export default function RequestDetailModal({
                                       ? 'bg-green-600 text-white shadow-sm' 
                                       : 'bg-green-100 hover:bg-green-200 text-green-700'
                                   }`}
+                                  title={t('requestDetail.approved')}
+                                  aria-label={t('requestDetail.approved')}
                                 >
                                   <Check className="w-4 h-4" />
                                 </button>
@@ -837,6 +854,8 @@ export default function RequestDetailModal({
                                       ? 'bg-red-600 text-white shadow-sm' 
                                       : 'bg-red-100 hover:bg-red-200 text-red-700'
                                   }`}
+                                  title={t('requestDetail.denied')}
+                                  aria-label={t('requestDetail.denied')}
                                 >
                                   <X className="w-4 h-4" />
                                 </button>
@@ -850,7 +869,7 @@ export default function RequestDetailModal({
                 ) : (
                   <div className="p-4 text-center text-gray-500">
                     <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm">No pending groups</p>
+                      <p className="text-sm">{t('requestDetail.noPendingGroups')}</p>
                     </div>
                   )}
                 </div>
@@ -860,11 +879,11 @@ export default function RequestDetailModal({
               {/* Approved Groups List */}
               {approvedGroups.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center space-x-1.5">
+                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                     <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span>Approved</span>
+                    <span>{t('requestDetail.approved')}</span>
                   </h4>
-                  <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                  <div className="flex items-center gap-3 overflow-x-auto pb-1">
                     {approvedGroups.map(([groupId]) => {
                       const group = allGroups.find(g => (g.id || g.group_id) === groupId);
                       return (
@@ -899,11 +918,11 @@ export default function RequestDetailModal({
               {/* Denied Groups List */}
               {deniedGroups.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center space-x-1.5">
+                  <h4 className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                     <XCircle className="w-4 h-4 text-red-600" />
-                    <span>Denied</span>
+                    <span>{t('requestDetail.denied')}</span>
                   </h4>
-                  <div className="flex items-center space-x-3 overflow-x-auto pb-1">
+                  <div className="flex items-center gap-3 overflow-x-auto pb-1">
                     {deniedGroups.map(([groupId]) => {
                       const group = allGroups.find(g => (g.id || g.group_id) === groupId);
                       return (
@@ -939,8 +958,8 @@ export default function RequestDetailModal({
                 <p className="text-xs text-gray-500">
                   {Object.keys(groupActions).length > 0 ? (
                     <span>
-                      {Object.values(groupActions).filter(a => a === 'approve').length} approved, {' '}
-                      {Object.values(groupActions).filter(a => a === 'deny').length} denied
+                      {Object.values(groupActions).filter(a => a === 'approve').length} {t('requestDetail.approvedCount')}, {' '}
+                      {Object.values(groupActions).filter(a => a === 'deny').length} {t('requestDetail.deniedCount')}
                     </span>
                   ) : (
                     <span className="invisible">Placeholder</span>
@@ -980,13 +999,15 @@ export default function RequestDetailModal({
               <button
                 onClick={handleApplyChanges}
                 disabled={loading || Object.keys(groupActions).length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                title={t('requestDetail.applyChanges')}
+                aria-label={t('requestDetail.applyChanges')}
               >
                 {loading && (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 )}
                 {!loading && <Save className="w-4 h-4" />}
-                <span>Apply Changes</span>
+                <span>{t('requestDetail.applyChanges')}</span>
               </button>
             )}
           </div>

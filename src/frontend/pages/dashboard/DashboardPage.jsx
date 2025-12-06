@@ -2,14 +2,19 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { MessageSquare, LayoutDashboard, Calendar, User, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { APP_CONFIG } from '../../config/appConfig';
 import { getCurrentProfile } from '../../utils/profileService';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   const currentProfile = getCurrentProfile();
   const permissions = usePermissions();
   const hasManageableEvents = Boolean(currentProfile?.has_manageable_events);
@@ -19,8 +24,8 @@ export default function DashboardPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Dashboard | ${APP_CONFIG.name}`;
-  }, []);
+    document.title = `${t('dashboard.dashboard')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {
@@ -32,8 +37,8 @@ export default function DashboardPage() {
   const sections = [
     {
       id: 'events',
-      title: 'Events',
-      description: 'Review and configure event settings',
+      title: t('dashboard.events'),
+      description: t('dashboard.reviewAndConfigureEventSettings'),
       icon: Calendar,
       link: '/dashboard/events',
       iconBg: 'from-blue-100 to-blue-50',
@@ -45,8 +50,8 @@ export default function DashboardPage() {
     },
     {
       id: 'profiles',
-      title: 'Profiles',
-      description: 'Manage user profiles and permissions',
+      title: t('dashboard.profiles'),
+      description: t('dashboard.manageUserProfilesAndPermissions'),
       icon: User,
       link: '/dashboard/profiles',
       iconBg: 'from-purple-100 to-purple-50',
@@ -58,8 +63,8 @@ export default function DashboardPage() {
     },
     {
       id: 'feedbacks',
-      title: 'Feedbacks',
-      description: 'View and manage user feedback',
+      title: t('dashboard.feedbacks'),
+      description: t('dashboard.viewAndManageUserFeedback'),
       icon: MessageSquare,
       link: '/dashboard/feedbacks',
       iconBg: 'from-primary-100 to-primary-50',
@@ -71,8 +76,8 @@ export default function DashboardPage() {
     },
     {
       id: 'settings',
-      title: 'App Settings',
-      description: 'Manage system-wide configuration',
+      title: t('dashboard.appSettings'),
+      description: t('dashboard.manageSystemWideConfiguration'),
       icon: Settings,
       link: '/dashboard/settings',
       iconBg: 'from-gray-100 to-gray-50',
@@ -139,7 +144,7 @@ export default function DashboardPage() {
               <p className="text-sm leading-relaxed text-gray-600">{section.description}</p>
               {!isAuthenticated && !isLoading && (
                 <span className="mt-4 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-600">
-                  Sign in to access
+                  {t('dashboard.signInToAccess')}
                 </span>
               )}
             </div>
@@ -150,13 +155,13 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100">
+    <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100">
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
       <div className="pt-[4rem]">
       <div className="relative">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
-            className="absolute top-0 right-0 h-96 w-96 rounded-full bg-primary-100/30 blur-3xl"
+            className={`absolute top-0 ${endClass('0')} h-96 w-96 rounded-full bg-primary-100/30 blur-3xl`}
             animate={{
               scale: [1, 1.2, 1],
               opacity: [0.3, 0.2, 0.3]
@@ -168,7 +173,7 @@ export default function DashboardPage() {
             }}
           />
           <motion.div
-            className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-purple-100/20 blur-3xl"
+            className={`absolute bottom-0 ${startClass('0')} h-96 w-96 rounded-full bg-purple-100/20 blur-3xl`}
             animate={{
               scale: [1, 1.3, 1],
               opacity: [0.2, 0.3, 0.2]
@@ -201,14 +206,14 @@ export default function DashboardPage() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600/10">
                   <LayoutDashboard className="h-8 w-8 text-primary-600" />
                 </div>
-                <div className="text-left">
-                  <h1 className="text-4xl font-semibold tracking-tight text-gray-900 md:text-5xl">Dashboard</h1>
-                  <p className="text-base text-gray-500 md:text-lg">System management and administration</p>
+                <div className={isRTL ? 'text-right' : 'text-left'}>
+                  <h1 className="text-4xl font-semibold tracking-tight text-gray-900 md:text-5xl">{t('dashboard.dashboard')}</h1>
+                  <p className="text-base text-gray-500 md:text-lg">{t('dashboard.systemManagementAndAdministration')}</p>
                 </div>
               </div>
               {!isAuthenticated && !isLoading && (
                 <p className="text-sm font-medium text-primary-600">
-                  Please sign in to explore dashboard tools.
+                  {t('dashboard.pleaseSignInToExploreDashboardTools')}
                 </p>
               )}
             </motion.div>

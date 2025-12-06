@@ -81,13 +81,14 @@ export function useRTL() {
    * @returns {string} Tailwind padding class
    */
   const ps = (size) => {
-    // For now, return empty - can be extended if needed
     const paddingClasses = {
       '0': { ltr: 'pl-0', rtl: 'pr-0' },
       '1': { ltr: 'pl-1', rtl: 'pr-1' },
       '2': { ltr: 'pl-2', rtl: 'pr-2' },
       '3': { ltr: 'pl-3', rtl: 'pr-3' },
       '4': { ltr: 'pl-4', rtl: 'pr-4' },
+      '10': { ltr: 'pl-10', rtl: 'pr-10' },
+      '12': { ltr: 'pl-12', rtl: 'pr-12' },
     };
     const classes = paddingClasses[size];
     return classes ? (isRTL ? classes.rtl : classes.ltr) : '';
@@ -105,10 +106,50 @@ export function useRTL() {
       '2': { ltr: 'pr-2', rtl: 'pl-2' },
       '3': { ltr: 'pr-3', rtl: 'pl-3' },
       '4': { ltr: 'pr-4', rtl: 'pl-4' },
+      '10': { ltr: 'pr-10', rtl: 'pl-10' },
+      '12': { ltr: 'pr-12', rtl: 'pl-12' },
     };
     const classes = paddingEndClasses[size];
     return classes ? (isRTL ? classes.rtl : classes.ltr) : '';
   };
+
+  /**
+   * Returns RTL-aware position string ('left' or 'right')
+   * @returns {string} 'left' in LTR, 'right' in RTL
+   */
+  const start = () => isRTL ? 'right' : 'left';
+
+  /**
+   * Returns RTL-aware position string ('right' or 'left')
+   * @returns {string} 'right' in LTR, 'left' in RTL
+   */
+  const end = () => isRTL ? 'left' : 'right';
+
+  /**
+   * Returns RTL-aware Tailwind class for start positioning
+   * @param {string} size - Tailwind spacing size (e.g., '1', '2', '3', '4')
+   * @returns {string} Tailwind position class (e.g., 'left-4' or 'right-4')
+   */
+  const startClass = (size) => isRTL ? `right-${size}` : `left-${size}`;
+
+  /**
+   * Returns RTL-aware Tailwind class for end positioning
+   * @param {string} size - Tailwind spacing size (e.g., '1', '2', '3', '4')
+   * @returns {string} Tailwind position class (e.g., 'right-4' or 'left-4')
+   */
+  const endClass = (size) => isRTL ? `left-${size}` : `right-${size}`;
+
+  /**
+   * Returns transform class to flip icon horizontally for RTL
+   * @returns {string} 'scale-x-[-1]' in RTL, empty string in LTR
+   */
+  const flipX = () => isRTL ? 'scale-x-[-1]' : '';
+
+  /**
+   * Returns flex direction class for button with icon after text
+   * @returns {string} 'flex-row-reverse' in RTL, empty string in LTR
+   */
+  const buttonIconOrder = () => isRTL ? 'flex-row-reverse' : '';
 
   return {
     isRTL,
@@ -116,6 +157,11 @@ export function useRTL() {
     me, // margin-end
     ps, // padding-start
     pe, // padding-end
+    start, // position string 'left'/'right'
+    end, // position string 'right'/'left'
+    startClass, // position class 'left-*'/'right-*'
+    endClass, // position class 'right-*'/'left-*'
+    flipX, // icon flip transform
+    buttonIconOrder, // button layout (deprecated - use dir instead)
   };
 }
-

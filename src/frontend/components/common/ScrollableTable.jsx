@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
+import { useRTL } from '../../hooks/useRTL';
 
 /**
  * ScrollableTable - A reusable table component with sticky header and scrollable body
@@ -29,6 +30,7 @@ export default function ScrollableTable({
   onRowClick = null,
   style = {},
 }) {
+  const { isRTL } = useRTL();
   const getSortIcon = (field) => {
     if (!field || sortBy !== field) return null;
     return sortDir === 'asc' ? (
@@ -42,6 +44,22 @@ export default function ScrollableTable({
     if (field && onSort) {
       onSort(field);
     }
+  };
+
+  // Get RTL-aware text alignment class using logical properties
+  // Use text-start/text-end which automatically respect dir attribute
+  const getAlignClass = (align) => {
+    if (align === 'center') return 'text-center';
+    if (align === 'right') return 'text-end';
+    return 'text-start'; // 'left' or default
+  };
+
+  // Get RTL-aware flex justify class using logical properties
+  // justify-start and justify-end automatically respect dir attribute
+  const getJustifyClass = (align) => {
+    if (align === 'center') return 'justify-center';
+    if (align === 'right') return 'justify-end';
+    return 'justify-start'; // 'left' or default
   };
 
   if (data.length === 0 && emptyState) {
@@ -61,9 +79,9 @@ export default function ScrollableTable({
   }
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)', ...style }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)', ...style }}>
       <div className="overflow-y-auto flex-1 min-h-0">
-        <table className="w-full border-collapse">
+        <table dir={isRTL ? 'rtl' : 'ltr'} className="w-full border-collapse">
           <thead className="bg-white sticky top-0 z-20 shadow-sm">
             <tr className="border-b border-gray-200">
               {columns.map((column, colIndex) => {
@@ -78,12 +96,13 @@ export default function ScrollableTable({
                 } = column;
 
                 const isSortable = sortable && onSort;
-                const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+                const alignClass = getAlignClass(align);
 
                 if (renderHeader) {
                   return (
                     <th
                       key={key || colIndex}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                       className={`sticky top-0 z-20 bg-white px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${headerClassName} ${colClassName}`}
                       onClick={() => isSortable && handleSort(key)}
                     >
@@ -95,11 +114,12 @@ export default function ScrollableTable({
                 return (
                   <th
                     key={key || colIndex}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                     className={`sticky top-0 z-20 bg-white px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200 ${alignClass} ${isSortable ? 'cursor-pointer hover:bg-gray-50' : ''} ${headerClassName} ${colClassName}`}
                     onClick={() => isSortable && handleSort(key)}
                   >
                     {isSortable ? (
-                      <div className={`flex items-center ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : ''} space-x-1`}>
+                      <div dir={isRTL ? 'rtl' : 'ltr'} className={`flex items-center ${getJustifyClass(align)} gap-1`}>
                         <span>{label}</span>
                         {getSortIcon(key)}
                       </div>
@@ -127,11 +147,12 @@ export default function ScrollableTable({
                     cellClassName = '',
                   } = column;
 
-                  const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+                  const alignClass = getAlignClass(align);
 
                   return (
                     <td
                       key={key || colIndex}
+                      dir={isRTL ? 'rtl' : 'ltr'}
                       className={`px-4 py-3 text-sm ${alignClass} ${cellClassName} ${colClassName}`}
                     >
                       {renderCell ? renderCell(row, rowIndex) : row[key] ?? ''}

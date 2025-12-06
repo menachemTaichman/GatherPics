@@ -269,6 +269,8 @@ export default function HomePage() {
                   <button
                     onClick={openLoginModal}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
+                    title={t('homePage.logIn')}
+                    aria-label={t('homePage.logIn')}
                   >
                     <LogIn className={`w-5 h-5 ${me('2')}`} />
                     {t('homePage.logIn')}
@@ -376,6 +378,8 @@ export default function HomePage() {
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('feedback:open-form'))}
               className="hover:text-primary-600 transition-colors duration-200"
+              title={t('homePage.sendFeedback')}
+              aria-label={t('homePage.sendFeedback')}
             >
               {t('homePage.sendFeedback')}
             </button>

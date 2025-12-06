@@ -12,6 +12,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useEventId } from '../../utils/storeUtils';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
@@ -26,21 +27,9 @@ export default function AlbumQuickAddButton({
   const { defaultAlbumIds } = useEventDefaultAlbums(eventId, eventUrl);
   const defaultAlbumsReady = Boolean(defaultAlbumIds);
   const { showToast } = useToast();
-  const { i18n } = useTranslation();
-  const [isRTL, setIsRTL] = useState(() => document.documentElement.dir === 'rtl');
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const navigate = useNavigate();
-  
-  // Update RTL state when language changes
-  useEffect(() => {
-    const updateDirection = () => {
-      setIsRTL(document.documentElement.dir === 'rtl');
-    };
-    updateDirection();
-    i18n.on('languageChanged', updateDirection);
-    return () => {
-      i18n.off('languageChanged', updateDirection);
-    };
-  }, [i18n]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
@@ -198,7 +187,7 @@ export default function AlbumQuickAddButton({
       // Check if album name already exists using API
       const nameCheck = await albumsAPI.checkName(trimmedName, '', eventUrl);
       if (nameCheck.conflict) {
-        showToast('Album with this name already exists', 'error');
+        showToast(t('albumQuickAdd.albumNameAlreadyExists'), 'error');
         return;
       }
       
@@ -293,14 +282,14 @@ export default function AlbumQuickAddButton({
 
   // Render dropdown content
   const renderDropdownContent = () => (
-    <div className="w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg">
+        <div className="w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg" dir={isRTL ? 'rtl' : 'ltr'}>
       {loading || !defaultAlbumsReady ? (
-        <div className="p-3 text-sm text-gray-500">Loading albums...</div>
+        <div className="p-3 text-sm text-gray-500">{t('albumQuickAdd.loadingAlbums')}</div>
       ) : (
         <ul className="divide-y divide-gray-100">
           {albums.length === 0 ? (
             <li>
-              <div className="p-3 text-sm text-gray-500">No albums</div>
+              <div className="p-3 text-sm text-gray-500">{t('albumQuickAdd.noAlbums')}</div>
             </li>
           ) : (
             albums.map((album, idx) => (
@@ -334,7 +323,7 @@ export default function AlbumQuickAddButton({
                     value={newAlbumName}
                     onChange={(e) => setNewAlbumName(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Album name"
+                    placeholder={t('albumQuickAdd.albumName')}
                     className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
                     autoFocus
                   />
@@ -367,7 +356,7 @@ export default function AlbumQuickAddButton({
                   <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
                     <PlusIcon className="w-4 h-4 text-gray-400" />
                   </div>
-                  <span className="text-sm">Create new album</span>
+                  <span className="text-sm">{t('albumQuickAdd.createNewAlbum')}</span>
                 </button>
               )}
             </div>
@@ -383,7 +372,8 @@ export default function AlbumQuickAddButton({
         ref={setButtonRef}
         onClick={() => setOpen(!open)}
         className="w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
-        title="Add selected to album"
+        title={t('albumQuickAdd.addToAlbum')}
+        aria-label={t('albumQuickAdd.addToAlbum')}
       >
         <PlusIcon className="w-4 h-4" />
       </button>

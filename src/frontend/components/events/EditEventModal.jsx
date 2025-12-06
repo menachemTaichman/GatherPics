@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Save, AlertCircle, Image as ImageIcon, Users, Layers, Calendar, Settings, Minus, HardDrive, Activity } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, API_BASE } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -11,6 +12,8 @@ import { useEventId, useApplyScopes } from '../../utils/storeUtils';
 import { useModalManager } from '../../utils/modalManager';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
 
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
 
@@ -68,6 +71,8 @@ export default function EditEventModal({
   const baseEvent = useEventGeneralById(eventId);
   const permissions = usePermissions(isCreateMode ? null : eventUrl);
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   const emitToast = useCallback(
     (message, type) => {
       const handler = onToast ?? showToast;
@@ -193,11 +198,11 @@ export default function EditEventModal({
     try {
       await eventsAPI.update(eventUrl, { representative_image: null });
       setEventError('');
-      emitToast('Event cover removed', 'success');
+      emitToast(t('editEventModal.eventCoverRemoved'), 'success');
       setCoverCacheBuster(Date.now());
     } catch (error) {
       console.error('Failed to remove event representative image:', error);
-      const message = formatErrorMessage('remove event cover', error);
+      const message = formatErrorMessage(t('editEventModal.removeEventCover'), error);
       setEventError(message);
       emitToast(message, 'error');
     } finally {
@@ -221,7 +226,7 @@ export default function EditEventModal({
       await eventsAPI.getById(eventUrl);
     } catch (error) {
       console.error('Failed to load event details:', error);
-      setEventError(formatErrorMessage('load event details', error));
+      setEventError(formatErrorMessage(t('editEventModal.loadEventDetails'), error));
       setEventDraft(null);
       setNameConflict(false);
       setUrlConflict(false);
@@ -452,32 +457,32 @@ export default function EditEventModal({
     const trimmedName = (eventDraft.name || '').trim();
     const trimmedUrl = (eventDraft.url || '').trim();
     if (!trimmedName) {
-      setEventError('Event name cannot be empty');
+      setEventError(t('editEventModal.eventNameCannotBeEmpty'));
       return;
     }
     if (!trimmedUrl) {
-      setEventError('Event URL cannot be empty');
+      setEventError(t('editEventModal.eventUrlCannotBeEmpty'));
       return;
     }
     if (nameConflict || urlConflict) {
-      setEventError('Resolve conflicts before saving');
+      setEventError(t('editEventModal.resolveConflictsBeforeSaving'));
       return;
     }
     if (!isCreateMode && !eventUrl) {
-      setEventError('Event URL is missing');
+      setEventError(t('editEventModal.eventUrlMissing'));
       return;
     }
     if (eventDraft.images_count_limit == null) {
-      setEventError('Photo count limit is required');
+      setEventError(t('editEventModal.photoCountLimitRequired'));
       return;
     }
     if (eventDraft.image_size_limit_bytes == null) {
-      setEventError('Max upload size is required');
+      setEventError(t('editEventModal.maxUploadSizeRequired'));
       return;
     }
     if (!isCreateMode && baseEvent?.images_count != null && eventDraft.images_count_limit != null) {
       if (eventDraft.images_count_limit < baseEvent.images_count) {
-        setEventError(`Photo count limit cannot be less than current image count (${baseEvent.images_count.toLocaleString()})`);
+        setEventError(t('editEventModal.photoCountLimitTooLow', { count: baseEvent.images_count.toLocaleString() }));
         return;
       }
     }
@@ -500,14 +505,14 @@ export default function EditEventModal({
       let response;
       if (isCreateMode) {
         response = await eventsAPI.create(payload);
-        emitToast('Event created', 'success');
+        emitToast(t('editEventModal.eventCreated'), 'success');
       } else {
         response = await eventsAPI.update(eventUrl, payload);
         const urlChanged = Boolean(previousUrl && trimmedUrl !== previousUrl);
         if (urlChanged) {
-          emitToast('Event URL updated. Update your bookmarks to the new address.', 'info');
+          emitToast(t('editEventModal.eventUrlUpdated'), 'info');
         }
-        emitToast('Event settings updated', 'success');
+        emitToast(t('editEventModal.eventSettingsUpdated'), 'success');
       }
       const urlChanged = Boolean(previousUrl && trimmedUrl !== previousUrl);
       onSuccess?.({
@@ -521,7 +526,7 @@ export default function EditEventModal({
       onClose?.();
     } catch (error) {
       console.error('Failed to save event:', error);
-      const actionLabel = isCreateMode ? 'create event' : 'update event';
+      const actionLabel = isCreateMode ? t('editEventModal.createEventAction') : t('editEventModal.updateEventAction');
       const message = formatErrorMessage(actionLabel, error);
       setEventError(message);
       emitToast(message, 'error');
@@ -600,10 +605,10 @@ export default function EditEventModal({
     customKeyHandler: handleModalKeys,
   });
 
-  const modalTitle = isCreateMode ? 'Create Event' : 'Edit Event';
-  const modalSubtitle = isCreateMode ? 'Set up a new event' : 'Update general event preferences';
-  const primaryButtonLabel = isCreateMode ? 'Create Event' : 'Save Changes';
-  const savingLabel = isCreateMode ? 'Creating...' : 'Saving...';
+  const modalTitle = isCreateMode ? t('editEventModal.createEvent') : t('editEventModal.editEvent');
+  const modalSubtitle = isCreateMode ? t('editEventModal.setUpNewEvent') : t('editEventModal.updateGeneralPreferences');
+  const primaryButtonLabel = isCreateMode ? t('editEventModal.createEvent') : t('editEventModal.saveChanges');
+  const savingLabel = isCreateMode ? t('editEventModal.creating') : t('editEventModal.saving');
 
   const modalContent = (
     <AnimatePresence>
@@ -611,6 +616,7 @@ export default function EditEventModal({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={onClose}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           <motion.form
             ref={modalRef}
@@ -624,7 +630,7 @@ export default function EditEventModal({
             noValidate
           >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
                   <Settings className="h-5 w-5" />
                 </div>
@@ -636,6 +642,8 @@ export default function EditEventModal({
               <button
                 onClick={onClose}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                title={t('account.close')}
+                aria-label={t('account.close')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -644,8 +652,8 @@ export default function EditEventModal({
             <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0">
               {eventLoading ? (
                 <div className="flex items-center justify-center py-8 text-sm text-gray-500">
-                  <div className="mr-3 h-4 w-4 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
-                  Loading event settings...
+                  <div className={`h-4 w-4 animate-spin rounded-full border-2 border-primary-500 border-t-transparent ${isRTL ? 'ml-3' : 'mr-3'}`} />
+                  {t('editEventModal.loadingEventSettings')}
                 </div>
               ) : (
                 <div className="space-y-6 pb-8">
@@ -659,80 +667,83 @@ export default function EditEventModal({
                     <>
                       <div className="space-y-6">
                         <div className="rounded-lg bg-gray-50 p-4">
-                          <h3 className="text-sm font-semibold text-gray-700">Basics</h3>
+                          <h3 className="text-sm font-semibold text-gray-700">{t('editEventModal.basics')}</h3>
                           <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
-                                Event Name
-                                <span className="ml-1 text-red-500">*</span>
+                                {t('editEventModal.eventName')}
+                                <span className={`${isRTL ? 'mr-1' : 'ml-1'} text-red-500`}>*</span>
                               </label>
                               <input
                                 type="text"
                                 value={eventDraft.name}
                                 onChange={(e) => handleEventFieldChange('name', e.target.value)}
                                 required
+                                dir={isRTL ? 'rtl' : 'ltr'}
                                 className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:border-transparent ${
                                   nameConflict
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
-                                placeholder="Enter event name"
+                                placeholder={t('editEventModal.enterEventName')}
                               />
                               {checkingName ? (
-                                <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
+                                <p className="mt-1 text-xs text-gray-500">{t('editEventModal.checkingAvailability')}</p>
                               ) : nameConflict ? (
                                 <p className="mt-1 text-xs text-red-600">
-                                  Name already in use by another event.
+                                  {t('editEventModal.nameAlreadyInUse')}
                                 </p>
                               ) : null}
                             </div>
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
-                                Event URL
-                                <span className="ml-1 text-red-500">*</span>
+                                {t('editEventModal.eventUrl')}
+                                <span className={`${isRTL ? 'mr-1' : 'ml-1'} text-red-500`}>*</span>
                               </label>
                               <input
                                 type="text"
                                 value={eventDraft.url}
                                 onChange={(e) => handleEventFieldChange('url', e.target.value)}
                                 required
+                                dir="ltr"
                                 className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:border-transparent ${
                                   urlConflict
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
-                                placeholder="friendly-event-slug"
+                                placeholder={t('editEventModal.friendlyEventSlug')}
                               />
                               {checkingUrl ? (
-                                <p className="mt-1 text-xs text-gray-500">Checking availability…</p>
+                                <p className="mt-1 text-xs text-gray-500">{t('editEventModal.checkingAvailability')}</p>
                               ) : urlConflict ? (
                                 <p className="mt-1 text-xs text-red-600">
-                                  URL already in use by another event.
+                                  {t('editEventModal.urlAlreadyInUse')}
                                 </p>
                               ) : null}
                               {baseEvent?.url && eventDraft.url !== baseEvent.url && (
                                 <p className="mt-1 text-xs text-amber-600">
-                                  The event URL will change after saving.
+                                  {t('editEventModal.urlWillChange')}
                                 </p>
                               )}
                             </div>
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
-                                Event Date
+                                {t('editEventModal.eventDate')}
                               </label>
                               <input
                                 type="date"
                                 value={eventDraft.date || ''}
                                 onChange={(e) => handleEventFieldChange('date', e.target.value)}
+                                dir="ltr"
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
                           </div>
                           <div className="mt-4 flex items-center justify-between rounded-lg bg-white px-4 py-3">
                             <div>
-                              <p className="font-medium text-gray-900">Public Event</p>
+                              <p className="font-medium text-gray-900">{t('editEventModal.publicEvent')}</p>
                               <p className="text-sm text-gray-500">
-                                Show it in the public events list
+                                {t('editEventModal.showInPublicList')}
                               </p>
                             </div>
                             <label className="relative inline-flex cursor-pointer items-center">
@@ -742,16 +753,20 @@ export default function EditEventModal({
                                 onChange={(e) => handleEventToggle('is_public', e.target.checked)}
                                 className="peer sr-only"
                               />
-                              <div className="after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer h-6 w-11 rounded-full bg-gray-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white" />
+                              <div className={`after:absolute after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer h-6 w-11 rounded-full bg-gray-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:border-white ${
+                                isRTL 
+                                  ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
+                                  : 'after:left-[2px] peer-checked:after:translate-x-5'
+                              }`} />
                             </label>
                           </div>
                           {!isCreateMode && (
                             <div className="mt-4 rounded-lg bg-white px-4 py-3">
                               <div className="flex items-start justify-between">
                                 <div>
-                                  <p className="font-medium text-gray-900">Cover Photo</p>
+                                  <p className="font-medium text-gray-900">{t('editEventModal.coverPhoto')}</p>
                                   <p className="text-sm text-gray-500">
-                                    Displayed on the event homepage.
+                                    {t('editEventModal.displayedOnHomepage')}
                                   </p>
                                 </div>
                                 {baseEvent?.representative_image ? (
@@ -761,15 +776,16 @@ export default function EditEventModal({
                                         width: 96,
                                         height: 96,
                                         className: 'h-full w-full object-cover',
-                                        alt: 'Event cover',
+                                        alt: t('editEventModal.coverPhoto'),
                                       })}
                                     </div>
                                     <button
                                       type="button"
                                       onClick={handleRemoveRepresentative}
                                       disabled={removingRepresentative}
-                                      className="absolute -bottom-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
-                                      title="Remove cover photo"
+                                      className={`absolute -bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70 ${endClass('2')}`}
+                                      title={t('editEventModal.removeCoverPhoto')}
+                                      aria-label={t('editEventModal.removeCoverPhoto')}
                                     >
                                       {removingRepresentative ? (
                                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -784,14 +800,14 @@ export default function EditEventModal({
                                       width: 96,
                                       height: 96,
                                       className: 'h-full w-full object-cover rounded-xl bg-gray-100 text-gray-400',
-                                      alt: 'Event cover placeholder',
+                                      alt: t('editEventModal.coverPhoto'),
                                     })}
                                   </div>
                                 )}
                               </div>
                               {!baseEvent?.representative_image && (
                                 <p className="mt-3 text-sm text-gray-500">
-                                  Choose a photo from the timeline or albums to set an event cover.
+                                  {t('editEventModal.choosePhotoFromTimeline')}
                                 </p>
                               )}
                             </div>
@@ -799,12 +815,12 @@ export default function EditEventModal({
                         </div>
 
                         <div className="rounded-lg bg-gray-50 p-4">
-                          <h3 className="text-sm font-semibold text-gray-700">Limits</h3>
+                          <h3 className="text-sm font-semibold text-gray-700">{t('editEventModal.limits')}</h3>
                           <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
-                                Photo Count Limit
-                                <span className="ml-1 text-red-500">*</span>
+                                {t('editEventModal.photoCountLimit')}
+                                <span className={`${isRTL ? 'mr-1' : 'ml-1'} text-red-500`}>*</span>
                               </label>
                               <input
                                 type="number"
@@ -825,21 +841,22 @@ export default function EditEventModal({
                                   }
                                   handleEventLimitChange('images_count_limit', finalValue);
                                 }}
+                                dir={isRTL ? 'rtl' : 'ltr'}
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                                placeholder={uploadsLimits?.images_count_limit?.toLocaleString() ?? 'Enter limit'}
+                                placeholder={uploadsLimits?.images_count_limit?.toLocaleString() ?? t('editEventModal.requiredEnterMaxPhotos')}
                               />
                               <p className="mt-1 text-xs text-gray-500">
                                 {!isCreateMode && baseEvent?.images_count != null
-                                  ? `Minimum: ${baseEvent.images_count.toLocaleString()} photos (current count). ${uploadsLimits?.images_count_limit != null ? `Maximum: ${uploadsLimits.images_count_limit.toLocaleString()} photos.` : ''}`
+                                  ? `${t('editEventModal.minimumPhotos', { count: baseEvent.images_count.toLocaleString() })} ${uploadsLimits?.images_count_limit != null ? t('editEventModal.maximumPhotos', { max: uploadsLimits.images_count_limit.toLocaleString() }) : ''}`
                                   : uploadsLimits?.images_count_limit != null
-                                  ? `Maximum allowed: ${uploadsLimits.images_count_limit.toLocaleString()} photos.`
-                                  : 'Required. Enter the maximum number of photos allowed.'}
+                                  ? t('editEventModal.maximumAllowedPhotos', { max: uploadsLimits.images_count_limit.toLocaleString() })
+                                  : t('editEventModal.requiredEnterMaxPhotos')}
                               </p>
                             </div>
                             <div>
                               <label className="mb-1 block text-xs font-medium text-gray-600">
-                                Max Upload Size (MB)
-                                <span className="ml-1 text-red-500">*</span>
+                                {t('editEventModal.maxUploadSize')}
+                                <span className={`${isRTL ? 'mr-1' : 'ml-1'} text-red-500`}>*</span>
                               </label>
                               <input
                                 type="number"
@@ -865,24 +882,25 @@ export default function EditEventModal({
                                     : value === '' ? (maxLimitMb ?? 0) : value;
                                   handleEventSizeLimitMbChange(finalValue);
                                 }}
+                                dir={isRTL ? 'rtl' : 'ltr'}
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
                                 placeholder={
                                   uploadsLimits?.image_size_limit_bytes != null
                                     ? String(Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024)))
-                                    : 'Enter limit'
+                                    : t('editEventModal.requiredEnterMaxSize')
                                 }
                               />
                               <p className="mt-1 text-xs text-gray-500">
                                 {uploadsLimits?.image_size_limit_bytes != null
-                                  ? `Maximum allowed: ${Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024))} MB.`
-                                  : 'Required. Enter the maximum upload size in MB.'}
+                                  ? t('editEventModal.maximumAllowedMB', { max: Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024)) })
+                                  : t('editEventModal.requiredEnterMaxSize')}
                               </p>
                             </div>
                             {permissions.has_settings && (
                               <div>
                                 <label className="mb-1 block text-xs font-medium text-gray-600">
-                                  Calls Limit
-                                  <span className="ml-1 text-red-500">*</span>
+                                  {t('editEventModal.callsLimit')}
+                                  <span className={`${isRTL ? 'mr-1' : 'ml-1'} text-red-500`}>*</span>
                                 </label>
                                 <input
                                   type="number"
@@ -902,15 +920,16 @@ export default function EditEventModal({
                                     }
                                     handleEventCallsLimitChange(finalValue);
                                   }}
+                                  dir={isRTL ? 'rtl' : 'ltr'}
                                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                                  placeholder={uploadsLimits?.rekognition_calls_limit?.toLocaleString() ?? 'Enter limit'}
+                                  placeholder={uploadsLimits?.rekognition_calls_limit?.toLocaleString() ?? t('editEventModal.enterMaxCalls')}
                                 />
                                 <p className="mt-1 text-xs text-gray-500">
                                   {!isCreateMode && baseEvent?.rekognition_calls_used != null
-                                    ? `Minimum: ${baseEvent.rekognition_calls_used.toLocaleString()} calls (current used). ${uploadsLimits?.rekognition_calls_limit != null ? `Maximum: ${uploadsLimits.rekognition_calls_limit.toLocaleString()} calls.` : ''}`
+                                    ? `${t('editEventModal.minimumCalls', { count: baseEvent.rekognition_calls_used.toLocaleString() })} ${uploadsLimits?.rekognition_calls_limit != null ? t('editEventModal.maximumCalls', { max: uploadsLimits.rekognition_calls_limit.toLocaleString() }) : ''}`
                                     : uploadsLimits?.rekognition_calls_limit != null
-                                    ? `Maximum allowed: ${uploadsLimits.rekognition_calls_limit.toLocaleString()} calls.`
-                                    : 'Enter the maximum number of recognition calls allowed.'}
+                                    ? t('editEventModal.maximumAllowedCalls', { max: uploadsLimits.rekognition_calls_limit.toLocaleString() })
+                                    : t('editEventModal.enterMaxCalls')}
                                 </p>
                               </div>
                             )}
@@ -924,7 +943,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <ImageIcon className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Photos</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.photos')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent?.images_count ?? 0}
@@ -935,7 +954,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <Users className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Faces</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.faces')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent?.faces_count ?? 0}
@@ -946,7 +965,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <Layers className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Albums</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.albums')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent?.albums_count ?? 0}
@@ -957,7 +976,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <Calendar className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Moments</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.moments')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent?.moments_count ?? 0}
@@ -968,7 +987,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Total Size</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent.total_size != null
@@ -981,7 +1000,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Original Size</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent.total_original_size != null
@@ -994,7 +1013,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">High Quality Size</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent.total_high_quality_size != null
@@ -1007,7 +1026,7 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">Max Size</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
                                 {baseEvent.max_image_size != null
@@ -1021,10 +1040,10 @@ export default function EditEventModal({
                                   <Activity className="h-5 w-5 text-blue-500" />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium text-gray-600">Rekognition Calls Used</p>
+                                  <p className="text-sm font-medium text-gray-600">{t('editEventModal.callsLimit')}</p>
                                   {baseEvent?.rekognition_calls_limit != null && (
                                     <p className="text-xs text-gray-500">
-                                      Max: {baseEvent.rekognition_calls_limit.toLocaleString()}
+                                      {t('editEventModal.maximumCalls', { max: baseEvent.rekognition_calls_limit.toLocaleString() })}
                                     </p>
                                   )}
                                 </div>
@@ -1039,7 +1058,7 @@ export default function EditEventModal({
                     </>
                   ) : (
                     <div className="rounded-lg bg-gray-50 py-8 text-center text-sm text-gray-500">
-                      Event details are unavailable.
+                      {t('editEventModal.eventDetailsUnavailable')}
                     </div>
                   )}
                 </div>
@@ -1051,7 +1070,7 @@ export default function EditEventModal({
                 type="submit"
                 disabled={!canSaveEvent}
                 data-submit-source="primary-button"
-                className="flex items-center space-x-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {eventSaving ? (
                   <>

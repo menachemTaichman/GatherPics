@@ -12,6 +12,8 @@ import { useModalStore } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
 import { formatDateTime } from '../../utils/dateUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
@@ -20,6 +22,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const urlHelpers = injectedUrlHelpers;
   const eventId = useEventId(eventUrl);
   const { updateMoment } = useDataStore();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
   
   const MODAL_ID = 'edit-moment-images-modal';
   
@@ -585,7 +589,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     const finalCount = currentCount - removeCount + addCount;
     
     if (removeCount === 0 && addCount === 0) {
-      return `No changes. Total: ${currentCount}`;
+      return `${t('moments.noChanges')} ${currentCount}`;
     }
     
     // Count how many additions are "shifted" from other moments
@@ -596,17 +600,17 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     
     let caption = "";
     if (removeCount > 0) {
-      caption += `Remove ${removeCount}`;
+      caption += `${t('moments.remove')} ${removeCount}`;
     }
     if (addCount > 0) {
       if (caption) caption += ", ";
       if (shiftedCount > 0) {
-        caption += `add ${addCount} (inc. ${shiftedCount} shifted)`;
+        caption += `${t('moments.add')} ${addCount} (${t('moments.including')} ${shiftedCount} ${t('moments.shifted')})`;
       } else {
-        caption += `add ${addCount}`;
+        caption += `${t('moments.add')} ${addCount}`;
       }
     }
-    caption += `. Total: ${finalCount}`;
+    caption += `. ${t('moments.total')} ${finalCount}`;
     
     return caption;
   };
@@ -621,29 +625,33 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           exit={{ scale: 0.9, opacity: 0 }}
           className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col"
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold">Edit Photos: {currentMoment?.label || moment.label}</h3>
-            <div className="flex items-center space-x-2">
+            <h3 className="text-lg font-bold">{t('moments.editPhotosTitle')} {currentMoment?.label || moment.label}</h3>
+            <div className="flex items-center gap-2">
               <button 
                 onClick={handleReset} 
                 className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
-                title="Reset"
+                title={t('moments.reset')}
+                aria-label={t('moments.reset')}
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
               <button 
                 onClick={handleSaveImages} 
                 className="w-8 h-8 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center"
-                title="Save Changes"
+                title={t('moments.saveChanges')}
+                aria-label={t('moments.saveChanges')}
               >
                 <CheckCheck className="w-4 h-4" />
               </button>
               <button 
                 onClick={handleClose} 
                 className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
-                title="Cancel"
+                title={t('moments.cancel')}
+                aria-label={t('moments.cancel')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -660,18 +668,19 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           
           {/* Filter and Sort Controls */}
           <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               {/* Sort button - moved before filter */}
               <button
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
-                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+                title={sortOrder === 'asc' ? t('moments.sortDescending') : t('moments.sortAscending')}
+                aria-label={sortOrder === 'asc' ? t('moments.sortDescending') : t('moments.sortAscending')}
               >
                 {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
               </button>
               
               <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">Filter:</span>
+              <span className="text-sm font-medium text-gray-700">{t('moments.filter')}</span>
               <button
                 onClick={() => setFilterType('all')}
                 className={`px-3 py-1 text-xs rounded transition-colors ${
@@ -680,7 +689,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                All
+                {t('moments.all')}
               </button>
               <button
                 onClick={() => setFilterType('in-moment')}
@@ -690,7 +699,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                In Moment
+                {t('moments.inMoment')}
               </button>
               <button
                 onClick={() => setFilterType('not-in-moment')}
@@ -700,7 +709,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                Not in Moment
+                {t('moments.notInMoment')}
               </button>
               <button
                 onClick={() => setFilterType('in-period')}
@@ -710,10 +719,10 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                In Period
+                {t('moments.inPeriod')}
               </button>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               {/* Select all button - only visible when not all filtered are selected */}
               {!areAllFilteredSelected() && (
                 <button
@@ -723,7 +732,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                       ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title="Select all filtered images"
+                  title={t('moments.selectAllFiltered')}
+                  aria-label={t('moments.selectAllFiltered')}
                 >
                   <CheckCheck className="w-4 h-4" />
                 </button>
@@ -734,7 +744,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                 <button
                   onClick={handleClearFilteredSelection}
                   className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
-                  title="Clear filtered selection"
+                  title={t('moments.clearFilteredSelection')}
+                  aria-label={t('moments.clearFilteredSelection')}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -801,7 +812,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                     {image.date_taken ? formatDateTime(image.date_taken) : image.label}
                   </div>
                   {momentInfo && (
-                    <div className={`absolute top-2 right-2 text-white text-xs px-1 py-0.5 rounded ${
+                    <div className={`absolute top-2 ${endClass('2')} text-white text-xs px-1 py-0.5 rounded ${
                       momentInfo.isCurrentMoment ? 'bg-green-500' : 'bg-red-500'
                     }`}>
                       {momentInfo.title}

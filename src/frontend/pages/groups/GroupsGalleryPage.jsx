@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { FaceCard } from '../../components/groups';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
@@ -11,12 +12,17 @@ import { useDataStore, selectors as storeSelectors, useGroupsList } from '../../
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { ImageIconPlaceholder } from '../../hooks/useImage.jsx';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
   const eventId = useEventId(eventUrl);
   useApplyScopes([{ entity: 'all', id: 'groups', eventId }]);
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass, ps, pe } = useRTL();
   const [searchTerm, setSearchTerm] = useState('');
   const sortBy = usePreference('GroupsGallery.sortBy', 'name');
   const setSortBy = (value) => setPreference('GroupsGallery.sortBy', value);
@@ -51,6 +57,11 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   
   useAuthRefresh(loadGroups, [eventUrl]);
 
+  // Set document title
+  useEffect(() => {
+    document.title = `${t('groupsGallery.peopleGallery')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
+
   // Use groups from store or placeholders when not authenticated
   const currentGroups = isAuthenticated ? storeGroups : placeholderGroups;
 
@@ -71,53 +82,56 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   }, [currentGroups, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
   return (
-    <div className="w-full">
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Sticky Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              People Gallery
+              {t('groupsGallery.peopleGallery')}
             </h1>
             <p className="text-gray-600">
               {filteredAndSortedGroups.length === currentGroups.length 
-                ? `${filteredAndSortedGroups.length} people`
-                : `${filteredAndSortedGroups.length} of ${currentGroups.length} people`
+                ? `${filteredAndSortedGroups.length} ${t('groupsGallery.people')}`
+                : `${filteredAndSortedGroups.length} ${t('groupsGallery.of')} ${currentGroups.length} ${t('groupsGallery.people')}`
               }
             </p>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className={`absolute ${startClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`} />
               <input
                 type="text"
                 id="search-people"
                 name="search-people"
-                placeholder="Search people..."
+                dir={isRTL ? 'rtl' : 'ltr'}
+                placeholder={t('groupsGallery.searchPeople')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
+                className={`${ps('10')} ${pe('4')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64`}
               />
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <div className="relative">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                  dir={isRTL ? 'rtl' : 'ltr'}
+                  className={`appearance-none ${ps('3')} ${pe('10')} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white`}
                 >
-                  <option value="name">Sort by Name</option>
-                  <option value="count">Sort by Count</option>
+                  <option value="name">{t('groupsGallery.sortByName')}</option>
+                  <option value="count">{t('groupsGallery.sortByCount')}</option>
                 </select>
-                <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                <Filter className={`absolute ${endClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none`} />
               </div>
               
               <button
                 onClick={() => setSortOrder(toggleSortOrder(sortOrder))}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
-                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+                title={`${t('groupsGallery.sort')} ${sortOrder === 'asc' ? t('groupsGallery.ascending') : t('groupsGallery.descending')}`}
+                aria-label={`${t('groupsGallery.sort')} ${sortOrder === 'asc' ? t('groupsGallery.ascending') : t('groupsGallery.descending')}`}
               >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="w-4 h-4" />
@@ -128,7 +142,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             </div>
 
             {/* Size Control */}
-            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
               <button
                 onClick={() => {
                   const currentPercent = Math.round(cardSize * 100);
@@ -140,6 +154,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 }}
                 disabled={cardSize <= 0.50}
                 className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('groupsGallery.decreaseSize')}
+                aria-label={t('groupsGallery.decreaseSize')}
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -149,6 +165,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 name="card-size-input"
                 inputMode="numeric"
                 pattern="[0-9]*"
+                dir={isRTL ? 'rtl' : 'ltr'}
                 value={cardSizeInputValue !== undefined ? cardSizeInputValue : Math.round(cardSize * 100)}
                 onChange={e => setCardSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
                 onBlur={e => {
@@ -178,6 +195,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 }}
                 disabled={cardSize >= 1.75}
                 className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('groupsGallery.increaseSize')}
+                aria-label={t('groupsGallery.increaseSize')}
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -197,12 +216,12 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         >
           <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {searchTerm ? 'No people found' : 'No people yet'}
+            {searchTerm ? t('groupsGallery.noPeopleFound') : t('groupsGallery.noPeopleYet')}
           </h3>
           <p className="text-gray-500">
             {searchTerm 
-              ? 'Try adjusting your search terms' 
-              : 'Upload some photos to get started'
+              ? t('groupsGallery.tryAdjustingSearchTerms')
+              : t('groupsGallery.uploadPhotosToGetStarted')
             }
           </p>
         </motion.div>

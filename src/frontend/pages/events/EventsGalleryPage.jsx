@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Eye, Edit2, Plus, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, profilesAPI } from '../../utils/apiService';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -19,6 +20,8 @@ import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 import { formatDate } from '../../utils/dateUtils';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
 
 function toNumber(value) {
   const numeric = Number(value);
@@ -29,6 +32,8 @@ export default function EventsGalleryPage() {
   const { isAuthenticated, isLoading, showLoginModal, loginError, login, closeLoginModal, openLoginModal } = useAuth();
   const { showToast } = useToast();
   const { canCreateEvents } = usePermissions();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass } = useRTL();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,8 +53,8 @@ export default function EventsGalleryPage() {
 
   // Set document title
   useEffect(() => {
-    document.title = `Events | ${APP_CONFIG.name}`;
-  }, []);
+    document.title = `${t('eventsGallery.events')} | ${APP_CONFIG.name}`;
+  }, [i18n.language]);
 
   // Auto-show login modal when not authenticated
   useEffect(() => {
@@ -290,7 +295,7 @@ export default function EventsGalleryPage() {
     if (!eventToDelete?.url) return;
     try {
       await eventsAPI.delete(eventToDelete.url);
-      showToast('Event deleted', 'success');
+      showToast(t('eventsGallery.eventDeleted'), 'success');
       try {
         await profilesAPI.getCurrentProfile();
         setProfileVersion((prev) => prev + 1);
@@ -308,30 +313,30 @@ export default function EventsGalleryPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50" dir={isRTL ? 'rtl' : 'ltr'}>
         <TopNavigationBar variant="light" showBackground={true} mode="full" />
         <div className="bg-white border-b border-gray-200 pt-[4rem]">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                   <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Event Management</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{t('eventsGallery.eventManagement')}</h1>
                   <p className="text-sm text-gray-500">
                     {isAuthenticated
                       ? hasEditableEvents
-                        ? `${stats.total} manageable event${stats.total === 1 ? '' : 's'}`
-                        : 'No events with edit access yet'
-                      : 'Loading...'}
+                        ? `${stats.total} ${stats.total === 1 ? t('eventsGallery.manageableEvent') : t('eventsGallery.manageableEvents')}`
+                        : t('eventsGallery.noEventsWithEditAccess')
+                      : t('eventsGallery.loading')}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleFilterChange('all')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -340,7 +345,7 @@ export default function EventsGalleryPage() {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  All ({stats.total})
+                  {t('eventsGallery.all')} ({stats.total})
                 </button>
                 <button
                   onClick={() => handleFilterChange('public')}
@@ -350,7 +355,7 @@ export default function EventsGalleryPage() {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Public ({stats.public})
+                  {t('eventsGallery.public')} ({stats.public})
                 </button>
                 <button
                   onClick={() => handleFilterChange('private')}
@@ -360,7 +365,7 @@ export default function EventsGalleryPage() {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Private ({stats.private})
+                  {t('eventsGallery.private')} ({stats.private})
                 </button>
               </div>
             </div>
@@ -376,8 +381,8 @@ export default function EventsGalleryPage() {
 
           {loading && isAuthenticated ? (
             <div className="flex items-center justify-center py-16 text-gray-500">
-              <div className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
-              Loading events...
+              <div className={`h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent ${isRTL ? 'ml-3' : 'mr-3'}`} />
+              {t('eventsGallery.loadingEvents')}
             </div>
           ) : sortedEvents.length === 0 ? (
             <motion.div
@@ -386,11 +391,11 @@ export default function EventsGalleryPage() {
               className="text-center py-12"
             >
               <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No manageable events</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{t('eventsGallery.noManageableEvents')}</h3>
               <p className="text-gray-500">
                 {hasEditableEvents
-                  ? 'Try adjusting filters or sorting options.'
-                  : 'You do not have edit access to any events yet.'}
+                  ? t('eventsGallery.tryAdjustingFilters')
+                  : t('eventsGallery.noEditAccess')}
               </p>
             </motion.div>
           ) : (
@@ -399,15 +404,15 @@ export default function EventsGalleryPage() {
               columns={[
                 {
                   key: 'name',
-                  label: 'Name',
+                  label: t('eventsGallery.name'),
                   sortable: true,
                   align: 'left',
                   cellClassName: 'text-gray-900 font-medium',
-                  renderCell: (event) => event.name || 'Untitled Event',
+                  renderCell: (event) => event.name || t('eventsGallery.untitledEvent'),
                 },
                 {
                   key: 'url',
-                  label: 'URL',
+                  label: t('eventsGallery.url'),
                   sortable: true,
                   align: 'left',
                   cellClassName: 'text-gray-600',
@@ -420,7 +425,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'date',
-                  label: 'Date',
+                  label: t('eventsGallery.date'),
                   sortable: true,
                   align: 'left',
                   cellClassName: 'text-gray-700',
@@ -428,7 +433,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'is_public',
-                  label: 'Visibility',
+                  label: t('eventsGallery.visibility'),
                   sortable: true,
                   align: 'left',
                   renderCell: (event) => (
@@ -439,13 +444,13 @@ export default function EventsGalleryPage() {
                           : 'bg-amber-100 text-amber-700'
                       }`}
                     >
-                      {event.is_public ? 'Public' : 'Private'}
+                      {event.is_public ? t('eventsGallery.public') : t('eventsGallery.private')}
                     </span>
                   ),
                 },
                 {
                   key: 'images_count',
-                  label: 'Photos',
+                  label: t('eventsGallery.photos'),
                   sortable: true,
                   align: 'center',
                   cellClassName: 'text-gray-700',
@@ -453,7 +458,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'faces_count',
-                  label: 'Faces',
+                  label: t('eventsGallery.faces'),
                   sortable: true,
                   align: 'center',
                   cellClassName: 'text-gray-700',
@@ -461,7 +466,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'albums_count',
-                  label: 'Albums',
+                  label: t('eventsGallery.albums'),
                   sortable: true,
                   align: 'center',
                   cellClassName: 'text-gray-700',
@@ -469,7 +474,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'moments_count',
-                  label: 'Moments',
+                  label: t('eventsGallery.moments'),
                   sortable: true,
                   align: 'center',
                   cellClassName: 'text-gray-700',
@@ -477,7 +482,7 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'total_size',
-                  label: 'Total Size',
+                  label: t('eventsGallery.totalSize'),
                   sortable: true,
                   align: 'center',
                   cellClassName: 'text-gray-700',
@@ -488,21 +493,23 @@ export default function EventsGalleryPage() {
                 },
                 {
                   key: 'actions',
-                  label: 'Actions',
+                  label: t('eventsGallery.actions'),
                   align: 'right',
                   renderCell: (event) => (
-                    <div className="flex items-center justify-end space-x-2">
+                    <div className="flex items-center justify-end gap-2">
                       {event.isPlaceholder ? (
                         <>
                           <span
                             className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                            title="Please log in to view events"
+                            title={t('eventsGallery.pleaseLogInToView')}
+                            aria-label={t('eventsGallery.pleaseLogInToView')}
                           >
                             <Eye className="w-4 h-4" />
                           </span>
                           <span
                             className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                            title="Please log in to edit events"
+                            title={t('eventsGallery.pleaseLogInToEdit')}
+                            aria-label={t('eventsGallery.pleaseLogInToEdit')}
                           >
                             <Edit2 className="w-4 h-4" />
                           </span>
@@ -513,14 +520,16 @@ export default function EventsGalleryPage() {
                             <Link
                               to={`/${event.url}`}
                               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                              title="Open event"
+                              title={t('eventsGallery.openEvent')}
+                              aria-label={t('eventsGallery.openEvent')}
                             >
                               <Eye className="w-4 h-4 text-blue-600" />
                             </Link>
                           ) : (
                             <span
                               className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
-                              title="Event URL not available"
+                              title={t('eventsGallery.eventUrlNotAvailable')}
+                              aria-label={t('eventsGallery.eventUrlNotAvailable')}
                             >
                               <Eye className="w-4 h-4" />
                             </span>
@@ -528,7 +537,8 @@ export default function EventsGalleryPage() {
                           <button
                             onClick={() => openEditModal(event.url)}
                             className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                            title="Edit settings"
+                            title={t('eventsGallery.editSettings')}
+                            aria-label={t('eventsGallery.editSettings')}
                           >
                             <Edit2 className="w-4 h-4 text-indigo-600" />
                           </button>
@@ -536,7 +546,8 @@ export default function EventsGalleryPage() {
                             <button
                               onClick={() => handleRequestDelete(event)}
                               className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                              title="Delete event"
+                              title={t('eventsGallery.deleteEvent')}
+                              aria-label={t('eventsGallery.deleteEvent')}
                             >
                               <Trash2 className="w-4 h-4 text-red-600" />
                             </button>
@@ -553,10 +564,10 @@ export default function EventsGalleryPage() {
               onSort={handleSort}
               emptyState={{
                 icon: Calendar,
-                title: 'No manageable events',
+                title: t('eventsGallery.noManageableEvents'),
                 message: hasEditableEvents
-                  ? 'Try adjusting filters or sorting options.'
-                  : 'You do not have edit access to any events yet.',
+                  ? t('eventsGallery.tryAdjustingFilters')
+                  : t('eventsGallery.noEditAccess'),
               }}
               getRowKey={(event) => event.event_id}
             />
@@ -578,31 +589,32 @@ export default function EventsGalleryPage() {
       {eventToDelete && (() => {
         const displayLabel = (eventToDelete.name || eventToDelete.url || '').trim();
         const message = displayLabel
-          ? `Are you sure you want to delete “${displayLabel}”?`
-          : 'Are you sure you want to delete this event?';
+          ? t('eventsGallery.deleteEventConfirm', { label: displayLabel })
+          : t('eventsGallery.deleteEventConfirmNoLabel');
         return (
           <ConfirmDelete
             isOpen={!!eventToDelete}
             onClose={handleCancelDelete}
             onConfirm={handleConfirmDelete}
-            title="Delete Event"
+            title={t('eventsGallery.deleteEventTitle')}
             message={message}
-            confirmText="Delete"
-            cancelText="Cancel"
-            caption="This action cannot be undone. All event data will be permanently removed."
+            confirmText={t('eventsGallery.delete')}
+            cancelText={t('account.cancel')}
+            caption={t('eventsGallery.deleteEventCaption')}
             simpleMessage={true}
           />
         );
       })()}
 
       {canCreateEvents && isAuthenticated && (
-        <div className="fixed bottom-8 right-8 z-40">
+        <div className={`fixed bottom-8 z-40 ${endClass('8')}`}>
           <motion.button
             onClick={openCreateModal}
             className="w-16 h-16 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 flex items-center justify-center"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            title="Create new event"
+            title={t('eventsGallery.createNewEvent')}
+            aria-label={t('eventsGallery.createNewEvent')}
           >
             <Plus className="w-8 h-8" />
           </motion.button>

@@ -7,6 +7,8 @@ import { useModalManager } from '../../utils/modalManager';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 
 
@@ -27,6 +29,8 @@ export default function MergeConflictModal({
 }) {
   const eventId = useEventId(eventUrl);
   const urlHelpers = injectedUrlHelpers;
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const [loading, setLoading] = useState(false);
   const dataStore = useDataStore.getState;
   const { registerModal, unregisterModal } = useModalManager();
@@ -173,29 +177,30 @@ export default function MergeConflictModal({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           <div className="p-6">
             <div className="text-center mb-4">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Transfer to "{newName}"?
+                {t('mergeConflict.transferTo', { name: newName })}
               </h2>
               <p className="text-sm text-gray-600">
-                All images from the current person will be transferred to the existing person.
+                {t('mergeConflict.transferDescription')}
               </p>
             </div>
 
-            <div className="flex items-center justify-center space-x-4 mb-6">
+            <div className="flex items-center justify-center gap-4 mb-6">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 mx-auto mb-2">
                   {useImageComponent(getRepresentativeImageSrc(currentGroup), {
                     width: 64,
                     height: 64,
                     className: 'w-full h-full object-cover',
-                    alt: 'Current person',
+                    alt: t('mergeConflict.currentPerson'),
                     iconType: 'person'
                   })}
                 </div>
-                <p className="text-xs text-gray-500">Current</p>
+                <p className="text-xs text-gray-500">{t('mergeConflict.current')}</p>
               </div>
 
               <ArrowRight className="w-5 h-5 text-gray-400" />
@@ -210,26 +215,26 @@ export default function MergeConflictModal({
                       width: 64,
                       height: 64,
                       className: 'w-full h-full object-cover',
-                      alt: 'Target person',
+                      alt: t('mergeConflict.targetPerson'),
                       iconType: 'person'
                     }
                   )}
                 </div>
-                <p className="text-xs text-gray-500">Target</p>
+                <p className="text-xs text-gray-500">{t('mergeConflict.target')}</p>
               </div>
             </div>
 
-            <div className="flex space-x-3">
+            <div className="flex gap-3">
               <button
                 onClick={handleCancel}
                 className="btn-secondary flex-1"
                 disabled={loading}
               >
-                Cancel
+                {t('mergeConflict.cancel')}
               </button>
               <button
                 onClick={handleTransfer}
-                className="btn-primary flex-1 flex items-center justify-center space-x-2"
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
                 disabled={loading}
               >
                 {loading ? (
@@ -237,7 +242,7 @@ export default function MergeConflictModal({
                 ) : (
                   <Users className="w-4 h-4" />
                 )}
-                <span>{loading ? 'Transferring...' : 'Transfer'}</span>
+                <span>{loading ? t('mergeConflict.transferring') : t('mergeConflict.transfer')}</span>
               </button>
             </div>
           </div>

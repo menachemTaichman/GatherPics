@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getStoragePrefix } from '../config/appConfig';
+import { setIsApplyingApiChanges } from './settings';
 
 // Centralized storage keys (prefix derived from app name)
 const prefix = getStoragePrefix();
@@ -785,9 +786,15 @@ export const useDataStore = create((set, get) => {
                                 storageKey === 'preferences' ? STORAGE_KEYS.PREFERENCES :
                                 storageKey;
               
-              if (ch.type === CHANGE_TYPES.UPSERT) {
-                // Replace entire value
-                try {
+              // Set flag to prevent setPreference from calling API when updating from API response
+              const isPreferencesUpdate = storageKey === 'preferences';
+              if (isPreferencesUpdate) {
+                setIsApplyingApiChanges(true);
+              }
+              
+              try {
+                if (ch.type === CHANGE_TYPES.UPSERT) {
+                  // Replace entire value
                   const value = { ...it };
                   delete value.id;
                   localStorage.setItem(mappedKey, JSON.stringify(value));
@@ -795,12 +802,8 @@ export const useDataStore = create((set, get) => {
                   if (storageKey === 'currentProfile') {
                     window.dispatchEvent(new Event('localStorage:currentProfile'));
                   }
-                } catch (e) {
-                  console.warn('Failed to update localStorage:', e);
-                }
-              } else if (ch.type === CHANGE_TYPES.UPDATE) {
-                // Merge into existing value
-                try {
+                } else if (ch.type === CHANGE_TYPES.UPDATE) {
+                  // Merge into existing value
                   const existingRaw = localStorage.getItem(mappedKey);
                   const existing = existingRaw ? JSON.parse(existingRaw) : {};
                   const merged = { ...existing, ...it };
@@ -810,8 +813,13 @@ export const useDataStore = create((set, get) => {
                   if (storageKey === 'currentProfile') {
                     window.dispatchEvent(new Event('localStorage:currentProfile'));
                   }
-                } catch (e) {
-                  console.warn('Failed to update localStorage:', e);
+                }
+              } catch (e) {
+                console.warn('Failed to update localStorage:', e);
+              } finally {
+                // Reset flag after updating preferences
+                if (isPreferencesUpdate) {
+                  setIsApplyingApiChanges(false);
                 }
               }
             });

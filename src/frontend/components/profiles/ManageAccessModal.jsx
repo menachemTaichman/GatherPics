@@ -9,12 +9,16 @@ import { profilesAPI } from '../../utils/apiService';
 import { getCurrentProfileId } from '../../utils/profileService';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { getErrorExplanation, formatErrorMessage } from '../../utils/errorHandler';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 /**
  * Profile Access Row Component
  * Handles displaying and managing access for a single profile
  */
 function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast }) {
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const [loading, setLoading] = useState({});
   const [specifyStatus, setSpecifyStatus] = useState(null); // 1 = all accessible, -1 = all inaccessible, 0 = mixed, null = unknown
   const [actualStatus, setActualStatus] = useState(null); // 1 = all accessible, -1 = all inaccessible, 0 = mixed, null = unknown
@@ -77,7 +81,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         await profilesAPI.setGroupsAccessible(profile.id, entityIds, eventUrl);
       }
 
-      showToast(`Access granted for ${profile.label}`, 'success');
+      showToast(`${t('manageAccess.accessGranted')} ${profile.label}`, 'success');
       
       // Refresh status after successful operation
       try {
@@ -123,7 +127,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         await profilesAPI.setGroupsInaccessible(profile.id, entityIds, eventUrl);
       }
 
-      showToast(`Access denied for ${profile.label}`, 'success');
+      showToast(`${t('manageAccess.accessDenied')} ${profile.label}`, 'success');
       
       // Refresh status after successful operation
       try {
@@ -169,21 +173,20 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
   // Determine actual status for tooltip
   const entityCount = entityIds?.length || 0;
   const isSingular = entityCount === 1;
-  const entityLabelPlural = entityType === 'image' ? 'photos' : entityType === 'album' ? 'albums' : 'people';
-  const entityLabelSingular = entityType === 'image' ? 'photo' : entityType === 'album' ? 'album' : 'person';
+  const entityLabelPlural = entityType === 'image' ? t('manageAccess.photos') : entityType === 'album' ? t('manageAccess.albums') : t('manageAccess.people');
+  const entityLabelSingular = entityType === 'image' ? t('manageAccess.photo') : entityType === 'album' ? t('manageAccess.album') : t('manageAccess.person');
   const entityLabel = isSingular ? entityLabelSingular : entityLabelPlural;
-  const entityCountText = isSingular ? 'The' : 'All selected';
-  const verbText = isSingular ? 'is' : 'are';
+  const entityCountText = isSingular ? t('manageAccess.the') : t('manageAccess.allSelected');
   
   const getActualTooltipText = () => {
     if (actualStatus === 1) {
-      return `${entityCountText} ${entityLabel} ${verbText} effectively accessible to this profile`;
+      return t('manageAccess.actualAccessFull');
     } else if (actualStatus === -1) {
-      return `${entityCountText} ${entityLabel} ${verbText} effectively not accessible to this profile`;
+      return t('manageAccess.actualAccessNone');
     } else if (actualStatus === 0) {
-      return `The selected ${entityLabel} have mixed accessibility to this profile`;
+      return t('manageAccess.actualAccessPartial');
     }
-    return 'Checking effective accessibility...';
+    return t('manageAccess.checkingAccessibility');
   };
 
   // Get color for actual status indicator
@@ -197,8 +200,9 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
   return (
     <div
       className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+      dir={isRTL ? 'rtl' : 'ltr'}
     >
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
           isSpecifyAllowed ? 'bg-green-100' :
           isSpecifyDenied ? 'bg-red-100' :
@@ -216,7 +220,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           )}
         </div>
         <div className="flex-1">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <p className="font-medium text-gray-900">{profile.label}</p>
             {actualStatus !== null && (
               <div className="relative">
@@ -226,7 +230,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
                   onMouseLeave={() => setShowActualTooltip(false)}
                 />
                 {showActualTooltip && (
-                  <div className="absolute left-0 top-5 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-normal">
+                  <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-5 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-normal`}>
                     {getActualTooltipText()}
                   </div>
                 )}
@@ -234,20 +238,20 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
             )}
           </div>
           <p className="text-xs text-gray-500">
-            Rank {profile.hierarchy_rank} • 
-            {isSpecifyAllowed ? ' Has access' :
-             isSpecifyDenied ? ' No access' :
-             isSpecifyMixed ? ' Mixed access' :
-             ' Unknown'}
+            {t('manageAccess.rank')} {profile.hierarchy_rank} • 
+            {isSpecifyAllowed ? ` ${t('manageAccess.hasAccess')}` :
+             isSpecifyDenied ? ` ${t('manageAccess.noAccess')}` :
+             isSpecifyMixed ? ` ${t('manageAccess.mixedAccess')}` :
+             ` ${t('manageAccess.unknown')}`}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-2">
         <button
           onClick={handleAllow}
           disabled={isLoadingAny || isSpecifyAllowed}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
             isSpecifyAllowed
               ? 'bg-green-100 text-green-700 hover:bg-green-200'
               : 'bg-green-600 text-white hover:bg-green-700'
@@ -258,12 +262,12 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           ) : (
             <Check className="w-4 h-4" />
           )}
-          <span>Allow</span>
+          <span>{t('manageAccess.allow')}</span>
         </button>
         <button
           onClick={handleDeny}
           disabled={isLoadingAny || isSpecifyDenied}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
             isSpecifyDenied
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-red-600 text-white hover:bg-red-700'
@@ -274,7 +278,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
           ) : (
             <Minus className="w-4 h-4" />
           )}
-          <span>Deny</span>
+          <span>{t('manageAccess.deny')}</span>
         </button>
       </div>
     </div>
@@ -292,6 +296,8 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
 export default function ManageAccessModal({ isOpen, onClose, entityType, entityIds = [], eventUrl }) {
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const MODAL_ID = 'manage-access-modal';
   const { registerModal, unregisterModal } = useModalStore();
 
@@ -390,7 +396,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
           setProfilesLoaded(true);
         } catch (err) {
           console.error('Failed to load profiles:', err);
-          setError('Failed to load profiles. Please try again.');
+          setError(t('manageAccess.failedToLoadProfiles'));
         } finally {
           setProfilesLoading(false);
         }
@@ -402,7 +408,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
 
   if (!isOpen) return null;
 
-  const entityLabel = entityType === 'image' ? 'photo' : entityType === 'album' ? 'album' : 'person';
+  const entityLabel = entityType === 'image' ? t('manageAccess.photo') : entityType === 'album' ? t('manageAccess.album') : t('manageAccess.person');
   const entityCount = entityIds.length;
 
   return (
@@ -422,19 +428,20 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
           className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
           tabIndex={-1}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                 <Key className="w-5 h-5 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Manage Access
+                  {t('manageAccess.manageAccess')}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {entityCount} {entityLabel}{entityCount !== 1 ? 's' : ''} selected
+                  {entityCount} {entityLabel}{entityCount !== 1 ? (entityType === 'image' ? t('manageAccess.photos') : entityType === 'album' ? t('manageAccess.albums') : t('manageAccess.people')) : ''} {t('manageAccess.selected')}
                 </p>
               </div>
             </div>
@@ -452,27 +459,27 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
             {profilesLoading ? (
               <div className="text-center py-12">
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-3" />
-                <p className="text-gray-500">Loading profiles...</p>
+                <p className="text-gray-500">{t('manageAccess.loadingProfiles')}</p>
               </div>
             ) : profilesLoaded && otherProfiles.length === 0 ? (
               <div className="text-center py-12">
                 <Key className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500">No other profiles available</p>
+                <p className="text-gray-500">{t('manageAccess.noOtherProfilesAvailable')}</p>
               </div>
             ) : profilesLoaded ? (
               <div className="space-y-4">
                 {/* Note about other permissions */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-2">
+                  <div className="flex items-start gap-2">
                     <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm text-blue-900 font-medium mb-1">
-                        Note: Other permissions may override these settings
+                        {t('manageAccess.noteOtherPermissions')}
                       </p>
                       <p className="text-xs text-blue-700">
-                        {entityType === 'image' && 'Archived photos may be inaccessible if the profile doesn\'t have access to archived albums.'}
-                        {entityType === 'album' && 'Albums may be inaccessible if there are no accessible photos inside and the profile cannot edit.'}
-                        {entityType === 'group' && 'People may be inaccessible if there are no accessible photos inside and the profile cannot edit.'}
+                        {entityType === 'image' && t('manageAccess.noteImage')}
+                        {entityType === 'album' && t('manageAccess.noteAlbum')}
+                        {entityType === 'group' && t('manageAccess.noteGroup')}
                       </p>
                     </div>
                   </div>
@@ -495,7 +502,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
             ) : null}
 
             {error && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2 text-red-700">
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2 text-red-700">
                 <X className="w-4 h-4 flex-shrink-0" />
                 <p className="text-sm">{error}</p>
               </div>
@@ -508,7 +515,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
               onClick={onClose}
               className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
             >
-              Close
+              {t('manageAccess.close')}
             </button>
           </div>
         </motion.div>

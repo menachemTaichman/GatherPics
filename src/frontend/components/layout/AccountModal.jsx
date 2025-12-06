@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, User, UserCircle, Edit2, Plus, LogOut, Lock, Trash2, FileText, Eye, Check, MessageSquare } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { getPreference, setPreference } from '../../utils/settings';
@@ -21,8 +22,11 @@ import { FeedbackFormModal } from '../feedbacks';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatDate } from '../../utils/dateUtils';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function AccountModal({ hideButton = false }) {
+  const { t } = useTranslation();
+  const { isRTL, ms, me } = useRTL();
   const [isOpen, setIsOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
   const params = useParams();
@@ -174,13 +178,13 @@ export default function AccountModal({ hideButton = false }) {
     try {
       await profilesAPI.updateCurrentProfile({ email: currentEmail.trim() || null }, eventUrl);
       setCurrentProfile({ ...currentProfile, email: currentEmail.trim() || null });
-      showToast('Email updated', 'success');
+      showToast(t('account.emailUpdated'), 'success');
       setEditingEmail(false);
     } catch (error) {
       console.error('Failed to update email:', error);
-      showToast(formatErrorMessage('update email', error), 'error');
+      showToast(formatErrorMessage(t('account.updateEmail'), error), 'error');
     }
-  }, [currentProfile, currentEmail, eventUrl, showToast]);
+  }, [currentProfile, currentEmail, eventUrl, showToast, t]);
 
   const handleEmailCancel = useCallback(() => {
     setEditingEmail(false);
@@ -248,16 +252,16 @@ export default function AccountModal({ hideButton = false }) {
     const requestId = requestToDelete?.id || requestToDelete?.access_request_id;
     if (!requestId) {
       console.error('Cannot delete request: no ID found', requestToDelete);
-      showToast('Cannot delete request: ID not found', 'error');
+      showToast(t('account.cannotDeleteRequestNoId'), 'error');
       return;
     }
 
     try {
       await requestsAPI.deleteMyRequest(requestId, eventUrl);
-      showToast(`Request deleted`, 'success');
+      showToast(t('account.requestDeleted'), 'success');
     } catch (error) {
       console.error('Failed to delete request:', error);
-      showToast(formatErrorMessage('delete request', error), 'error');
+      showToast(formatErrorMessage(t('account.deleteRequestAction'), error), 'error');
     } finally {
       setRequestToDelete(null);
     }
@@ -282,16 +286,16 @@ export default function AccountModal({ hideButton = false }) {
     const feedbackId = myFeedbackToDelete?.id || myFeedbackToDelete?.feedback_id;
     if (!feedbackId) {
       console.error('Cannot delete feedback: no ID found', myFeedbackToDelete);
-      showToast('Cannot delete feedback: ID not found', 'error');
+      showToast(t('account.cannotDeleteFeedbackNoId'), 'error');
       return;
     }
 
     try {
       await feedbacksAPI.deleteMyFeedback(feedbackId);
-      showToast(`Feedback deleted`, 'success');
+      showToast(t('account.feedbackDeleted'), 'success');
     } catch (error) {
       console.error('Failed to delete feedback:', error);
-      showToast(formatErrorMessage('delete feedback', error), 'error');
+      showToast(formatErrorMessage(t('account.deleteFeedbackAction'), error), 'error');
     } finally {
       setMyFeedbackToDelete(null);
     }
@@ -332,28 +336,31 @@ export default function AccountModal({ hideButton = false }) {
             transition={{ duration: 0.3 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+            dir={isRTL ? 'rtl' : 'ltr'}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
                   <UserCircle className="w-5 h-5 text-primary-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Account</h2>
-                  <p className="text-sm text-gray-500">Manage your account settings</p>
+                  <h2 className="text-xl font-semibold text-gray-900">{t('account.account')}</h2>
+                  <p className="text-sm text-gray-500">{t('account.manageAccountSettings')}</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                title={t('account.close')}
+                aria-label={t('account.close')}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0">
+            <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0" dir={isRTL ? 'rtl' : 'ltr'}>
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ 
@@ -368,15 +375,15 @@ export default function AccountModal({ hideButton = false }) {
                   /* Not Authenticated - Show Sign In */
                   <div className="bg-gray-50 rounded-lg p-8 text-center">
                     <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Not Signed In</h3>
-                    <p className="text-gray-600 mb-4">Sign in to access your account settings</p>
-                    <button
-                      onClick={handleSignIn}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center space-x-2"
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Sign In</span>
-                    </button>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('account.notSignedIn')}</h3>
+                    <p className="text-gray-600 mb-4">{t('account.signInToAccess')}</p>
+                              <button
+                                onClick={handleSignIn}
+                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium inline-flex items-center gap-2"
+                              >
+                                <span>{t('account.signIn')}</span>
+                                <User className="w-4 h-4" />
+                              </button>
                   </div>
                 ) : (
                   <>
@@ -384,30 +391,30 @@ export default function AccountModal({ hideButton = false }) {
                     <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="text-base text-gray-700">
-                          Current Profile: <span className="font-medium text-gray-900">{currentProfile?.label || 'Not set'}</span>
+                          <span className={me('1')}>{t('account.currentProfile')}</span> <span className="font-medium text-gray-900">{currentProfile?.label || t('account.notSet')}</span>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className={`flex items-center ${ms('2')}`}>
                           {!Boolean(currentProfile?.is_public) && (
                             <button
                               onClick={() => setShowChangePasswordModal(true)}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-blue-700 shadow-sm"
+                              className={`px-3 py-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium inline-flex items-center justify-center gap-2 ${ms('2')} border border-blue-700 shadow-sm`}
                             >
+                              <span>{t('account.changePassword')}</span>
                               <Lock className="w-4 h-4" />
-                              <span>Change Password</span>
                             </button>
                           )}
                           <button
                             onClick={handleSignOut}
-                            className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center space-x-2 border border-red-200 shadow-sm"
+                            className={`px-3 py-1.5 bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition-colors font-medium inline-flex items-center justify-center gap-2 ${ms('2')} border border-red-200 shadow-sm`}
                           >
+                            <span>{t('account.signOut')}</span>
                             <LogOut className="w-4 h-4" />
-                            <span>Sign Out</span>
                           </button>
                         </div>
                       </div>
                       {!Boolean(currentProfile?.is_public) && (
                         <div 
-                          className="flex items-center space-x-1.5"
+                          className="flex items-center gap-1.5"
                           onKeyDown={(e) => {
                             if (editingEmail) {
                               if (e.key === 'Enter') {
@@ -422,7 +429,7 @@ export default function AccountModal({ hideButton = false }) {
                             }
                           }}
                         >
-                          <span className="text-sm text-gray-600">Email:</span>
+                          <span className={`text-sm text-gray-600 ${me('2')}`}>{t('account.email')}</span>
                           {editingEmail ? (
                             <>
                               <input
@@ -430,31 +437,34 @@ export default function AccountModal({ hideButton = false }) {
                                 value={currentEmail}
                                 onChange={(e) => setCurrentEmail(e.target.value)}
                                 className="w-64 px-2 py-1 text-sm border border-blue-500 rounded focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-                                placeholder="Enter email (optional)"
+                                placeholder={t('account.enterEmailOptional')}
                                 autoFocus
                               />
                               <button
                                 onClick={handleEmailSave}
-                                className="p-1 hover:bg-green-100 rounded transition-colors"
-                                title="Save (Enter)"
+                                className={`p-1 hover:bg-green-100 rounded transition-colors ${ms('2')}`}
+                                title={t('account.saveEnter')}
+                                aria-label={t('account.saveEnter')}
                               >
                                 <Check className="w-4 h-4 text-green-600" />
                               </button>
                               <button
                                 onClick={handleEmailCancel}
-                                className="p-1 hover:bg-red-100 rounded transition-colors"
-                                title="Cancel (Esc)"
+                                className={`p-1 hover:bg-red-100 rounded transition-colors ${ms('2')}`}
+                                title={t('account.cancelEsc')}
+                                aria-label={t('account.cancelEsc')}
                               >
                                 <X className="w-4 h-4 text-red-600" />
                               </button>
                             </>
                           ) : (
                             <>
-                              <span className="text-sm font-medium text-gray-900">{currentProfile?.email || 'Not set'}</span>
+                              <span className={`text-sm font-medium text-gray-900 ${ms('2')}`}>{currentProfile?.email || t('account.notSet')}</span>
                               <button
                                 onClick={handleEmailEdit}
-                                className="p-1 hover:bg-blue-100 rounded transition-colors"
-                                title="Edit email"
+                                className={`p-1 hover:bg-blue-100 rounded transition-colors ${ms('2')}`}
+                                title={t('account.editEmail')}
+                                aria-label={t('account.editEmail')}
                               >
                                 <Edit2 className="w-3.5 h-3.5 text-blue-600" />
                               </button>
@@ -467,15 +477,15 @@ export default function AccountModal({ hideButton = false }) {
                     {/* Include Archived */}
                     <PermissionGate requires="hasArchiveAlbum" eventUrl={eventUrl}>
                       <div className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Gallery Preferences</h4>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('account.galleryPreferences')}</h4>
                         <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
                               <Archive className="w-5 h-5 text-gray-600" />
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900">Include Archived</p>
-                              <p className="text-sm text-gray-500">Show archived images in galleries</p>
+                              <p className="font-medium text-gray-900">{t('account.includeArchived')}</p>
+                              <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
                             </div>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
@@ -485,7 +495,7 @@ export default function AccountModal({ hideButton = false }) {
                               onChange={(e) => handleIncludeArchivedChange(e.target.checked)}
                               className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                            <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-full' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600`}></div>
                           </label>
                         </div>
                       </div>
@@ -513,20 +523,20 @@ export default function AccountModal({ hideButton = false }) {
                       return (
                         <div className="bg-gray-50 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-gray-700">My Requests</h4>
+                            <h4 className="text-sm font-semibold text-gray-700">{t('account.myRequests')}</h4>
                             {enableNewRequests && (
                               <button
                                 onClick={handleCreateRequest}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1">
+                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-1">
+                                <span>{t('account.createRequest')}</span>
                                 <Plus className="w-4 h-4" />
-                                <span>Create Request</span>
                               </button>
                             )}
                           </div>
                           {!isPublic && (userRequests.length === 0 ? (
                             <div key="no-requests-message" className="text-center py-4">
                               <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                              <p className="text-sm text-gray-500">No requests yet</p>
+                              <p className="text-sm text-gray-500">{t('account.noRequestsYet')}</p>
                             </div>
                           ) : (
                             <div key="requests-list" className="space-y-2">
@@ -539,12 +549,12 @@ export default function AccountModal({ hideButton = false }) {
                                     key={requestKey}
                                     className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
                                   >
-                                    <div className="flex items-center space-x-3">
+                                    <div className="flex items-center gap-3">
                                       <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                                         <FileText className="w-5 h-5 text-blue-600" />
                                       </div>
                                       <div>
-                                        <div className="flex items-center space-x-2">
+                                        <div className="flex items-center gap-2">
                                           <p className="font-medium text-gray-900">{request.applicant_name}</p>
                                           <span className={`px-2 py-1 text-xs rounded-full ${
                                             (() => {
@@ -561,21 +571,21 @@ export default function AccountModal({ hideButton = false }) {
                                             {(() => {
                                               const status = request.status || 'pending';
                                               const statusConfig = {
-                                                pending: 'Pending',
-                                                approved: 'Approved',
-                                                rejected: 'Rejected',
-                                                mixed: 'Mixed'
+                                                pending: t('account.pending'),
+                                                approved: t('account.approved'),
+                                                rejected: t('account.rejected'),
+                                                mixed: t('account.mixed')
                                               };
                                               return statusConfig[status] || statusConfig.pending;
                                             })()}
                                           </span>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                          {request.groups_count} group{request.groups_count !== 1 ? 's' : ''} • {formatDate(request.requested_at)}
+                                          {request.groups_count} {request.groups_count !== 1 ? t('account.groups') : t('account.group')} • {formatDate(request.requested_at)}
                                         </p>
                                       </div>
                                     </div>
-                                    <div className="flex items-center space-x-1">
+                                    <div className="flex items-center gap-1">
                                       {(() => {
                                         const status = request.status || 'pending';
                                         const isClosed = status !== 'pending';
@@ -584,7 +594,8 @@ export default function AccountModal({ hideButton = false }) {
                                           <button
                                             onClick={() => handleEditRequest(request)}
                                             className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                            title="View request"
+                                            title={t('account.viewRequest')}
+                                            aria-label={t('account.viewRequest')}
                                           >
                                             <Eye className="w-4 h-4 text-blue-600" />
                                           </button>
@@ -593,7 +604,8 @@ export default function AccountModal({ hideButton = false }) {
                                             <button
                                               onClick={() => handleEditRequest(request)}
                                               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                              title="Edit request"
+                                              title={t('account.editRequest')}
+                                              aria-label={t('account.editRequest')}
                                             >
                                               <Edit2 className="w-4 h-4 text-blue-600" />
                                             </button>
@@ -601,7 +613,8 @@ export default function AccountModal({ hideButton = false }) {
                                               <button
                                                 onClick={() => handleDeleteRequest(request)}
                                                 className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                                title="Delete request"
+                                                title={t('account.deleteRequest')}
+                                                aria-label={t('account.deleteRequest')}
                                               >
                                                 <Trash2 className="w-4 h-4 text-red-600" />
                                               </button>
@@ -630,7 +643,7 @@ export default function AccountModal({ hideButton = false }) {
                       return (
                         <div className="bg-gray-50 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-gray-700">My Feedbacks</h4>
+                            <h4 className="text-sm font-semibold text-gray-700">{t('account.myFeedbacks')}</h4>
                           </div>
                           <div key="feedbacks-list" className="space-y-2">
                             {sortedMyFeedbacks.map((feedback, index) => {
@@ -643,7 +656,7 @@ export default function AccountModal({ hideButton = false }) {
                                   key={feedbackKey}
                                   className="flex items-center justify-between py-3 px-4 bg-white rounded-lg hover:shadow-sm transition-shadow"
                                 >
-                                  <div className="flex items-center space-x-3">
+                                  <div className="flex items-center gap-3">
                                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                                       feedback.type === 0 ? 'bg-red-100' : 'bg-green-100'
                                     }`}>
@@ -652,27 +665,28 @@ export default function AccountModal({ hideButton = false }) {
                                       }`} />
                                     </div>
                                     <div>
-                                      <div className="flex items-center space-x-2">
+                                      <div className="flex items-center gap-2">
                                         <p className="font-medium text-gray-900">{feedback.title}</p>
                                         <span className={`px-2 py-1 text-xs rounded-full ${
                                           isClosed 
                                             ? (feedback.solved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700')
                                             : 'bg-blue-100 text-blue-700'
                                         }`}>
-                                          {isClosed ? (feedback.solved ? 'Solved' : 'Closed') : 'Open'}
+                                          {isClosed ? (feedback.solved ? t('account.solved') : t('account.closed')) : t('account.open')}
                                         </span>
                                       </div>
                                       <p className="text-xs text-gray-500">
-                                        {feedback.type === 0 ? 'Bug Report' : 'Suggestion'} • {formatDate(feedback.created_at)}
+                                        {feedback.type === 0 ? t('account.bugReport') : t('account.suggestion')} • {formatDate(feedback.created_at)}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center space-x-1">
+                                  <div className="flex items-center gap-1">
                                     {isClosed ? (
                                       <button
                                         onClick={() => handleEditMyFeedback(feedback)}
                                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                        title="View feedback"
+                                        title={t('account.viewFeedback')}
+                                        aria-label={t('account.viewFeedback')}
                                       >
                                         <Eye className="w-4 h-4 text-blue-600" />
                                       </button>
@@ -681,14 +695,16 @@ export default function AccountModal({ hideButton = false }) {
                                         <button
                                           onClick={() => handleEditMyFeedback(feedback)}
                                           className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                          title="Edit feedback"
+                                          title={t('account.editFeedback')}
+                                          aria-label={t('account.editFeedback')}
                                         >
                                           <Edit2 className="w-4 h-4 text-blue-600" />
                                         </button>
                                         <button
                                           onClick={() => handleDeleteMyFeedback(feedback)}
                                           className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                          title="Delete feedback"
+                                          title={t('account.deleteFeedback')}
+                                          aria-label={t('account.deleteFeedback')}
                                         >
                                           <Trash2 className="w-4 h-4 text-red-600" />
                                         </button>
@@ -713,8 +729,10 @@ export default function AccountModal({ hideButton = false }) {
                 <button
                   onClick={() => setIsOpen(false)}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  title={t('account.close')}
+                  aria-label={t('account.close')}
                 >
-                  Close
+                  {t('account.close')}
                 </button>
               </div>
             </div>
@@ -742,12 +760,12 @@ export default function AccountModal({ hideButton = false }) {
             setRequestToDelete(null);
           }}
           onConfirm={handleConfirmDeleteRequest}
-          title="Delete Request"
-          message="Are you sure you want to delete this request"
+          title={t('account.deleteRequestTitle')}
+          message={t('account.deleteRequestMessage')}
           itemName={requestToDelete.applicant_name}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('account.delete')}
+          cancelText={t('account.cancel')}
+          caption={t('account.thisActionCannotBeUndone')}
         />
       )}
 
@@ -783,12 +801,12 @@ export default function AccountModal({ hideButton = false }) {
             setMyFeedbackToDelete(null);
           }}
           onConfirm={handleConfirmDeleteMyFeedback}
-          title="Delete Feedback"
-          message="Are you sure you want to delete this feedback"
+          title={t('account.deleteFeedbackTitle')}
+          message={t('account.deleteFeedbackMessage')}
           itemName={myFeedbackToDelete.title}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone."
+          confirmText={t('account.delete')}
+          cancelText={t('account.cancel')}
+          caption={t('account.thisActionCannotBeUndone')}
         />
       )}
     </>
@@ -800,7 +818,7 @@ export default function AccountModal({ hideButton = false }) {
         <button
           onClick={() => setIsOpen(true)}
           className="w-9 h-9 border border-transparent rounded-lg transition-all hover:bg-gray-100 flex items-center justify-center text-gray-700 relative"
-          title="Account"
+          title={t('account.account')}
         >
           <UserCircle className="w-4 h-4" />
         </button>

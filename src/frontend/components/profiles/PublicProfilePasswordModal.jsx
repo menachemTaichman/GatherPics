@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Eye, EyeOff, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
@@ -8,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
 export default function PublicProfilePasswordModal({ isOpen, onClose, profileId, profileLabel, eventUrl }) {
+  const { t } = useTranslation();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -160,7 +162,8 @@ export default function PublicProfilePasswordModal({ isOpen, onClose, profileId,
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     tabIndex={-1}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                    title={showNewPassword ? 'Hide password' : 'Show password'}
+                    title={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                    aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -198,7 +201,8 @@ export default function PublicProfilePasswordModal({ isOpen, onClose, profileId,
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     tabIndex={-1}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    title={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                    aria-label={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>

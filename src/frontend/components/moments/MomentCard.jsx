@@ -9,6 +9,8 @@ import { useDataStore } from '../../utils/dataManager';
 import { momentsAPI } from '../../utils/apiService';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 
 const MomentCard = forwardRef(({
   moment,
@@ -31,6 +33,8 @@ const MomentCard = forwardRef(({
   // Data loading is handled by 'all:moments' scope from the parent Moments component
   
   const { showToast } = useToast();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   
   // State for image aspect ratio classes (same approach as GroupDetail)
   const [imageClasses, setImageClasses] = useState({});
@@ -162,6 +166,7 @@ const MomentCard = forwardRef(({
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.1 }}
       className="relative flex"
+      dir={isRTL ? 'rtl' : 'ltr'}
     >
       <div className="flex-1">
         <motion.div
@@ -172,7 +177,7 @@ const MomentCard = forwardRef(({
           whileHover={{ y: -2 }}
         >
           <div className="p-6 border-b border-gray-100">
-            <div className="flex items-start space-x-4">
+            <div className="flex items-start gap-4">
               {/* Representative Image */}
               <div className="flex-shrink-0">
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shadow-md">
@@ -191,28 +196,28 @@ const MomentCard = forwardRef(({
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xl font-bold text-gray-900">{moment.label}</h3>
                 </div>
-                                 <div className="flex items-center space-x-4 text-sm text-gray-500 h-8">
-                   <div className="flex items-center space-x-1">
+                                 <div className="flex items-center gap-4 text-sm text-gray-500 h-8">
+                   <div className="flex items-center gap-1">
                      <Clock className="w-4 h-4" />
                      <span>{formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}</span>
                    </div>
-                   <div className="flex items-center space-x-1">
+                   <div className="flex items-center gap-1">
                      <Calendar className="w-4 h-4" />
                      <span>{formatDate(moment.start_date)}</span>
                    </div>
                    {(() => {
                      const photoCount = includeArchived ? moment.images_count : moment.active_images_count;
                      return photoCount > 0 && (
-                       <div className="flex items-center space-x-1">
+                       <div className="flex items-center gap-1">
                          <Image className="w-4 h-4" />
-                         <span>{photoCount} photos</span>
+                         <span>{photoCount} {t('moments.photos')}</span>
                        </div>
                      );
                    })()}
                    
                    {/* Per-moment selection controls */}
                    {images.length > 0 && (
-                     <div className="flex items-center space-x-3">
+                     <div className="flex items-center gap-3">
                        {/* Select all button - only visible when checkboxes are shown AND not all are selected */}
                        {selectionMode && !allSelectedInMoment && (
                          <button
@@ -222,7 +227,8 @@ const MomentCard = forwardRef(({
                                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
                                : 'hover:bg-gray-100 text-gray-700'
                            }`}
-                           title="Select all"
+                           title={t('moments.selectAll')}
+                           aria-label={t('moments.selectAll')}
                          >
                            <CheckCheck className="w-4 h-4" />
                          </button>
@@ -233,7 +239,8 @@ const MomentCard = forwardRef(({
                          <button
                            onClick={() => onClearMomentSelection(moment.id)}
                            className="w-8 h-8 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors flex items-center justify-center"
-                           title="Clear selection"
+                           title={t('moments.clearSelection')}
+                           aria-label={t('moments.clearSelection')}
                          >
                            <X className="w-4 h-4" />
                          </button>
@@ -243,7 +250,7 @@ const MomentCard = forwardRef(({
                    
                    {selectedInMoment.length > 0 && (
                      <span className="text-primary-600 font-medium">
-                       • {selectedInMoment.length} selected
+                       • {selectedInMoment.length} {t('moments.selected')}
                      </span>
                    )}
                  </div>

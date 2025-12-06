@@ -70,6 +70,10 @@ import { GroupsFilter } from '../../components/groups';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useImageHighlight } from '../../hooks/useImageHighlight';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
+import i18n from '../../i18n';
+import { APP_CONFIG } from '../../config/appConfig';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -109,6 +113,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const [group, setGroup] = useState(null);
   const permissions = usePermissions();
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL, startClass, endClass, ms, me } = useRTL();
   
   // Get event data to check for unassociated group
   const eventData = useEventGeneralById(eventId);
@@ -138,7 +144,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       width: 64,
       height: 64,
       className: 'w-full h-full object-cover',
-      alt: group?.label || `Person ${group?.id}`,
+      alt: group?.label || `${t('groupDetail.person')} ${group?.id}`,
       key: group?.id || 'no-representative',
       iconType: 'person'
     }
@@ -846,6 +852,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     }
   }, [currentGroups, group?.id]);
 
+  // Set document title
+  useEffect(() => {
+    if (group?.label) {
+      document.title = `${group.label} - ${t('groupDetail.person')} | ${APP_CONFIG.name}`;
+    } else {
+      document.title = `${t('groupDetail.person')} | ${APP_CONFIG.name}`;
+    }
+  }, [group?.label, i18n.language]);
+
   // Legacy subscription removed; updates flow from normalized selectors
 
   useLayoutEffect(() => {
@@ -1156,7 +1171,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
   const handleTransferFaces = async () => {
     if (selectedImages.size === 0) {
-      showToast('Please select photos to transfer', 'error');
+      showToast(t('groupDetail.pleaseSelectPhotosToTransfer'), 'error');
       return;
     }
     
@@ -1167,7 +1182,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     // Show toast and don't open modal if no faces found
     if (!hasFaces) {
-      showToast('No faces found in selected photos', 'error');
+      showToast(t('groupDetail.noFacesFoundInSelectedPhotos'), 'error');
       return;
     }
     
@@ -1396,10 +1411,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       navigate(newUrl, { replace: true });
       
       setIsEditingTitle(false);
-      showToast('Person name updated', 'success');
+      showToast(t('groupDetail.personNameUpdated'), 'success');
     } catch (error) {
       console.error('Error updating group name:', error);
-      showToast(formatErrorMessage('update person name', error), 'error');
+      showToast(formatErrorMessage(t('groupDetail.updatePersonName'), error), 'error');
       setIsEditingTitle(false);
     }
   }, [group, editingTitle, eventUrl, navigate, showToast, showMergeConflictModal]);
@@ -1423,23 +1438,24 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
 
   if (!group) {
-    return <div>Loading...</div>;
+    return <div>{t('groupDetail.loading')}</div>;
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Pinned Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-4">
             <Link
               to={`/${eventUrl}/people`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Back to all people"
+              title={t('groupDetail.backToAllPeople')}
+              aria-label={t('groupDetail.backToAllPeople')}
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <div className="relative">
                 <div 
                   className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-lg"
@@ -1453,22 +1469,23 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                         e.stopPropagation();
                         try {
                           await groupsAPI.update(group.id, { representative_face: null }, eventUrl);
-                          showToast('Representative removed', 'success');
+                          showToast(t('groupDetail.representativeRemoved'), 'success');
                         } catch (error) {
-                          showToast(formatErrorMessage('remove representative', error), 'error');
+                          showToast(formatErrorMessage(t('groupDetail.removeRepresentativeAction'), error), 'error');
                         }
                       }}
-                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
-                      title="Remove representative"
+                      className={`absolute -bottom-1 ${endClass('1')} w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors`}
+                      title={t('groupDetail.removeRepresentative')}
+                      aria-label={t('groupDetail.removeRepresentative')}
                     >
                       <Minus className="w-3 h-3" />
                     </button>
                   </PermissionGate>
                 )}
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 {isEditingTitle ? (
-                  <div className="flex items-center space-x-2" onBlur={(e) => {
+                  <div className="flex items-center gap-2" onBlur={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget)) {
                       handleTitleCancel();
                     }
@@ -1490,15 +1507,16 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                             handleTitleCancel();
                           }
                         }}
+                        dir={isRTL ? 'rtl' : 'ltr'}
                         className={`text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-[200px] ${
                           nameConflict ? 'border-red-500' : 'border-primary-500'
                         }`}
                         autoFocus
                       />
                       {nameConflict && (
-                        <div className="absolute top-full left-0 mt-1 flex items-center space-x-1 text-red-500 text-xs">
+                        <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
                           <AlertTriangle className="w-3 h-3" />
-                          <span>Name already exists</span>
+                          <span>{t('groupDetail.nameAlreadyExists')}</span>
                         </div>
                       )}
                     </div>
@@ -1517,14 +1535,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <h1 
                       className={`text-3xl font-bold text-gray-900 w-[200px] ${
                         (isUnassociatedGroup || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
                       }`}
                       onClick={(isUnassociatedGroup || !permissions.canEdit) ? undefined : handleTitleEdit}
                     >
-                      {group.label || `Person ${group.id}`}
+                      {group.label || `${t('groupDetail.person')} ${group.id}`}
                     </h1>
                   </div>
                 )}
@@ -1532,11 +1550,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               <div className="relative">
                 <p className="text-gray-600">
                   {showCrops ? (
-                    `${sortedImages.length} faces`
+                    `${sortedImages.length} ${t('groupDetail.faces')}`
                   ) : (
                     sortedImages.length === getImageCount(group)
-                      ? `${sortedImages.length} photos`
-                      : `${sortedImages.length} of ${getImageCount(group)} photos`
+                      ? `${sortedImages.length} ${t('groupDetail.photos')}`
+                      : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
                   )}
                 </p>
               </div>
@@ -1551,7 +1569,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
           <div className="flex items-center divide-x divide-gray-200">
             {/* Group 1: Sort and Filter */}
-            <div className="flex items-center space-x-3 px-4">
+            <div className="flex items-center gap-3 px-4">
               {/* Search field - temporarily hidden
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -1585,7 +1603,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               <button
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
-                title={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
+                title={sortOrder === 'asc' ? t('groupDetail.sortAscending') : t('groupDetail.sortDescending')}
+                aria-label={sortOrder === 'asc' ? t('groupDetail.sortAscending') : t('groupDetail.sortDescending')}
               >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="w-4 h-4" />
@@ -1600,14 +1619,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
                 }`}
-                title={filterVisible ? 'Hide people filter' : 'Show people filter'}
+                title={filterVisible ? t('groupDetail.hidePeopleFilter') : t('groupDetail.showPeopleFilter')}
+                aria-label={filterVisible ? t('groupDetail.hidePeopleFilter') : t('groupDetail.showPeopleFilter')}
               >
                 <Filter className="w-4 h-4" />
               </button>
             </div>
             
             {/* Group 2: Zoom, Crops */}
-            <div className="flex items-center space-x-3 px-4">
+            <div className="flex items-center gap-3 px-4">
               <button
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
@@ -1619,7 +1639,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 }}
                 disabled={imageSize <= 0.5}
                 className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Decrease size"
+                title={t('groupDetail.decreaseSize')}
+                aria-label={t('groupDetail.decreaseSize')}
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -1658,7 +1679,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 }}
                 disabled={imageSize >= 3}
                 className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Increase size"
+                title={t('groupDetail.increaseSize')}
+                aria-label={t('groupDetail.increaseSize')}
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -1670,7 +1692,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       ? 'bg-primary-100 text-primary-700' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={showCrops ? 'Show full photos' : 'Show faces'}
+                  title={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
+                  aria-label={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
                 >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </button>
@@ -1678,7 +1701,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
                         {/* Group 3: Selection Mode Toggle */}
             {sortedImages.length > 0 && (
-              <div className="flex items-center space-x-3 px-4">
+              <div className="flex items-center gap-3 px-4">
                 <button
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
@@ -1686,7 +1709,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
                       : 'hover:bg-gray-100 text-gray-700'
                   }`}
-                  title={selectionMode ? 'Cancel selection mode' : 'Show checkboxes'}
+                  title={selectionMode ? t('groupDetail.cancelSelectionMode') : t('groupDetail.showCheckboxes')}
+                  aria-label={selectionMode ? t('groupDetail.cancelSelectionMode') : t('groupDetail.showCheckboxes')}
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
@@ -1695,12 +1719,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
             {/* Group 4: Manage Access */}
             {!isUnassociatedGroup && (
-              <div className="flex items-center space-x-3 px-4">
+              <div className="flex items-center gap-3 px-4">
                 <PermissionGate requires="isProfilesManager">
                   <button
                     onClick={() => setShowManageAccessModal(true)}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
-                    title="Manage profile access"
+                    title={t('groupDetail.manageProfileAccess')}
+                    aria-label={t('groupDetail.manageProfileAccess')}
                   >
                     <Key className="w-4 h-4" />
                   </button>
@@ -1740,7 +1765,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2">Loading photos...</p>
+            <p className="text-gray-500 mt-2">{t('groupDetail.loadingPhotos')}</p>
           </div>
         ) : sortedImages.length === 0 ? (
           <motion.div
@@ -1750,10 +1775,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           >
             <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm ? 'No photos found' : 'No photos in this group'}
+              {searchTerm ? t('groupDetail.noPhotosFound') : t('groupDetail.noPhotosInThisGroup')}
             </h3>
             <p className="text-gray-500">
-              {searchTerm ? 'Try adjusting your search terms' : 'This face group is empty'}
+              {searchTerm ? t('groupDetail.tryAdjustingYourSearchTerms') : t('groupDetail.thisFaceGroupIsEmpty')}
             </p>
           </motion.div>
         ) : (
@@ -1844,18 +1869,18 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       onSetRepresentative={isFacesMode ? (async () => {
                         try {
                           await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
-                          showToast('Representative updated', 'success');
+                          showToast(t('groupDetail.representativeUpdated'), 'success');
                         } catch (error) {
-                          showToast(formatErrorMessage('set representative', error), 'error');
+                          showToast(formatErrorMessage(t('groupDetail.setRepresentative'), error), 'error');
                         }
                       }) : undefined}
                     />
                     {/* Group label overlay for faces mode when filtering with at least one group */}
                     {isFacesMode && filterGroups.length > 1 && (
-                      <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium">
+                      <div className={`absolute top-2 ${endClass('2')} bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium`}>
                         {(() => {
                           const store = useDataStore.getState();
-                          return store.entities?.[eventId]?.groups?.[item.group_id]?.label || `Person ${item.group_id}`;
+                          return store.entities?.[eventId]?.groups?.[item.group_id]?.label || `${t('groupDetail.person')} ${item.group_id}`;
                         })()}
                       </div>
                     )}
@@ -1870,7 +1895,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   disabled={isFetchingMore}
                   className="btn-secondary"
                 >
-                  {isFetchingMore ? 'Loading...' : 'Load More'}
+                  {isFetchingMore ? t('groupDetail.loading') : t('groupDetail.loadMore')}
                 </button>
               </div>
             )}
@@ -1889,10 +1914,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         onSetRepresentative={showCrops ? async (faceId) => {
           try {
             await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
-            showToast('Representative updated', 'success');
+            showToast(t('groupDetail.representativeUpdated'), 'success');
             clearSelection();
           } catch (error) {
-            showToast(formatErrorMessage('set representative', error), 'error');
+            showToast(formatErrorMessage(t('groupDetail.setRepresentative'), error), 'error');
           }
         } : undefined}
         eventUrl={eventUrl}

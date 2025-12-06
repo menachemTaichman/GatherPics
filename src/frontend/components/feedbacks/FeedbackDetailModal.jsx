@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { X, User, Mail, MessageSquare, Calendar, Monitor, Wifi, CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager, useModalStore } from '../../utils/modalManager';
 import { useToast } from '../../contexts/ToastContext';
@@ -11,6 +12,7 @@ import { useApplyScopes } from '../../utils/storeUtils';
 import CloseFeedbackModal from './CloseFeedbackModal';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { useRTL } from '../../hooks/useRTL';
 
 export default function FeedbackDetailModal({ 
   isOpen, 
@@ -32,6 +34,8 @@ export default function FeedbackDetailModal({
   const [showRelatedErrors, setShowRelatedErrors] = useState(false);
   const [settings, setSettings] = useState(null);
   
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const { showToast } = useToast();
   const { registerModal, unregisterModal, isTopModal } = useModalManager();
   const modalId = 'feedback-detail-modal';
@@ -111,7 +115,7 @@ export default function FeedbackDetailModal({
         notes: notes.trim() || null
       });
       
-      showToast('Notes saved', 'success');
+      showToast(t('feedbackDetail.notesSaved'), 'success');
       setEditingNotes(false);
     } catch (error) {
       console.error('Failed to save notes:', error);
@@ -141,7 +145,7 @@ export default function FeedbackDetailModal({
     setLoading(true);
     try {
       await feedbacksAPI.delete(feedbackId);
-      showToast('Feedback deleted', 'success');
+      showToast(t('feedbackDetail.feedbackDeleted'), 'success');
       onClose();
     } catch (error) {
       console.error('Failed to delete feedback:', error);
@@ -254,7 +258,7 @@ export default function FeedbackDetailModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" dir={isRTL ? 'rtl' : 'ltr'}>
         <motion.div
           ref={modalRef}
           tabIndex={-1}
@@ -267,46 +271,48 @@ export default function FeedbackDetailModal({
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                 isClosed ? 'bg-gray-100' : 'bg-primary-100'
               }`}>
                 <MessageSquare className={`w-5 h-5 ${isClosed ? 'text-gray-600' : 'text-primary-600'}`} />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
-                  <span>Feedback #{feedbackId}</span>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <span>{t('feedbackDetail.feedback')} #{feedbackId}</span>
                   {isClosed && (
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       feedback.solved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                     }`}>
-                      {feedback.solved ? 'Solved' : 'Closed'}
+                      {feedback.solved ? t('feedbackDetail.solved') : t('feedbackDetail.closed')}
                     </span>
                   )}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {formatDateTimeLocale(feedback.created_at)}
                   {totalFeedbacks > 1 && (
-                    <span className="ml-2">• {currentIndex + 1} of {totalFeedbacks}</span>
+                    <span className="ml-2">• {currentIndex + 1} {t('feedbackDetail.of')} {totalFeedbacks}</span>
                   )}
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               {/* Navigation buttons */}
               {totalFeedbacks > 1 && onNavigate && (
                 <>
                   <button
                     onClick={() => handleNavigate('prev')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                    title="Previous feedback (Left arrow)"
+                    title={t('feedbackDetail.previousFeedback')}
+                    aria-label={t('feedbackDetail.previousFeedback')}
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => handleNavigate('next')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                    title="Next feedback (Right arrow)"
+                    title={t('feedbackDetail.nextFeedback')}
+                    aria-label={t('feedbackDetail.nextFeedback')}
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
@@ -315,6 +321,8 @@ export default function FeedbackDetailModal({
               <button
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                title={t('feedbackDetail.close')}
+                aria-label={t('feedbackDetail.close')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -325,31 +333,31 @@ export default function FeedbackDetailModal({
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Feedback Details */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Feedback Details</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('feedbackDetail.feedbackDetails')}</h3>
               <div className="space-y-3">
                 <div>
-                  <span className="text-xs text-gray-600">Sender:</span>
+                  <span className="text-xs text-gray-600">{t('feedbackDetail.sender')}</span>
                   <div className="mt-1 space-y-1">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-900">{feedback.sender_name}</span>
                     </div>
                     {Boolean(feedback.profile_is_public) && feedback.profile_label && (
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-gray-400" />
-                        <span className="text-xs text-gray-600">Profile:</span>
+                        <span className="text-xs text-gray-600">{t('feedbackDetail.profile')}</span>
                         <span className="text-sm text-gray-900">{feedback.profile_label}</span>
                       </div>
                     )}
                     {feedback.sender_email && (
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-gray-400" />
                         <a href={`mailto:${feedback.sender_email}`} className="text-sm text-blue-600 hover:underline">
                           {feedback.sender_email}
                         </a>
                         {feedback.communication_consent && (
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                            Agreed to contact
+                            {t('feedbackDetail.agreedToContact')}
                           </span>
                         )}
                       </div>
@@ -357,19 +365,19 @@ export default function FeedbackDetailModal({
                   </div>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-600">Title:</span>
+                  <span className="text-xs text-gray-600">{t('feedbackDetail.title')}</span>
                   <p className="text-sm font-medium text-gray-900">{feedback.title}</p>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-600">Type:</span>
+                  <span className="text-xs text-gray-600">{t('feedbackDetail.type')}</span>
                   <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
                     feedback.type === 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                   }`}>
-                    {feedback.type === 0 ? 'Bug Report' : 'Suggestion'}
+                    {feedback.type === 0 ? t('feedbackDetail.bugReport') : t('feedbackDetail.suggestion')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-600">Details:</span>
+                  <span className="text-xs text-gray-600">{t('feedbackDetail.details')}</span>
                   <p className="text-sm text-gray-900 whitespace-pre-wrap mt-1">{feedback.message}</p>
                 </div>
               </div>
@@ -378,13 +386,13 @@ export default function FeedbackDetailModal({
             {/* Developer Notes - private, not shown to sender */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-gray-700">Developer Notes (Private)</h3>
+                <h3 className="text-sm font-semibold text-gray-700">{t('feedbackDetail.developerNotes')}</h3>
                 {!editingNotes && (
                   <button
                     onClick={() => setEditingNotes(true)}
                     className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    Edit
+                    {t('feedbackDetail.edit')}
                   </button>
                 )}
               </div>
@@ -394,11 +402,12 @@ export default function FeedbackDetailModal({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     className="w-full px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none"
-                    placeholder="Add private notes (not shown to sender)..."
+                    placeholder={t('feedbackDetail.addPrivateNotes')}
                     rows={3}
                     disabled={loading}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                   />
-                  <div className="flex justify-end space-x-2">
+                  <div className="flex justify-end gap-2">
                     <button
                       onClick={() => {
                         setNotes(feedback.notes || '');
@@ -407,20 +416,20 @@ export default function FeedbackDetailModal({
                       className="px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded transition-colors"
                       disabled={loading}
                     >
-                      Cancel
+                      {t('feedbackDetail.cancel')}
                     </button>
                     <button
                       onClick={handleSaveNotes}
                       className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
                       disabled={loading}
                     >
-                      Save Notes
+                      {t('feedbackDetail.saveNotes')}
                     </button>
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                  {notes || <span className="text-gray-400 italic">No notes yet</span>}
+                  {notes || <span className="text-gray-400 italic">{t('feedbackDetail.noNotesYet')}</span>}
                 </p>
               )}
             </div>
@@ -428,20 +437,20 @@ export default function FeedbackDetailModal({
             {/* Metadata */}
             {(feedback.user_agent || feedback.ip_address) && (
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Metadata</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('feedbackDetail.metadata')}</h3>
                 <div className="space-y-2">
                   {feedback.ip_address && (
-                    <div className="flex items-center space-x-2 text-xs">
+                    <div className="flex items-center gap-2 text-xs">
                       <Wifi className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-600">IP:</span>
+                      <span className="text-gray-600">{t('feedbackDetail.ip')}</span>
                       <span className="text-gray-900 font-mono">{feedback.ip_address}</span>
                     </div>
                   )}
                   {feedback.user_agent && (
-                    <div className="flex items-start space-x-2 text-xs">
+                    <div className="flex items-start gap-2 text-xs">
                       <Monitor className="w-4 h-4 text-gray-400 mt-0.5" />
                       <div className="flex-1">
-                        <span className="text-gray-600">User Agent:</span>
+                        <span className="text-gray-600">{t('feedbackDetail.userAgent')}</span>
                         <p className="text-gray-900 font-mono text-[10px] leading-relaxed break-all mt-1">
                           {feedback.user_agent}
                         </p>
@@ -459,7 +468,7 @@ export default function FeedbackDetailModal({
                   onClick={() => setShowDiagnostics(!showDiagnostics)}
                   className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 hover:text-primary-600 transition-colors"
                 >
-                  <span>Diagnostic Information</span>
+                  <span>{t('feedbackDetail.diagnosticInformation')}</span>
                   {showDiagnostics ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
@@ -472,7 +481,7 @@ export default function FeedbackDetailModal({
                     {/* Browser Info */}
                     {diagnostics.browser_info && (
                       <div>
-                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Browser Information</h4>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">{t('feedbackDetail.browserInformation')}</h4>
                         <pre className="bg-white p-3 rounded text-[10px] overflow-x-auto">
                           {JSON.stringify(diagnostics.browser_info, null, 2)}
                         </pre>
@@ -483,7 +492,7 @@ export default function FeedbackDetailModal({
                     {diagnostics.console_logs && diagnostics.console_logs.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-gray-700 mb-2">
-                          Console Logs ({diagnostics.console_logs.length})
+                          {t('feedbackDetail.consoleLogs')} ({diagnostics.console_logs.length})
                         </h4>
                         <div className="bg-white p-3 rounded max-h-60 overflow-y-auto">
                           {diagnostics.console_logs.map((log, idx) => (
@@ -507,7 +516,7 @@ export default function FeedbackDetailModal({
                     {diagnostics.network_logs && diagnostics.network_logs.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-gray-700 mb-2">
-                          Network Requests ({diagnostics.network_logs.length})
+                          {t('feedbackDetail.networkRequests')} ({diagnostics.network_logs.length})
                         </h4>
                         <div className="bg-white p-3 rounded max-h-60 overflow-y-auto">
                           {diagnostics.network_logs.map((log, idx) => (
@@ -535,7 +544,7 @@ export default function FeedbackDetailModal({
                     {diagnostics.network_errors && diagnostics.network_errors.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-red-700 mb-2">
-                          Network Errors ({diagnostics.network_errors.length})
+                          {t('feedbackDetail.networkErrors')} ({diagnostics.network_errors.length})
                         </h4>
                         <div className="bg-white p-3 rounded max-h-80 overflow-y-auto">
                           {diagnostics.network_errors.map((error, idx) => (
@@ -560,7 +569,7 @@ export default function FeedbackDetailModal({
                               )}
                               {error.responseBody && (
                                 <div className="mt-2">
-                                  <div className="text-gray-600 font-semibold mb-1">Response:</div>
+                                  <div className="text-gray-600 font-semibold mb-1">{t('feedbackDetail.response')}</div>
                                   <pre className="bg-red-50 p-2 rounded text-red-900 whitespace-pre-wrap break-words">
                                     {typeof error.responseBody === 'string' 
                                       ? error.responseBody 
@@ -570,7 +579,7 @@ export default function FeedbackDetailModal({
                               )}
                               {error.headers && (
                                 <div className="mt-2">
-                                  <div className="text-gray-600 font-semibold mb-1">Headers:</div>
+                                  <div className="text-gray-600 font-semibold mb-1">{t('feedbackDetail.headers')}</div>
                                   <pre className="bg-gray-50 p-2 rounded text-gray-700 whitespace-pre-wrap break-words text-[9px]">
                                     {JSON.stringify(error.headers, null, 2)}
                                   </pre>
@@ -595,7 +604,7 @@ export default function FeedbackDetailModal({
                 >
                   <span className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-red-600" />
-                    Related Errors ({relatedErrors.length})
+                    {t('feedbackDetail.relatedErrors')} ({relatedErrors.length})
                   </span>
                   {showRelatedErrors ? (
                     <ChevronUp className="w-4 h-4" />
@@ -640,7 +649,7 @@ export default function FeedbackDetailModal({
                           {error.error_message}
                         </div>
                         <div className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                          Click to view details →
+                          {t('feedbackDetail.clickToViewDetails')}
                         </div>
                       </button>
                     ))}
@@ -652,23 +661,23 @@ export default function FeedbackDetailModal({
             {/* Closed Info */}
             {isClosed && (
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Closure Information</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('feedbackDetail.closureInformation')}</h3>
                 <div className="space-y-2">
-                  <div className="flex items-center space-x-2 text-sm">
+                  <div className="flex items-center gap-2 text-sm">
                     <Calendar className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-600">Closed at:</span>
+                    <span className="text-gray-600">{t('feedbackDetail.closedAt')}</span>
                     <span className="text-gray-900">{formatDateTimeLocale(feedback.closed_at)}</span>
                   </div>
                   {feedback.closed_by_label && (
-                    <div className="flex items-center space-x-2 text-sm">
+                    <div className="flex items-center gap-2 text-sm">
                       <User className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-600">Closed by:</span>
+                      <span className="text-gray-600">{t('feedbackDetail.closedBy')}</span>
                       <span className="text-gray-900">{feedback.closed_by_label}</span>
                     </div>
                   )}
                   {feedback.closed_details && (
                     <div className="mt-3">
-                      <span className="text-xs text-gray-600">Closure Details:</span>
+                      <span className="text-xs text-gray-600">{t('feedbackDetail.closureDetails')}</span>
                       <p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{feedback.closed_details}</p>
                     </div>
                   )}
@@ -684,24 +693,24 @@ export default function FeedbackDetailModal({
               disabled={loading}
               className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium disabled:opacity-50"
             >
-              Delete
+              {t('feedbackDetail.delete')}
             </button>
-            <div className="flex space-x-3">
+            <div className="flex gap-3">
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors font-medium"
                 disabled={loading}
               >
-                Close
+                {t('feedbackDetail.close')}
               </button>
               {!isClosed && (
                 <button
                   onClick={() => setShowCloseFeedbackModal(true)}
                   disabled={loading}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  <span>Close Feedback</span>
+                  <span>{t('feedbackDetail.closeFeedback')}</span>
                 </button>
               )}
             </div>
@@ -721,11 +730,11 @@ export default function FeedbackDetailModal({
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteConfirm}
-        title="Delete Feedback"
-        message="Are you sure you want to delete"
-        itemName={`Feedback #${feedbackId}`}
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('feedbackDetail.deleteFeedback')}
+        message={t('feedbackDetail.areYouSureYouWantToDelete')}
+        itemName={`${t('feedbackDetail.feedback')} #${feedbackId}`}
+        confirmText={t('feedbackDetail.delete')}
+        cancelText={t('feedbackDetail.cancel')}
       />
     </>
   );

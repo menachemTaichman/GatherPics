@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
 import { useRTL } from '../../hooks/useRTL';
+import { setPreference } from '../../utils/settings';
 
 export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,7 +18,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, openLoginModal } = useAuth();
   const permissions = usePermissions();
   const { t, i18n: i18nInstance } = useTranslation();
   const location = useLocation();
@@ -115,7 +116,11 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
 
   const handleAccountClick = () => {
     setIsOpen(false);
-    window.dispatchEvent(new CustomEvent('account:open'));
+    if (isAuthenticated) {
+      window.dispatchEvent(new CustomEvent('account:open'));
+    } else {
+      openLoginModal();
+    }
   };
 
   const handleFeedbackClick = () => {
@@ -133,7 +138,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
     },
     {
       id: 'account',
-      label: t('menu.myAccount'),
+      label: isAuthenticated ? t('menu.myAccount') : t('homePage.logIn'),
       icon: UserCircle,
       onClick: handleAccountClick,
       show: true
@@ -199,6 +204,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                     onClick={item.onClick}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                     dir={isRTL ? 'rtl' : 'ltr'}
+                    title={item.label}
+                    aria-label={item.label}
                   >
                     <Icon className="w-5 h-5 text-gray-500" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -217,6 +224,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                     isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
                   }`}
                   dir={isRTL ? 'rtl' : 'ltr'}
+                  title={item.label}
+                  aria-label={item.label}
                 >
                   <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
                   <span className="text-sm font-medium">{item.label}</span>
@@ -233,7 +242,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                 </div>
                 <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      await setPreference('general.language', 'en');
                       i18n.changeLanguage('en');
                     }}
                     className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
@@ -241,11 +251,14 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                         ? 'bg-white text-primary-700 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
+                    title={t('menu.english')}
+                    aria-label={t('menu.english')}
                   >
                     {t('menu.english')}
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      await setPreference('general.language', 'he');
                       i18n.changeLanguage('he');
                     }}
                     className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
@@ -253,6 +266,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                         ? 'bg-white text-primary-700 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
+                    title={t('menu.hebrew')}
+                    aria-label={t('menu.hebrew')}
                   >
                     {t('menu.hebrew')}
                   </button>
@@ -272,6 +287,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
         onClick={() => setIsOpen(!isOpen)}
         className={buttonClass}
         style={iconStyle}
+        title={t('menu.menu')}
         aria-label={t('menu.menu')}
       >
         {isOpen ? (

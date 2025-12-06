@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Eye, EyeOff, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
@@ -9,6 +11,8 @@ import { getCurrentProfile } from '../../utils/profileService';
 import RequestPasswordResetModal from '../auth/RequestPasswordResetModal';
 
 export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
+  const { t } = useTranslation();
+  const { isRTL, endClass, pe } = useRTL();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,7 +26,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
   const { registerModal, unregisterModal } = useModalManager();
   const MODAL_ID = 'change-password-modal';
   const currentProfile = isOpen ? getCurrentProfile() : null;
-  const profileLabel = currentProfile?.label || 'Profile';
+  const profileLabel = currentProfile?.label || t('changePassword.profile');
 
   // Register modal when opened
   useEffect(() => {
@@ -72,26 +76,30 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
   const handleSave = async () => {
     // Validate all fields
     if (!currentPassword || !currentPassword.trim()) {
-      setError('Current password is required');
-      showToast('Current password is required', 'error');
+      const errorMsg = t('changePassword.currentPasswordIsRequired');
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
       return;
     }
     
     if (!newPassword || !newPassword.trim()) {
-      setError('New password is required');
-      showToast('New password is required', 'error');
+      const errorMsg = t('changePassword.newPasswordIsRequired');
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
       return;
     }
     
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      showToast('New passwords do not match', 'error');
+      const errorMsg = t('changePassword.newPasswordsDoNotMatch');
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
       return;
     }
     
     if (currentPassword === newPassword) {
-      setError('New password must be different from current password');
-      showToast('New password must be different from current password', 'error');
+      const errorMsg = t('changePassword.newPasswordMustBeDifferentFromCurrentPassword');
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
       return;
     }
     
@@ -100,17 +108,17 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
     
     try {
       await profilesAPI.updateCurrentProfilePassword(currentPassword, newPassword, eventUrl);
-      showToast('Password updated successfully', 'success');
+      showToast(t('changePassword.passwordUpdatedSuccessfully'), 'success');
       onClose();
     } catch (error) {
       console.error('Failed to update password:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to update password';
+      const errorMsg = error.response?.data?.error || error.message || t('changePassword.failedToUpdatePassword');
       
       // Check if this is the "Label with this password already exists" error
       if (errorMsg.includes('Label with this password already exists')) {
-        setError('Name and password combination already exists');
+        setError(t('changePassword.nameAndPasswordCombinationAlreadyExists'));
       } else if (errorMsg.includes('Current password') || errorMsg.includes('incorrect')) {
-        setError('Current password is incorrect');
+        setError(t('changePassword.currentPasswordIsIncorrect'));
       } else {
         setError(errorMsg);
         showToast(errorMsg, 'error');
@@ -136,6 +144,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
   return (
     <AnimatePresence>
       <div 
+        key="change-password-modal"
         className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
         onClick={handleClose}
       >
@@ -148,21 +157,24 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
           className="bg-white rounded-xl shadow-2xl w-full max-w-md"
           tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Lock className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Change Password</h2>
-                <p className="text-sm text-gray-500">{profileLabel || 'Profile'}</p>
+                <h2 className="text-xl font-semibold text-gray-900">{t('changePassword.changePassword')}</h2>
+                <p className="text-sm text-gray-500">{profileLabel}</p>
               </div>
             </div>
             <button
               onClick={handleClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              title={t('account.close')}
+              aria-label={t('account.close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -177,7 +189,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                 {/* Current Password */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Password <span className="text-red-500">*</span>
+                    {t('changePassword.currentPassword')} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -188,8 +200,9 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                         setCurrentPassword(e.target.value);
                         setError('');
                       }}
-                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter current password"
+                      dir={isRTL ? 'rtl' : 'ltr'}
+                      className={`w-full px-4 py-2 ${pe('12')} border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                      placeholder={t('changePassword.enterCurrentPassword')}
                       autoFocus
                       autoComplete="current-password"
                       required
@@ -197,8 +210,9 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                     <button
                       type="button"
                       onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                      title={showCurrentPassword ? 'Hide password' : 'Show password'}
+                      className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
+                      title={showCurrentPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                      aria-label={showCurrentPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -209,16 +223,16 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                       setShowResetModal(true);
                       handleClose();
                     }}
-                    className="mt-2 text-sm text-blue-600 hover:text-blue-700 text-left"
+                    className={`mt-2 text-sm text-blue-600 hover:text-blue-700 ${isRTL ? 'text-right' : 'text-left'}`}
                   >
-                    Forgot password or need to set one up?
+                    {t('changePassword.forgotPasswordOrNeedToSetOneUp')}
                   </button>
                 </div>
 
                 {/* New Password */}
                 <div className="mt-7">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New Password <span className="text-red-500">*</span>
+                    {t('changePassword.newPassword')} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -229,16 +243,18 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                         setNewPassword(e.target.value);
                         setError('');
                       }}
-                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter new password"
+                      dir={isRTL ? 'rtl' : 'ltr'}
+                      className={`w-full px-4 py-2 ${pe('12')} border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                      placeholder={t('changePassword.enterNewPassword')}
                       autoComplete="new-password"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                      title={showNewPassword ? 'Hide password' : 'Show password'}
+                      className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
+                      title={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                      aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -248,7 +264,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                 {/* Confirm Password */}
                 <div className="mt-7">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm New Password <span className="text-red-500">*</span>
+                    {t('changePassword.confirmNewPassword')} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -265,16 +281,18 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                           handleSave();
                         }
                       }}
-                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Confirm new password"
+                      dir={isRTL ? 'rtl' : 'ltr'}
+                      className={`w-full px-4 py-2 ${pe('12')} border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                      placeholder={t('changePassword.confirmNewPasswordPlaceholder')}
                       autoComplete="new-password"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
+                      title={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                      aria-label={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -283,7 +301,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
               </form>
 
               {error && (
-                <div className="flex items-center space-x-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -292,36 +310,39 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
             <button
               onClick={handleClose}
               disabled={loading}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Cancel
+              {t('changePassword.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={loading || !currentPassword?.trim() || !newPassword?.trim() || !confirmPassword?.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving...</span>
+                  <span>{t('changePassword.saving')}</span>
                 </>
               ) : (
-                <span>Save</span>
+                <span>{t('changePassword.save')}</span>
               )}
             </button>
           </div>
         </motion.div>
       </div>
       
-      <RequestPasswordResetModal
-        isOpen={showResetModal}
-        onClose={() => setShowResetModal(false)}
-      />
+      {showResetModal && (
+        <RequestPasswordResetModal
+          key="request-password-reset-modal"
+          isOpen={showResetModal}
+          onClose={() => setShowResetModal(false)}
+        />
+      )}
     </AnimatePresence>
   );
 }

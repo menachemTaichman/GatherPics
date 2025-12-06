@@ -6,6 +6,8 @@ import { getRepresentativeUrl, useEventId } from '../../utils/storeUtils';
 import { getImageCount } from '../../utils/settings';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/authContext';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { 
   Filter, 
   X, 
@@ -39,6 +41,8 @@ export default function GroupsFilter({
 }) {
   const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isLoadingRelatedGroups, setIsLoadingRelatedGroups] = useState(false);
@@ -501,16 +505,17 @@ export default function GroupsFilter({
           }}
           className="px-5 py-4"
         >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between mb-3" dir={isRTL ? 'rtl' : 'ltr'}>
+          <div className="flex items-center gap-3">
             <Filter className="w-4 h-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Filter by People</span>
+            <span className="text-sm font-medium text-gray-700">{t('groupsFilter.filterByPeople')}</span>
             
             {/* Filter Mode Toggle - Single button with icon only */}
             <button
               onClick={() => onModeChange(filterMode === 'and' ? 'or' : 'and')}
               className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
-              title={`${filterMode === 'and' ? 'AND mode' : 'OR mode'} - Click to switch to ${filterMode === 'and' ? 'OR' : 'AND'} mode`}
+              title={`${filterMode === 'and' ? t('groupsFilter.andMode') : t('groupsFilter.orMode')} - ${t('groupsFilter.clickToSwitchTo')} ${filterMode === 'and' ? t('groupsFilter.orMode') : t('groupsFilter.andMode')} ${t('groupsFilter.mode')}`}
+              aria-label={`${filterMode === 'and' ? t('groupsFilter.andMode') : t('groupsFilter.orMode')} - ${t('groupsFilter.clickToSwitchTo')} ${filterMode === 'and' ? t('groupsFilter.orMode') : t('groupsFilter.andMode')} ${t('groupsFilter.mode')}`}
             >
               {filterMode === 'and' ? (
                 <UserCheck className="w-4 h-4 text-gray-700" />
@@ -527,7 +532,8 @@ export default function GroupsFilter({
                   ? 'bg-primary-100 text-primary-700' 
                   : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
               }`}
-              title={onlySelected ? 'Show all groups' : 'Show only selected groups'}
+              title={onlySelected ? t('groupsFilter.showAllGroups') : t('groupsFilter.showOnlySelectedGroups')}
+              aria-label={onlySelected ? t('groupsFilter.showAllGroups') : t('groupsFilter.showOnlySelectedGroups')}
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -537,7 +543,8 @@ export default function GroupsFilter({
               <button
                 onClick={handleReset}
                 className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
-                title="Reset all filters"
+                title={t('groupsFilter.resetAllFilters')}
+                aria-label={t('groupsFilter.resetAllFilters')}
               >
                 <RefreshCw className="w-4 h-4 text-gray-700" />
               </button>
@@ -546,7 +553,7 @@ export default function GroupsFilter({
         </div>
 
         {/* Groups Row */}
-        <div className="flex items-center space-x-3 overflow-x-auto pb-2">
+        <div className="flex items-center gap-3 overflow-x-auto pb-2" dir={isRTL ? 'rtl' : 'ltr'}>
           {/* Main Group (always selected) */}
             <div 
             key={`main-${group.id || group.group_id}`}
@@ -627,11 +634,11 @@ export default function GroupsFilter({
 
         {/* Filter Status */}
         {(hasAdditionalGroups || onlySelected) && (
-          <div className="mt-2 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-gray-500" dir={isRTL ? 'rtl' : 'ltr'}>
             {hasAdditionalGroups ? (
-              <>Filtering by {selectedGroups.length + 1} group{(selectedGroups.length + 1) !== 1 ? 's' : ''} ({filterMode.toUpperCase()} mode{onlySelected ? ', only selected groups' : ''})</>
+              <>{t('groupsFilter.filteringBy')} {selectedGroups.length + 1} {(selectedGroups.length + 1) !== 1 ? t('groupsFilter.groups') : t('groupsFilter.group')} ({t('groupsFilter.mode')} {filterMode.toUpperCase()}{onlySelected ? `, ${t('groupsFilter.modeOnlySelectedGroups')}` : ''})</>
             ) : (
-              <>Filtering by main group only ({filterMode.toUpperCase()} mode{onlySelected ? ', only selected groups' : ''})</>
+              <>{t('groupsFilter.filteringByMainGroupOnly')} ({t('groupsFilter.mode')} {filterMode.toUpperCase()}{onlySelected ? `, ${t('groupsFilter.onlySelectedGroups')}` : ''})</>
             )}
           </div>
         )}

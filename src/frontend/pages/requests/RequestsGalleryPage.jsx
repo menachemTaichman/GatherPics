@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useRTL } from '../../hooks/useRTL';
 import { FileText, Eye, Trash2, CheckCircle, XCircle, Clock, AlertCircle, Trash } from 'lucide-react';
 import { requestsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
@@ -31,6 +33,8 @@ function getRequestStatus(request) {
 
 export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
+  const { isRTL } = useRTL();
   const eventId = useEventId(eventUrl);
   const [deleteRequest, setDeleteRequest] = useState(null);
   const [deleteAll, setDeleteAll] = useState(false);
@@ -100,7 +104,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     try {
       const requestId = deleteRequest.access_request_id || deleteRequest.id;
       await requestsAPI.delete(requestId, eventUrl);
-      showToast('Request deleted successfully', 'success');
+      showToast(t('requestsGallery.requestDeletedSuccessfully'), 'success');
     } catch (error) {
       console.error('Failed to delete request:', error);
       showToast(formatErrorMessage('delete request', error), 'error');
@@ -117,7 +121,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
     try {
       const response = await requestsAPI.deleteAll(eventUrl);
       const deletedCount = response?.deleted_ids?.length || 0;
-      showToast(`Successfully deleted ${deletedCount} request${deletedCount !== 1 ? 's' : ''}`, 'success');
+      showToast(`${t('requestsGallery.successfullyDeleted')} ${deletedCount} ${deletedCount === 1 ? t('requestsGallery.request') : t('requestsGallery.requests')}`, 'success');
     } catch (error) {
       console.error('Failed to delete requests:', error);
       showToast(formatErrorMessage('delete requests', error), 'error');
@@ -227,19 +231,19 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
   return (
     <>
-      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`}>
+      <div className={`${!eventUrl ? 'min-h-screen' : ''} bg-gray-50`} dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Header */}
         <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 shadow-sm">
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                   <FileText className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Access Requests</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{t('requestsGallery.accessRequests')}</h1>
                   <p className="text-sm text-gray-500">
-                    {isAuthenticated ? `${stats.total} total, ${stats.pending} pending` : 'Loading...'}
+                    {isAuthenticated ? `${stats.total} ${t('requestsGallery.total')}, ${stats.pending} ${t('requestsGallery.pending')}` : 'Loading...'}
                   </p>
                 </div>
               </div>
@@ -247,7 +251,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
 
             {/* Filters */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleFilterChange('all')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -256,7 +260,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  All ({stats.total})
+                  {t('requestsGallery.all')} ({stats.total})
                 </button>
                 <button
                   onClick={() => handleFilterChange('pending')}
@@ -266,7 +270,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Pending ({stats.pending})
+                  {t('requestsGallery.pending')} ({stats.pending})
                 </button>
                 <button
                   onClick={() => handleFilterChange('approved')}
@@ -276,7 +280,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Approved ({stats.approved})
+                  {t('requestsGallery.approved')} ({stats.approved})
                 </button>
                 <button
                   onClick={() => handleFilterChange('rejected')}
@@ -286,7 +290,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Rejected ({stats.rejected})
+                  {t('requestsGallery.rejected')} ({stats.rejected})
                 </button>
                 <button
                   onClick={() => handleFilterChange('mixed')}
@@ -296,7 +300,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Mixed ({stats.mixed})
+                  {t('requestsGallery.mixed')} ({stats.mixed})
                 </button>
               </div>
 
@@ -304,11 +308,12 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
               {isAuthenticated && sortedRequests.length > 0 && (
                 <button
                   onClick={handleDeleteAll}
-                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                  title="Delete all requests"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  title={t('requestsGallery.deleteAll')}
+                  aria-label={t('requestsGallery.deleteAll')}
                 >
                   <Trash className="w-4 h-4" />
-                  <span>Delete All</span>
+                  <span>{t('requestsGallery.deleteAll')}</span>
                 </button>
               )}
             </div>
@@ -322,36 +327,36 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
             columns={[
               {
                 key: 'access_request_id',
-                label: 'ID',
+                label: t('requestsGallery.id'),
                 align: 'left',
                 cellClassName: 'text-xs text-gray-500 font-mono',
                 renderCell: (request) => request.access_request_id || request.id || 'N/A',
               },
               {
                 key: 'requested_at',
-                label: 'Requested',
+                label: t('requestsGallery.requestedAt'),
                 sortable: true,
                 align: 'left',
                 renderCell: (request) => formatDateTimeLocale(request.requested_at),
               },
               {
                 key: 'closed_at',
-                label: 'Closed',
+                label: t('requestsGallery.closed'),
                 sortable: true,
                 align: 'left',
                 renderCell: (request) => request.closed_at ? formatDateTimeLocale(request.closed_at) : <span className="text-gray-400">—</span>,
               },
               {
                 key: 'profile_label',
-                label: 'Profile',
+                label: t('requestsGallery.profileLabel'),
                 sortable: true,
                 align: 'left',
                 cellClassName: 'text-gray-700',
-                renderCell: (request) => request.profile_label || 'Unknown',
+                renderCell: (request) => request.profile_label || t('requestsGallery.unknown'),
               },
               {
                 key: 'accessible_groups_count',
-                label: 'Groups',
+                label: t('requestsGallery.groups'),
                 sortable: true,
                 align: 'center',
                 cellClassName: 'text-gray-700',
@@ -359,26 +364,26 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                   <div className="inline-flex items-center gap-1">
                     {!!(request.approved_groups_count) && (
                       <span
-                        title={`${request.approved_groups_count} approved groups`}
+                        title={`${request.approved_groups_count} ${t('requestsGallery.approvedGroups')}`}
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
                       >
-                        {request.approved_groups_count} <span className="ml-1">✓</span>
+                        {request.approved_groups_count} <span className={isRTL ? 'mr-1' : 'ml-1'}>✓</span>
                       </span>
                     )}
                     {!!(request.rejected_groups_count) && (
                       <span
-                        title={`${request.rejected_groups_count} denied groups`}
+                        title={`${request.rejected_groups_count} ${t('requestsGallery.deniedGroups')}`}
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
                       >
-                        {request.rejected_groups_count} <span className="ml-1">✗</span>
+                        {request.rejected_groups_count} <span className={isRTL ? 'mr-1' : 'ml-1'}>✗</span>
                       </span>
                     )}
                     {!!(request.pending_groups_count) && (
                       <span
-                        title={`${request.pending_groups_count} pending groups`}
+                        title={`${request.pending_groups_count} ${t('requestsGallery.pendingGroups')}`}
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
                       >
-                        {request.pending_groups_count} <span className="ml-1">⏳</span>
+                        {request.pending_groups_count} <span className={isRTL ? 'mr-1' : 'ml-1'}>⏳</span>
                       </span>
                     )}
                   </div>
@@ -386,12 +391,16 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
               },
               {
                 key: 'status',
-                label: 'Status',
+                label: t('requestsGallery.status'),
                 sortable: true,
                 align: 'left',
                 renderCell: (request) => {
                   const statusInfo = getRequestStatus(request);
                   const StatusIcon = statusInfo.icon;
+                  const statusText = statusInfo.status === 'pending' ? t('requestsGallery.pending') :
+                                   statusInfo.status === 'approved' ? t('requestsGallery.approved') :
+                                   statusInfo.status === 'rejected' ? t('requestsGallery.rejected') :
+                                   t('requestsGallery.mixed');
                   return (
                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                       statusInfo.color === 'blue' ? 'bg-blue-100 text-blue-800' :
@@ -399,41 +408,43 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                       statusInfo.color === 'red' ? 'bg-red-100 text-red-800' :
                       'bg-yellow-100 text-yellow-800'}`}
                     >
-                      <StatusIcon className={`inline mr-1 w-4 h-4 align-text-bottom ${
+                      <StatusIcon className={`inline ${isRTL ? 'ml-1' : 'mr-1'} w-4 h-4 align-text-bottom ${
                         statusInfo.color === 'blue' ? 'text-blue-600' :
                         statusInfo.color === 'green' ? 'text-green-600' :
                         statusInfo.color === 'red' ? 'text-red-600' :
                         'text-yellow-600'
                       }`} />
-                      {statusInfo.status.charAt(0).toUpperCase() + statusInfo.status.slice(1)}
+                      {statusText}
                     </span>
                   );
                 },
               },
               {
                 key: 'details',
-                label: 'Details',
+                label: t('requestsGallery.details'),
                 align: 'left',
                 cellClassName: 'text-gray-700 max-w-xs truncate',
-                renderCell: (request) => request.details || <span className="text-gray-400 italic">No details</span>,
+                renderCell: (request) => request.details || <span className="text-gray-400 italic">{t('requestsGallery.noDetails')}</span>,
               },
               {
                 key: 'actions',
-                label: 'Actions',
+                label: t('requestsGallery.actions'),
                 align: 'right',
                 renderCell: (request, idx) => (
-                  <div className="flex items-center justify-end space-x-2">
+                  <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => handleViewRequest(request, idx)}
                       className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                      title="View details"
+                      title={t('requestsGallery.viewDetails')}
+                      aria-label={t('requestsGallery.viewDetails')}
                     >
                       <Eye className="w-4 h-4 text-blue-600" />
                     </button>
                     <button
                       onClick={() => handleDeleteRequest(request)}
                       className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                      title="Delete request"
+                      title={t('requestsGallery.deleteRequest')}
+                      aria-label={t('requestsGallery.deleteRequest')}
                     >
                       <Trash2 className="w-4 h-4 text-red-600" />
                     </button>
@@ -447,8 +458,8 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
             onSort={handleSort}
             emptyState={{
               icon: FileText,
-              title: 'No requests yet',
-              message: 'No access requests have been submitted yet.',
+              title: t('requestsGallery.noRequestsYet'),
+              message: t('requestsGallery.noAccessRequestsHaveBeenSubmittedYet'),
             }}
             getRowKey={(request, idx) => request.access_request_id || request.id || `request-${idx}`}
           />
@@ -456,7 +467,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
           {/* Note about data changes */}
           {sortedRequests.length > 0 && (
             <div className="mt-4 text-xs text-gray-500 italic text-center">
-              Note: Permissions may have changed since these requests were updated
+              {t('requestsGallery.permissionsMayHaveChanged')}
             </div>
           )}
         </div>
@@ -468,12 +479,12 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
           isOpen={!!deleteRequest}
           onClose={() => setDeleteRequest(null)}
           onConfirm={handleConfirmDelete}
-          title="Delete Request"
-          message="Are you sure you want to delete this request?"
+          title={t('requestsGallery.deleteRequestTitle')}
+          message={t('requestsGallery.deleteRequestMessage')}
           simpleMessage={true}
-          confirmText="Delete"
-          cancelText="Cancel"
-          caption="This action cannot be undone. The request record will be deleted."
+          confirmText={t('account.delete')}
+          cancelText={t('account.cancel')}
+          caption={t('requestsGallery.deleteRequestCaption')}
         />
       )}
 
@@ -483,12 +494,12 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
           isOpen={deleteAll}
           onClose={() => setDeleteAll(false)}
           onConfirm={handleConfirmDeleteAll}
-          title="Delete All Requests"
-          message={`Are you sure you want to delete all ${sortedRequests.length} request${sortedRequests.length !== 1 ? 's' : ''}?`}
+          title={t('requestsGallery.deleteAllTitle')}
+          message={`${t('requestsGallery.deleteAllMessage')} ${sortedRequests.length} ${sortedRequests.length === 1 ? t('requestsGallery.request') : t('requestsGallery.requests')}?`}
           simpleMessage={true}
-          confirmText="Delete All"
-          cancelText="Cancel"
-          caption="This action cannot be undone. All displayed requests will be permanently deleted."
+          confirmText={t('requestsGallery.deleteAll')}
+          cancelText={t('account.cancel')}
+          caption={t('requestsGallery.deleteAllCaption')}
         />
       )}
 
