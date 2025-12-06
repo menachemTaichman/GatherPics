@@ -16,54 +16,6 @@ def clean_postgres_error(error_message: str) -> str:
     return error_message
 
 
-def log_error_to_db(error_message: str, error_type: str, traceback_str: str = None):
-    """Log error to database errors table with Flask request context.
-    
-    Wrapper around core log_error() that extracts Flask request context
-    (profile_id, request_path, etc.) and passes it to the core logging function.
-    
-    In non-production mode, logs errors to application logs with full context.
-    error_message should be the original error (with CONTEXT from PostgreSQL).
-    
-    Returns the error_id if successfully logged, None otherwise.
-    """
-    # Get request information
-    request_path = request.path if request else None
-    request_method = request.method if request else None
-    user_agent = request.headers.get('User-Agent') if request else None
-    ip_address = request.remote_addr if request else None
-    
-    # Extract event_id from request path if available
-    # Pattern: /api/events/<event_id>/... or /events/<event_id>/...
-    event_id = None
-    if request_path:
-        # Try to extract event_id from URL pattern like /api/events/<uuid>/...
-        match = re.search(r'/events/([a-f0-9-]{36})', request_path)
-        if match:
-            event_id = match.group(1)
-    
-    # Get current profile ID if available
-    profile_id = None
-    try:
-        profile_id = get_jwt_identity()
-    except:
-        pass  # Not authenticated or no JWT
-    
-    # Call core logging function with all context
-    return log_error(
-        error_message=error_message,
-        error_type=error_type,
-        traceback_str=traceback_str,
-        profile_id=profile_id,
-        event_id=event_id,
-        request_path=request_path,
-        request_method=request_method,
-        user_agent=user_agent,
-        ip_address=ip_address,
-        debug_mode=current_app.debug if current_app else False
-    )
-
-
 def register_error_handlers(app):
     """Register all error handlers with the Flask app."""
     
@@ -101,7 +53,7 @@ def register_error_handlers(app):
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
             traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error_to_db(str(error), "Forbidden", traceback_str)
+            error_id = log_error(str(error), "Forbidden", traceback_str)
             response = {"error": error_msg}
             if error_id:
                 response["error_id"] = error_id
@@ -117,7 +69,7 @@ def register_error_handlers(app):
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
             traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error_to_db(str(error), "DatabaseError", traceback_str)
+            error_id = log_error(str(error), "DatabaseError", traceback_str)
             # Show generic message in production, detailed error in debug mode
             if not app.debug:
                 error_msg = "An internal database error occurred"
@@ -136,7 +88,7 @@ def register_error_handlers(app):
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
             traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error_to_db(str(error), "PolicyError", traceback_str)
+            error_id = log_error(str(error), "PolicyError", traceback_str)
             response = {"error": error_msg}
             if error_id:
                 response["error_id"] = error_id
@@ -187,7 +139,7 @@ def register_error_handlers(app):
     @app.errorhandler(JWTDecodeError)
     def handle_jwt_decode_error(error):
         error_msg = "Invalid token"
-        error_id = log_error_to_db(error_msg, "JWTDecodeError", None)
+        error_id = log_error(error_msg, "JWTDecodeError", None)
         response = {"error": error_msg}
         if error_id:
             response["error_id"] = error_id
@@ -196,7 +148,7 @@ def register_error_handlers(app):
     @app.errorhandler(InvalidHeaderError)
     def handle_invalid_header_error(error):
         error_msg = "Invalid authorization header"
-        error_id = log_error_to_db(error_msg, "InvalidHeaderError", None)
+        error_id = log_error(error_msg, "InvalidHeaderError", None)
         response = {"error": error_msg}
         if error_id:
             response["error_id"] = error_id
@@ -205,7 +157,7 @@ def register_error_handlers(app):
     @app.errorhandler(NoAuthorizationError)
     def handle_no_authorization_error(error):
         error_msg = "Missing authorization token"
-        error_id = log_error_to_db(error_msg, "NoAuthorizationError", None)
+        error_id = log_error(error_msg, "NoAuthorizationError", None)
         response = {"error": error_msg}
         if error_id:
             response["error_id"] = error_id
@@ -221,7 +173,7 @@ def register_error_handlers(app):
             
             # Get full traceback
             traceback_str = traceback.format_exc()
-            error_id = log_error_to_db(str(error), "Exception", traceback_str)
+            error_id = log_error(str(error), "Exception", traceback_str)
             
             # Don't expose internal error details in production
             error_message = str(error) if app.debug else "An unexpected error occurred"

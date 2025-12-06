@@ -15,6 +15,7 @@ import { useApplyScopes } from '../../utils/storeUtils';
 import { APP_CONFIG } from '../../config/appConfig';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import ErrorDetailModal from '../../components/errors/ErrorDetailModal';
+import AuditLogDetailModal from '../../components/auditLogs/AuditLogDetailModal';
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -34,7 +35,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   
-  // Active section (limits, usage, or errors)
+  // Active section (limits, usage, errors, or audit)
   const [activeSection, setActiveSection] = useState(() => getPreference('SettingsPage.activeSection', 'limits'));
   
   // Filters for usage section
@@ -52,9 +53,22 @@ export default function SettingsPage() {
   const [errorSortBy, setErrorSortBy] = useState(() => getPreference('SettingsPage.errorSortBy', 'created_at'));
   const [errorSortDir, setErrorSortDir] = useState(() => getPreference('SettingsPage.errorSortDir', 'desc'));
   
+  // Filters for audit logs section
+  const [auditFilterPeriod, setAuditFilterPeriod] = useState(() => getPreference('SettingsPage.auditFilterPeriod', 'all'));
+  const [auditFilterDateFrom, setAuditFilterDateFrom] = useState(() => getPreference('SettingsPage.auditFilterDateFrom', ''));
+  const [auditFilterDateTo, setAuditFilterDateTo] = useState(() => getPreference('SettingsPage.auditFilterDateTo', ''));
+  const [auditFilterSeverity, setAuditFilterSeverity] = useState(() => getPreference('SettingsPage.auditFilterSeverity', 'all'));
+  const [auditFilterAction, setAuditFilterAction] = useState(() => getPreference('SettingsPage.auditFilterAction', 'all'));
+  const [auditSortBy, setAuditSortBy] = useState(() => getPreference('SettingsPage.auditSortBy', 'timestamp'));
+  const [auditSortDir, setAuditSortDir] = useState(() => getPreference('SettingsPage.auditSortDir', 'desc'));
+  
   // Error detail modal state
   const [openErrorId, setOpenErrorId] = useState(null);
   const [errorNavigation, setErrorNavigation] = useState({ currentIndex: 0, errors: [] });
+  
+  // Audit log detail modal state
+  const [openAuditLogId, setOpenAuditLogId] = useState(null);
+  const [auditLogNavigation, setAuditLogNavigation] = useState({ currentIndex: 0, logs: [] });
   
   // Fetch events and add to scope
   useApplyScopes([{ entity: 'all', id: 'events', eventId: 'general' }]);
@@ -176,12 +190,13 @@ export default function SettingsPage() {
       const updatedSettings = response?.settings || {};
       showToast('Settings saved successfully', 'success');
       
-      // Smoothly update state instead of reloading (preserve rekognition_usage and errors)
+      // Smoothly update state instead of reloading (preserve rekognition_usage, errors, and audit_logs)
       setSettings((prev) => ({
         ...prev,
         ...updatedSettings,
         rekognition_usage: prev?.rekognition_usage || updatedSettings.rekognition_usage,
         errors: prev?.errors || updatedSettings.errors,
+        audit_logs: prev?.audit_logs || updatedSettings.audit_logs,
       }));
       setSettingsDraft({
         image_size_limit_bytes: updatedSettings.image_size_limit_bytes ?? 0,
@@ -506,6 +521,229 @@ export default function SettingsPage() {
     setPreference('SettingsPage.errorFilterType', type);
   };
 
+  // Filter and sort audit logs data
+  const filteredAndSortedAuditLogs = useMemo(() => {
+    const auditLogsDict = settings?.audit_logs || {};
+    let auditLogsArray = Object.values(auditLogsDict);
+
+    // Filter by severity
+    if (auditFilterSeverity && auditFilterSeverity !== 'all') {
+      auditLogsArray = auditLogsArray.filter(log => log.severity === auditFilterSeverity);
+    }
+
+    // Filter by action
+    if (auditFilterAction && auditFilterAction !== 'all') {
+      auditLogsArray = auditLogsArray.filter(log => log.action === auditFilterAction);
+    }
+
+    // Filter by date period
+    if (auditFilterPeriod && auditFilterPeriod !== 'all') {
+      if (auditFilterPeriod === 'custom') {
+        if (auditFilterDateFrom || auditFilterDateTo) {
+          auditLogsArray = auditLogsArray.filter(log => {
+            if (!log.timestamp) return false;
+            const logDate = new Date(log.timestamp);
+            
+            if (auditFilterDateFrom && auditFilterDateTo) {
+              const startDate = new Date(auditFilterDateFrom);
+              startDate.setHours(0, 0, 0, 0);
+              const endDate = new Date(auditFilterDateTo);
+              endDate.setHours(23, 59, 59, 999);
+              return logDate >= startDate && logDate <= endDate;
+            } else if (auditFilterDateFrom) {
+              const startDate = new Date(auditFilterDateFrom);
+              startDate.setHours(0, 0, 0, 0);
+              return logDate >= startDate;
+            } else if (auditFilterDateTo) {
+              const endDate = new Date(auditFilterDateTo);
+              endDate.setHours(23, 59, 59, 999);
+              return logDate <= endDate;
+            }
+            return true;
+          });
+        }
+      } else {
+        const now = new Date();
+        let startDate;
+        
+        if (auditFilterPeriod === 'last_month') {
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        } else if (auditFilterPeriod === 'last_3_months') {
+          startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+        } else if (auditFilterPeriod === 'last_6_months') {
+          startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+        } else if (auditFilterPeriod === 'last_year') {
+          startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        }
+        
+        if (startDate) {
+          auditLogsArray = auditLogsArray.filter(log => {
+            if (!log.timestamp) return false;
+            const logDate = new Date(log.timestamp);
+            return logDate >= startDate;
+          });
+        }
+      }
+    }
+
+    // Sort
+    const toAuditValue = (item, field) => {
+      switch (field) {
+        case 'timestamp':
+          return item.timestamp ? new Date(item.timestamp).getTime() : 0;
+        case 'action':
+          return (item.action || '').toString().toLowerCase();
+        case 'severity':
+          return (item.severity || '').toString().toLowerCase();
+        case 'actor_profile_label':
+          return (item.actor_profile_label || item.actor_profile_id || '').toString().toLowerCase();
+        case 'ip_address':
+          return (item.ip_address || '').toString().toLowerCase();
+        default:
+          return '';
+      }
+    };
+
+    const copy = [...auditLogsArray];
+    copy.sort((a, b) => {
+      const aVal = toAuditValue(a, auditSortBy);
+      const bVal = toAuditValue(b, auditSortBy);
+      
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return auditSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      
+      const comparison = String(aVal).localeCompare(String(bVal));
+      return auditSortDir === 'asc' ? comparison : -comparison;
+    });
+
+    return copy;
+  }, [settings?.audit_logs, auditFilterPeriod, auditFilterDateFrom, auditFilterDateTo, auditFilterSeverity, auditFilterAction, auditSortBy, auditSortDir]);
+
+  const handleAuditSort = (field) => {
+    if (auditSortBy === field) {
+      const newDir = auditSortDir === 'asc' ? 'desc' : 'asc';
+      setAuditSortDir(newDir);
+      setPreference('SettingsPage.auditSortDir', newDir);
+    } else {
+      setAuditSortBy(field);
+      setAuditSortDir('desc');
+      setPreference('SettingsPage.auditSortBy', field);
+      setPreference('SettingsPage.auditSortDir', 'desc');
+    }
+  };
+
+  const handleAuditFilterPeriodChange = (period) => {
+    setAuditFilterPeriod(period);
+    setPreference('SettingsPage.auditFilterPeriod', period);
+    if (period !== 'custom') {
+      setAuditFilterDateFrom('');
+      setAuditFilterDateTo('');
+      setPreference('SettingsPage.auditFilterDateFrom', '');
+      setPreference('SettingsPage.auditFilterDateTo', '');
+    }
+  };
+
+  const handleAuditDateFromChange = (date) => {
+    setAuditFilterDateFrom(date);
+    setPreference('SettingsPage.auditFilterDateFrom', date);
+    if (date) {
+      setAuditFilterPeriod('custom');
+      setPreference('SettingsPage.auditFilterPeriod', 'custom');
+    }
+  };
+
+  const handleAuditDateToChange = (date) => {
+    setAuditFilterDateTo(date);
+    setPreference('SettingsPage.auditFilterDateTo', date);
+    if (date) {
+      setAuditFilterPeriod('custom');
+      setPreference('SettingsPage.auditFilterPeriod', 'custom');
+    }
+  };
+
+  const handleAuditFilterSeverityChange = (severity) => {
+    setAuditFilterSeverity(severity);
+    setPreference('SettingsPage.auditFilterSeverity', severity);
+  };
+
+  const handleAuditFilterActionChange = (action) => {
+    setAuditFilterAction(action);
+    setPreference('SettingsPage.auditFilterAction', action);
+  };
+
+  // Audit log definitions based on audit_log.py
+  const AUDIT_SEVERITIES = ['critical', 'warning', 'info'];
+  const AUDIT_ACTION_SEVERITY_MAP = {
+    'profile_changed_password': 'critical',
+    'profile_reset_password_completed': 'critical',
+    'profile_requested_password_reset': 'critical',
+    'profile_deleted': 'critical',
+    'event_deleted': 'warning',
+    'image_deleted': 'warning',
+    'profile_created': 'info',
+    'event_created': 'info',
+    'upload_made': 'info',
+  };
+  
+  const AUDIT_ACTIONS = Object.keys(AUDIT_ACTION_SEVERITY_MAP);
+
+  // Get filtered actions based on selected severity
+  const filteredAuditActions = useMemo(() => {
+    if (!auditFilterSeverity || auditFilterSeverity === 'all') {
+      return AUDIT_ACTIONS;
+    }
+    return AUDIT_ACTIONS.filter(action => AUDIT_ACTION_SEVERITY_MAP[action] === auditFilterSeverity);
+  }, [auditFilterSeverity]);
+
+  // Reset action filter when severity changes if current action is not valid for new severity
+  useEffect(() => {
+    if (auditFilterAction && auditFilterAction !== 'all' && !filteredAuditActions.includes(auditFilterAction)) {
+      setAuditFilterAction('all');
+      setPreference('SettingsPage.auditFilterAction', 'all');
+    }
+  }, [auditFilterSeverity, auditFilterAction, filteredAuditActions]);
+
+  // Audit log detail modal handlers
+  const handleAuditLogRowClick = useCallback((log, index) => {
+    const logsArray = filteredAndSortedAuditLogs;
+    setAuditLogNavigation({
+      currentIndex: index,
+      logs: logsArray
+    });
+    setOpenAuditLogId(log.audit_log_id);
+  }, [filteredAndSortedAuditLogs]);
+
+  const handleAuditLogNavigate = useCallback((direction, targetIndex = null) => {
+    setAuditLogNavigation(prev => {
+      const logs = prev.logs || filteredAndSortedAuditLogs;
+      let newIndex = prev.currentIndex;
+      
+      if (targetIndex !== null) {
+        newIndex = targetIndex;
+      } else if (direction === 'prev') {
+        newIndex = newIndex === 0 ? logs.length - 1 : newIndex - 1;
+      } else if (direction === 'next') {
+        newIndex = newIndex === logs.length - 1 ? 0 : newIndex + 1;
+      }
+      
+      const log = logs[newIndex];
+      if (log) {
+        setOpenAuditLogId(log.audit_log_id);
+      }
+      
+      return {
+        ...prev,
+        currentIndex: newIndex,
+        logs
+      };
+    });
+  }, [filteredAndSortedAuditLogs]);
+
+  const handleCloseAuditLogModal = useCallback(() => {
+    setOpenAuditLogId(null);
+  }, []);
+
   const columns = [
     {
       key: 'created_at',
@@ -610,6 +848,82 @@ export default function SettingsPage() {
             <div className="text-xs text-gray-500">Feedback #{error.feedback_id}</div>
           )}
         </div>
+      ),
+    },
+  ];
+
+  const auditLogColumns = [
+    {
+      key: 'timestamp',
+      label: 'Date',
+      sortable: true,
+      align: 'left',
+      renderCell: (log) => (
+        <span className="text-gray-600">
+          {log.timestamp ? formatDateTimeLocale(log.timestamp) : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'severity',
+      label: 'Severity',
+      sortable: true,
+      align: 'left',
+      renderCell: (log) => (
+        <span className={`px-2 py-1 text-xs rounded-full ${
+          log.severity === 'critical' ? 'bg-red-100 text-red-700' :
+          log.severity === 'warning' ? 'bg-orange-100 text-orange-700' :
+          'bg-blue-100 text-blue-700'
+        }`}>
+          {log.severity || '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'action',
+      label: 'Action',
+      sortable: true,
+      align: 'left',
+      renderCell: (log) => (
+        <span className="text-sm font-medium text-gray-900">
+          {log.action ? log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'actor_profile_label',
+      label: 'Actor',
+      sortable: true,
+      align: 'left',
+      renderCell: (log) => (
+        <div>
+          <div className="font-medium text-gray-900">{log.actor_profile_label || log.actor_profile_id || '-'}</div>
+          {log.actor_profile_id && (
+            <div className="text-xs text-gray-500">{log.actor_profile_id}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'ip_address',
+      label: 'IP Address',
+      sortable: true,
+      align: 'left',
+      renderCell: (log) => (
+        <span className="text-sm text-gray-600">{log.ip_address || '-'}</span>
+      ),
+    },
+    {
+      key: 'details',
+      label: 'Details',
+      sortable: false,
+      align: 'left',
+      renderCell: (log) => (
+        log.details && Object.keys(log.details).length > 0 ? (
+          <span className="text-xs text-blue-600 font-medium">View Details</span>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
+        )
       ),
     },
   ];
@@ -740,6 +1054,16 @@ export default function SettingsPage() {
                   }`}
                 >
                   Errors
+                </button>
+                <button
+                  onClick={() => handleSectionChange('audit')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeSection === 'audit'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Audit Logs
                 </button>
               </div>
             </div>
@@ -1013,6 +1337,99 @@ export default function SettingsPage() {
                   />
                 </div>
                 )}
+
+                {/* Audit Logs Section */}
+                {activeSection === 'audit' && (
+                <div className="rounded-lg bg-white border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      Audit Logs
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      {/* Severity Filter */}
+                      <select
+                        value={auditFilterSeverity}
+                        onChange={(e) => handleAuditFilterSeverityChange(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">All Severities</option>
+                        {AUDIT_SEVERITIES.map(severity => (
+                          <option key={severity} value={severity}>{severity.charAt(0).toUpperCase() + severity.slice(1)}</option>
+                        ))}
+                      </select>
+                      
+                      {/* Action Filter */}
+                      <select
+                        value={auditFilterAction}
+                        onChange={(e) => handleAuditFilterActionChange(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">All Actions</option>
+                        {filteredAuditActions.map(action => (
+                          <option key={action} value={action}>{action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                        ))}
+                      </select>
+                      
+                      {/* Period Filter */}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <select
+                          value={auditFilterPeriod}
+                          onChange={(e) => handleAuditFilterPeriodChange(e.target.value)}
+                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="all">All Time</option>
+                          <option value="last_month">Last Month</option>
+                          <option value="last_3_months">Last 3 Months</option>
+                          <option value="last_6_months">Last 6 Months</option>
+                          <option value="last_year">Last Year</option>
+                          <option value="custom">Custom Range</option>
+                        </select>
+                      </div>
+                      
+                      {/* Custom Date Range */}
+                      {auditFilterPeriod === 'custom' && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={auditFilterDateFrom}
+                            onChange={(e) => handleAuditDateFromChange(e.target.value)}
+                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="From"
+                          />
+                          <span className="text-gray-500">to</span>
+                          <input
+                            type="date"
+                            value={auditFilterDateTo}
+                            onChange={(e) => handleAuditDateToChange(e.target.value)}
+                            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="To"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <ScrollableTable
+                    style={{ maxHeight: 'calc(100vh - 22rem)' }}
+                    columns={auditLogColumns}
+                    data={filteredAndSortedAuditLogs}
+                    sortBy={auditSortBy}
+                    sortDir={auditSortDir}
+                    onSort={handleAuditSort}
+                    onRowClick={handleAuditLogRowClick}
+                    emptyState={{
+                      icon: Activity,
+                      title: 'No audit logs',
+                      message: auditFilterPeriod !== 'all' || auditFilterDateFrom || auditFilterDateTo || auditFilterSeverity !== 'all' || auditFilterAction !== 'all'
+                        ? 'No audit logs match the current filters'
+                        : 'No audit logs available yet'
+                    }}
+                    getRowKey={(log) => log.audit_log_id || `audit-${log.timestamp}`}
+                  />
+                </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -1037,6 +1454,17 @@ export default function SettingsPage() {
         currentIndex={errorNavigation.currentIndex}
         totalErrors={errorNavigation.errors?.length || 0}
         filteredErrors={errorNavigation.errors || []}
+      />
+
+      {/* Audit Log Detail Modal */}
+      <AuditLogDetailModal
+        isOpen={!!openAuditLogId}
+        onClose={handleCloseAuditLogModal}
+        auditLogId={openAuditLogId}
+        onNavigate={handleAuditLogNavigate}
+        currentIndex={auditLogNavigation.currentIndex}
+        totalLogs={auditLogNavigation.logs?.length || 0}
+        filteredLogs={auditLogNavigation.logs || []}
       />
     </>
   );

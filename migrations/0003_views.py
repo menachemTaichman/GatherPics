@@ -57,6 +57,21 @@ steps = [
             ec.*
         FROM errors_ctx ec;
 
+        -- audit_logs
+        
+        CREATE OR REPLACE VIEW audit_logs_ctx AS
+        SELECT
+            al.*
+        FROM audit_logs al
+        WHERE cur_profile_bool('is_developer');
+
+        CREATE OR REPLACE VIEW audit_logs_ext AS
+        SELECT
+            alc.*,
+            p.label AS actor_profile_label
+        FROM audit_logs_ctx alc
+        LEFT JOIN profiles p ON alc.actor_profile_id = p.profile_id;
+
         -- profiles
         
         CREATE OR REPLACE VIEW profiles_ctx AS
@@ -1086,6 +1101,8 @@ steps = [
         DROP VIEW IF EXISTS my_preferences CASCADE;
         DROP VIEW IF EXISTS profiles_ext CASCADE;
         DROP VIEW IF EXISTS profiles_ctx CASCADE;
+        DROP VIEW IF EXISTS audit_logs_ext CASCADE;
+        DROP VIEW IF EXISTS audit_logs_ctx CASCADE;
         DROP VIEW IF EXISTS errors_ext CASCADE;
         DROP VIEW IF EXISTS errors_ctx CASCADE;
         DROP VIEW IF EXISTS rekognition_usaged_ext CASCADE;

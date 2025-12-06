@@ -304,6 +304,17 @@ steps = [
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         
+        -- audit_logs
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            audit_log_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor_profile_id UUID,
+            action TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            ip_address TEXT,
+            details JSONB
+        );
+        
         -- Create unique constraints for case-insensitive fields
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_name_lower ON events(LOWER(name));
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_url_lower ON events(LOWER(url));
@@ -319,6 +330,7 @@ steps = [
         DROP INDEX IF EXISTS idx_images_event_label_lower;
         DROP INDEX IF EXISTS idx_events_url_lower;
         DROP INDEX IF EXISTS idx_events_name_lower;
+        DROP TABLE IF EXISTS audit_logs CASCADE;
         DROP TABLE IF EXISTS errors CASCADE;
         DROP TABLE IF EXISTS access_requests_groups CASCADE;
         DROP TABLE IF EXISTS access_requests CASCADE;
@@ -554,8 +566,14 @@ steps = [
         ALTER TABLE errors
             ADD CONSTRAINT fk_errors_event_id 
             FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE SET NULL;
+        
+        -- Foreign keys for audit_logs
+        ALTER TABLE audit_logs
+            ADD CONSTRAINT fk_audit_logs_actor_profile_id 
+            FOREIGN KEY (actor_profile_id) REFERENCES profiles(profile_id) ON DELETE SET NULL;
         """,
         """
+        ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_audit_logs_actor_profile_id;
         ALTER TABLE errors DROP CONSTRAINT IF EXISTS fk_errors_event_id;
         ALTER TABLE errors DROP CONSTRAINT IF EXISTS fk_errors_profile_id;
         ALTER TABLE access_requests_groups DROP CONSTRAINT IF EXISTS fk_access_requests_groups_closed_by;
@@ -631,8 +649,14 @@ step(
         CREATE INDEX IF NOT EXISTS idx_access_requests_requested_at ON access_requests(requested_at);
         CREATE INDEX IF NOT EXISTS idx_errors_created_at ON errors(created_at);
         CREATE INDEX IF NOT EXISTS idx_errors_error_type ON errors(error_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_severity ON audit_logs(severity);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
         """,
         """
+        DROP INDEX IF EXISTS idx_audit_logs_action;
+        DROP INDEX IF EXISTS idx_audit_logs_severity;
+        DROP INDEX IF EXISTS idx_audit_logs_timestamp;
         DROP INDEX IF EXISTS idx_errors_error_type;
         DROP INDEX IF EXISTS idx_errors_created_at;
         DROP INDEX IF EXISTS idx_access_requests_requested_at;
@@ -741,7 +765,14 @@ step(
             ('SettingsPage', 'errorFilterDateTo', 'str', ''),
             ('SettingsPage', 'errorFilterType', 'str', 'all'),
             ('SettingsPage', 'errorSortBy', 'str', 'created_at'),
-            ('SettingsPage', 'errorSortDir', 'str', 'asc')
+            ('SettingsPage', 'errorSortDir', 'str', 'asc'),
+            ('SettingsPage', 'auditFilterPeriod', 'str', 'all'),
+            ('SettingsPage', 'auditFilterDateFrom', 'str', ''),
+            ('SettingsPage', 'auditFilterDateTo', 'str', ''),
+            ('SettingsPage', 'auditFilterSeverity', 'str', 'all'),
+            ('SettingsPage', 'auditFilterAction', 'str', 'all'),
+            ('SettingsPage', 'auditSortBy', 'str', 'timestamp'),
+            ('SettingsPage', 'auditSortDir', 'str', 'desc')
         ON CONFLICT (preference_group, preference_key) DO NOTHING;
         """,
         """

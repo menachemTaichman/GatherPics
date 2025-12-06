@@ -6,6 +6,7 @@ from src.core.errors import Forbidden, PolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core import DATA_ROOT
+from src.core.audit_log import AuditAction, log_audit
 
 class Event():
     """Event model for managing event data and operations."""
@@ -53,7 +54,15 @@ class Event():
 
         parents = {}
         deleted_groups = set()
+        deleted_images_info = []
+        actor_profile_id = self.models.db.profile_context.get('profile_id')
+        
+        # Get image info for audit logging
+        images = self.models.get_entities('images', image_ids)
+        
         for image_id in image_ids:
+            image_info = images.get(image_id, {})
+            image_label = image_info.get('label', 'Unknown')
             image_parents = self.models.get_parents('images', image_id)
 
             face_ids = self.models.get_childs('images', image_id, 'faces', return_ids=True)
@@ -91,6 +100,13 @@ class Event():
                     deleted_groups.add(group_id)
                     set(image_parents.get('groups', set())).discard(group_id)
 
+            # Store image info for audit log
+            deleted_images_info.append({
+                'image_id': image_id,
+                'image_label': image_label,
+                'faces_count': len(face_ids)
+            })
+            
             for entity, entity_ids in image_parents.items():
                 parents.setdefault(entity, set()).update(entity_ids)
 
@@ -98,6 +114,19 @@ class Event():
             parents[entity] = list(entity_ids)
             for entity_id in entity_ids:
                 self.models.ensure_representative(entity, entity_id)
+        
+        # Log audit events for each deleted image
+        for img_info in deleted_images_info:
+            log_audit(
+                action=AuditAction.IMAGE_DELETED,
+                actor_profile_id=actor_profile_id,
+                details={
+                    'image_id': img_info['image_id'],
+                    'image_label': img_info['image_label'],
+                    'event_id': self.event_id,
+                    'faces_count': img_info['faces_count'],
+                }
+            )
                 
         return list(deleted_groups), parents
 
@@ -416,6 +445,19 @@ class Event():
                 _log(f"  - Images assigned to moments: {sum(len(imgs) for imgs in assigned_moments.values())}")
 
             self.models.db.execute_query('ANALYZE;')
+            
+            # Log audit event for upload
+            actor_profile_id = self.models.db.profile_context.get('profile_id')
+            log_audit(
+                action=AuditAction.UPLOAD_MADE,
+                actor_profile_id=actor_profile_id,
+                details={
+                    'upload_id': upload_id,
+                    'event_id': self.event_id,
+                    'images_processed': summary['images_processed'],
+                    'faces_detected': summary['faces_detected'],
+                }
+            )
 
             return summary
         

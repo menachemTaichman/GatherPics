@@ -88,6 +88,23 @@ class DB:
                     'created_at',
                 ],
             },
+            'audit_logs': {
+                'id_type': 'INTEGER',
+                'primary_key': 'audit_log_id',
+                'fields': [
+                    'audit_log_id',
+                    'timestamp',
+                    'actor_profile_id',
+                    'actor_profile_label',
+                    'action',
+                    'severity',
+                    'ip_address',
+                    'details',
+                ],
+                'serializable': {
+                    'details': dict,
+                },
+            },
             'events': {
                 'primary_key': 'event_id',
                 'fields': [

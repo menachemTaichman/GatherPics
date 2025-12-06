@@ -1,4 +1,3 @@
-from cProfile import label
 from typing import Dict, Any
 import secrets
 from datetime import timedelta, datetime, timezone
@@ -7,6 +6,7 @@ from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
 from src.core.errors import PolicyError, Forbidden, DatabaseError
 from src.core.utils.password_utils import hash_password, verify_password
+from src.core.audit_log import AuditAction, log_audit
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -107,6 +107,22 @@ class GeneralModels(BaseModels):
             profile_data['email'] = email
         
         new_profile_id = self.add('profiles', profile_data)
+
+        actor_profile_id = self.db.profile_context.get('profile_id')
+        log_audit(
+            action=AuditAction.PROFILE_CREATED,
+            actor_profile_id=actor_profile_id,
+            details={
+                'profile_id': new_profile_id,
+                'profile_label': label,
+                'is_public': is_public,
+                'hierarchy_rank': hierarchy_rank,
+                'restricted_to_event': restricted_to_event,
+                'can_create_events': can_create_events,
+                'duplicated_from_profile_id': profile_id
+            }
+        )
+        
         _, event_profiles = self.get_childs('profiles', profile_id, 'events')
         for event_id, event_relation in event_profiles.items():
             try:
@@ -136,6 +152,11 @@ class GeneralModels(BaseModels):
         profile = self.get_entities('profiles', profile_id)
         restricted_to_event_id = profile.get('restricted_to_event')
         event_id = only_remove_from_event_id or restricted_to_event_id
+        
+        # Get profile info for audit log before deletion
+        profile_label = profile.get('label', 'Unknown')
+        is_public = profile.get('is_public', False)
+        
         if event_id:
             event = self.get_event(event_id)
             event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
@@ -143,6 +164,20 @@ class GeneralModels(BaseModels):
         complete_delete = not only_remove_from_event_id or restricted_to_event_id is not None
         if complete_delete:
             self.delete('profiles', profile_id)
+            
+            # Log audit event
+            actor_profile_id = self.db.profile_context.get('profile_id')
+            log_audit(
+                action=AuditAction.PROFILE_DELETED,
+                actor_profile_id=actor_profile_id,
+                details={
+                    'profile_id': profile_id,
+                    'profile_label': profile_label,
+                    'is_public': is_public,
+                    'restricted_to_event': restricted_to_event_id,
+                    'deleted_as_cascade': False
+                }
+            )
 
         return complete_delete
         
@@ -254,6 +289,20 @@ class GeneralModels(BaseModels):
                 raise DatabaseError('Failed to create new profile')
             
             event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
+            
+            actor_profile_id = self.db.profile_context.get('profile_id')
+            log_audit(
+                action=AuditAction.PROFILE_CREATED,
+                actor_profile_id=actor_profile_id,
+                details={
+                    'profile_id': applicant_profile_id,
+                    'profile_label': label,
+                    'created_from_access_request': True,
+                    'access_request_id': access_request_id,
+                    'event_id': event_id,
+                    'requester_profile_id': requester_profile_id
+                }
+            )
         
         event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
 
@@ -290,6 +339,19 @@ class GeneralModels(BaseModels):
 
         event_id = self.add('events', data)
         Event.create_event(event_id)
+        
+        # Log audit event
+        actor_profile_id = self.db.profile_context.get('profile_id')
+        log_audit(
+            action=AuditAction.EVENT_CREATED,
+            actor_profile_id=actor_profile_id,
+            details={
+                'event_id': event_id,
+                'event_name': data.get('name', 'Unknown'),
+                'event_url': data.get('url', ''),
+                'is_public': data.get('is_public', False)
+            }
+        )
 
         return event_id
     
@@ -299,10 +361,54 @@ class GeneralModels(BaseModels):
         if not current_profile.get('can_delete_event'):
             raise Forbidden('Profile does not have permission to delete this event')
 
+        # Get event info for audit log
+        event = self.get_entities('events', event_id, include_details=True)
+        if not event:
+            raise Forbidden('Event not found')
+        event_name = event.get('name', 'Unknown')
+        
+        # Get profiles that will be deleted (restricted to this event)
+        query = 'SELECT profile_id, label FROM profiles WHERE restricted_to_event = %s'
+        restricted_profiles = self.db.execute_query(
+            query, 
+            (event_id,), 
+            return_format=ReturnFormat.LIST_DICTS
+        )
+        
+        # Delete the event (this will cascade delete restricted profiles)
         Event.delete_event(event_id)
         self.db.execute_query("SELECT set_transaction_context('temp_event_in_deletion', %s)", (event_id,))
         self.delete('events', event_id)
         self.db.execute_query('ANALYZE;')
+        
+        # Log audit events - event deletion first
+        actor_profile_id = self.db.profile_context.get('profile_id')
+        log_audit(
+            action=AuditAction.EVENT_DELETED,
+            actor_profile_id=actor_profile_id,
+            details={
+                'event_id': event_id,
+                'event_name': event_name,
+                'images_count': event.get('images_count', 0) if event else 0,
+                'total_size': event.get('total_size', 0) if event else 0,
+                'rekognition_calls_used': event.get('rekognition_calls_used', 0) if event else 0,
+                'restricted_profiles_deleted': len(restricted_profiles)
+            }
+        )
+        
+        # Log each restricted profile deletion
+        for profile in restricted_profiles:
+            log_audit(
+                action=AuditAction.PROFILE_DELETED,
+                actor_profile_id=actor_profile_id,
+                details={
+                    'profile_id': profile['profile_id'],
+                    'profile_label': profile.get('label', 'Unknown'),
+                    'deleted_as_cascade': True,
+                    'cascade_from_event_id': event_id,
+                    'cascade_from_event_name': event_name
+                }
+            )
     
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
@@ -341,6 +447,7 @@ class GeneralModels(BaseModels):
         result['developer_hierarchy_rank'] = 10
         result['rekognition_usage'] = self.get_entities('rekognition_usaged')
         result['errors'] = self.get_entities('errors')
+        result['audit_logs'] = self.get_entities('audit_logs')
 
         return result
     
@@ -458,9 +565,10 @@ class GeneralModels(BaseModels):
             (profile_id, profile_label, reset_token, reset_url) if profile found, None otherwise
         """
         query = 'SELECT profile_id, label FROM profiles WHERE email = %s'
-        profile_id, profile_label = self.db.execute_query(query, (email,), return_format=ReturnFormat.TUPLE)
+        result = self.db.execute_query(query, (email,), return_format=ReturnFormat.TUPLE)
         
-        if profile_id:
+        if result:
+            profile_id, profile_label = result
             reset_token = secrets.token_urlsafe(32)
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
             query = """
@@ -471,6 +579,16 @@ class GeneralModels(BaseModels):
             self.db.execute_query(query, (profile_id, reset_token, expires_at), return_format=ReturnFormat.VALUE)
             
             reset_url = f"{reset_url_base.rstrip('/')}/reset-password/{reset_token}"
+            
+            # Log audit event
+            log_audit(
+                action=AuditAction.PROFILE_REQUESTED_PASSWORD_RESET,
+                actor_profile_id=profile_id,
+                details={
+                    'profile_id': profile_id,
+                    'profile_label': profile_label,
+                }
+            )
             
             return profile_id, profile_label, reset_token, reset_url
         
@@ -515,6 +633,17 @@ class GeneralModels(BaseModels):
         self.db.execute_query('UPDATE password_reset_links SET used = TRUE, used_at = NOW() WHERE token = %s', (token,))
         hashed_password = hash_password(new_password)
         self.db.execute_query('UPDATE profiles SET password = %s WHERE profile_id = %s', (hashed_password, profile_id))
+        
+        # Log audit event
+        log_audit(
+            action=AuditAction.PROFILE_RESET_PASSWORD_COMPLETED,
+            actor_profile_id=profile_id,
+            details={
+                'profile_id': profile_id,
+                'profile_label': label,
+                'method': 'password_reset_token'
+            }
+        )
         
         return profile_id, label
 

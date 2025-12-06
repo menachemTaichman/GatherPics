@@ -2,7 +2,7 @@ import secrets
 from flask import Blueprint, jsonify, request
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, Forbidden
+from src.backend.helpers import get_current_profile_id, get_event, get_general_models, ChildOperation, Forbidden, log_audit, AuditAction
 from src.backend.validators import get_input, get_multiple_inputs, get_query_param, validate_path_param
 from src.core.utils.password_utils import hash_password
 
@@ -56,10 +56,25 @@ def create_profile():
     data['password'] = hash_password(data['password'])
 
     profile_id = general_models.add('profiles', data)
+    
+    created_profile = general_models.get_entities('profiles', [profile_id])
+    if created_profile:
+        profile_data = created_profile[profile_id]
+        log_audit(
+            action=AuditAction.PROFILE_CREATED,
+            details={
+                'profile_id': profile_id,
+                'profile_label': profile_data.get('label', 'Unknown'),
+                'is_public': profile_data.get('is_public', False),
+                'hierarchy_rank': profile_data.get('hierarchy_rank', 0),
+                'restricted_to_event': profile_data.get('restricted_to_event')
+            }
+        )
+    
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
-        'items': general_models.get_entities('profiles', [profile_id]),
+        'items': created_profile,
     }]
     return jsonify({"success": True, "profile_id": profile_id, "changes": changes})
 
@@ -253,6 +268,21 @@ def create_event_profile(event_id):
     profile_id = general_models.add('profiles', general_data)
     event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.ADD, data=event_data)
     profiles, event_profiles = event.models.get_childs('events', event_id, 'profiles', [profile_id])
+    
+    if profiles and profile_id in profiles:
+        profile_data = profiles[profile_id]
+        log_audit(
+            action=AuditAction.PROFILE_CREATED,
+            details={
+                'profile_id': profile_id,
+                'profile_label': profile_data.get('label', 'Unknown'),
+                'is_public': profile_data.get('is_public', False),
+                'hierarchy_rank': profile_data.get('hierarchy_rank', 0),
+                'restricted_to_event': event_id,
+                'created_for_event': True
+            }
+        )
+    
     changes = [{
         'type': 'UPSERT',
         'entity': 'profile',
@@ -392,6 +422,12 @@ def update_current_profile_password():
     
     # Update password
     general_models.edit('current_profile', profile_id, {'password': hash_password(new_password)})
+    
+    log_audit(
+        action=AuditAction.PROFILE_CHANGED_PASSWORD,
+        actor_profile_id=profile_id,
+        details={'method': 'direct_change'}
+    )
 
     changes = [{
         'type': 'UPSERT',

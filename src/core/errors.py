@@ -55,39 +55,72 @@ def sanitize_sensitive_data(text: str) -> str:
         logging.warning(f"Sanitization failed, returning original text: {e}")
         return text
 
-
 def log_error(
     error_message: str,
     error_type: str,
     traceback_str: Optional[str] = None,
-    profile_id: Optional[str] = None,
-    event_id: Optional[str] = None,
-    request_path: Optional[str] = None,
-    request_method: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    debug_mode: bool = False
 ) -> Optional[int]:
     """Log error to database errors table.
     
-    Core logging function that works without Flask request context.
-    All context parameters are optional and can be provided explicitly.
+    Core logging function that auto-detects Flask request context if available.
+    All context parameters are automatically detected from Flask request context.
     
     Args:
         error_message: The error message to log
         error_type: Type of error (e.g., "EmailError", "DatabaseError")
         traceback_str: Optional traceback string
-        profile_id: Optional profile ID associated with the error
-        event_id: Optional event ID associated with the error
-        request_path: Optional request path
-        request_method: Optional HTTP method
-        user_agent: Optional user agent string
-        ip_address: Optional IP address
-        debug_mode: Whether to log to application logs (default: False)
         
     Returns:
         error_id if successfully logged, None otherwise
     """
+    # Initialize context variables (auto-populated from Flask if available)
+    profile_id: str | None = None
+    event_id: str | None = None
+    request_path: str | None = None
+    request_method: str | None = None
+    user_agent: str | None = None
+    ip_address: str | None = None
+    debug_mode: bool = False
+
+    # Try to get Flask request context if available
+    try:
+        from flask import request, has_request_context, current_app
+        from flask_jwt_extended import get_jwt_identity
+        
+        if has_request_context():
+            # Auto-detect request information if not provided
+            if request_path is None and request:
+                request_path = request.path
+            if request_method is None and request:
+                request_method = request.method
+            if user_agent is None and request:
+                user_agent = request.headers.get('User-Agent')
+            if ip_address is None and request:
+                ip_address = request.remote_addr
+            
+            # Auto-detect profile_id from JWT if not provided
+            if profile_id is None:
+                try:
+                    profile_id = get_jwt_identity()
+                except:
+                    pass  # Not authenticated or no JWT
+            
+            # Auto-extract event_id from request path if not provided
+            if event_id is None and request_path:
+                match = re.search(r'/events/([a-f0-9-]{36})', request_path)
+                if match:
+                    event_id = match.group(1)
+            
+            # Auto-detect debug mode if not explicitly set
+            if not debug_mode and current_app:
+                debug_mode = current_app.debug
+    except ImportError:
+        # Flask not available, use provided values
+        pass
+    except Exception:
+        # Context detection failed, use provided values
+        pass
+    
     # Sanitize sensitive data before logging
     sanitized_error_message = sanitize_sensitive_data(error_message)
     sanitized_traceback = sanitize_sensitive_data(traceback_str) if traceback_str else None
@@ -121,3 +154,4 @@ def log_error(
     except Exception as e:
         logging.error(f"Failed to log error to database: {e}", exc_info=True)
         return None
+
