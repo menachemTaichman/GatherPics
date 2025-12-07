@@ -1634,5 +1634,9 @@
     "setAsRepresentative": "הגדר כנציג",
     "clickToView": "לחץ לצפייה",
     "crop": "חיתוך"
+  },
+  "loadingSpinner": {
+    "loading": "טוען",
+    "preparingCollection": "מכין את אוסף הפנים היפה שלך..."
   }
 }

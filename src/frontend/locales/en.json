@@ -1633,5 +1633,9 @@
     "setAsRepresentative": "Set as representative",
     "clickToView": "Click to view",
     "crop": "Crop"
+  },
+  "loadingSpinner": {
+    "loading": "Loading",
+    "preparingCollection": "Preparing your beautiful face collection..."
   }
 }

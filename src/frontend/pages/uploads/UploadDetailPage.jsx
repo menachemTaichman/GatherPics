@@ -656,8 +656,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       <div className="h-[4rem]"></div>
       {/* Sticky Header */}
       <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-4 sm:px-8 py-2 sm:py-4 shadow-sm">
+        {/* Title Row - Mobile: includes controls in same row, Desktop: title only */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0 flex-1 sm:flex-initial">
             <Link
               to={`/${eventUrl}/uploads`}
               className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
@@ -725,64 +726,248 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             </div>
           </div>
 
-        {/* Controls Row with Tabs */}
-        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+          {/* Mobile: Controls in same row as title */}
+          <div className="flex sm:hidden items-center gap-1.5 flex-wrap min-w-0">
+            {/* Tabs */}
+            <div className="flex items-center divide-x divide-gray-200 overflow-x-auto min-w-0">
+              <div className="flex gap-0.5 px-1">
+                <button
+                  onClick={() => handleModeChange('images')}
+                  className={`flex items-center gap-0.5 px-1.5 py-1 border-b-2 transition-colors whitespace-nowrap ${
+                    mode === 'images'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  <span className="font-medium text-xs">{t('uploadDetail.photos')}</span>
+                  <span className="font-medium text-xs">({uploadImages.length})</span>
+                </button>
+                <button
+                  onClick={() => handleModeChange('groups')}
+                  className={`flex items-center gap-0.5 px-1.5 py-1 border-b-2 transition-colors whitespace-nowrap ${
+                    mode === 'groups'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Users className="w-3 h-3" />
+                  <span className="font-medium text-xs">{t('uploadDetail.people')}</span>
+                  <span className="font-medium text-xs">({uploadGroups.length})</span>
+                </button>
+                <button
+                  onClick={() => handleModeChange('moments')}
+                  className={`flex items-center gap-0.5 px-1.5 py-1 border-b-2 transition-colors whitespace-nowrap ${
+                    mode === 'moments'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  <span className="font-medium text-xs">{t('uploadDetail.moments')}</span>
+                  <span className="font-medium text-xs">({uploadMoments.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Controls */}
+            {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Sort */}
+                <button
+                  onClick={toggleSortDir}
+                  className="w-6 h-6 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                  title={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
+                  aria-label={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
+                >
+                  {sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                </button>
+
+                {/* Zoom Controls */}
+                <button
+                  onClick={() => {
+                    const currentPercent = Math.round(imageSize * 100);
+                    const next25 = Math.ceil(currentPercent / 25) * 25;
+                    const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                    const subtract25 = currentPercent - 25;
+                    const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                    setImageSize(newPercent / 100);
+                  }}
+                  disabled={imageSize <= 0.5}
+                  className="w-6 h-6 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={t('uploadDetail.decreaseSize')}
+                  aria-label={t('uploadDetail.decreaseSize')}
+                >
+                  <Minus className="w-3 h-3" />
+                </button>
+                <input
+                  type="text"
+                  id="upload-detail-image-size-mobile"
+                  name="upload-detail-image-size-mobile"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={imageSizeInputValue !== undefined ? imageSizeInputValue : Math.round(imageSize * 100)}
+                  onChange={e => setImageSizeInputValue(e.target.value.replace(/[^0-9]/g, ''))}
+                  onBlur={e => {
+                    let val = parseInt(e.target.value, 10);
+                    if (isNaN(val)) val = Math.round(imageSize * 100);
+                    val = Math.max(50, Math.min(300, val));
+                    setImageSize(val / 100);
+                    setImageSizeInputValue(undefined);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.target.blur();
+                    } else if (e.key === 'Escape') {
+                      setImageSizeInputValue(undefined);
+                    }
+                  }}
+                  className="text-xs font-medium text-gray-700 w-8 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                />
+                <button
+                  onClick={() => {
+                    const currentPercent = Math.round(imageSize * 100);
+                    const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                    const add25 = currentPercent + 25;
+                    const newPercent = Math.min(300, Math.min(add25, next25));
+                    setImageSize(newPercent / 100);
+                  }}
+                  disabled={imageSize >= 3}
+                  className="w-6 h-6 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={t('uploadDetail.increaseSize')}
+                  aria-label={t('uploadDetail.increaseSize')}
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+
+                {/* Selection Mode */}
+                {uploadImages.length > 0 && (
+                  <button
+                    onClick={() => setSelectionMode(!selectionMode)}
+                    className={`w-6 h-6 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                      selectionMode 
+                        ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                    title={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
+                    aria-label={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
+                  >
+                    {selectionMode ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Notes field - Mobile (compact) */}
+            {upload && (
+              <div className="flex items-center gap-1 text-xs min-w-0 flex-1">
+                {editingNotes ? (
+                  <div className="flex items-center gap-1 min-w-0 flex-1">
+                    <span className="text-gray-600 whitespace-nowrap">{t('uploadDetail.notes')}:</span>
+                    <input
+                      type="text"
+                      value={notesValue}
+                      onChange={(e) => setNotesValue(e.target.value)}
+                      dir={isRTL ? 'rtl' : 'ltr'}
+                      className="flex-1 min-w-0 border rounded px-1 py-0.5 text-xs"
+                      placeholder={t('uploadDetail.addNotes')}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveNotes}
+                      className="p-0.5 hover:bg-green-100 rounded transition-colors flex-shrink-0"
+                      title={t('uploadDetail.save')}
+                      aria-label={t('uploadDetail.save')}
+                    >
+                      <Save className="w-3 h-3 text-green-600" />
+                    </button>
+                    <button
+                      onClick={handleCancelEditNotes}
+                      className="p-0.5 hover:bg-red-100 rounded transition-colors flex-shrink-0"
+                      title={t('uploadDetail.cancel')}
+                      aria-label={t('uploadDetail.cancel')}
+                    >
+                      <RotateCcw className="w-3 h-3 text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 min-w-0 flex-1">
+                    <span className="text-gray-600 whitespace-nowrap">{t('uploadDetail.notes')}:</span>
+                    <span className="text-gray-900 truncate min-w-0">{upload.notes || <span className="text-gray-400 italic">{t('uploadDetail.noNotes')}</span>}</span>
+                    <button
+                      onClick={handleEditNotes}
+                      className="p-0.5 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
+                      title={t('uploadDetail.editNotes')}
+                      aria-label={t('uploadDetail.editNotes')}
+                    >
+                      <Edit2 className="w-3 h-3 text-blue-600" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Controls Row with Tabs - Desktop: separate row */}
+        <div className="hidden sm:flex mt-4 items-center justify-between">
           {/* Tabs */}
-            <div className="flex items-center divide-x divide-gray-200 overflow-x-auto">
-            <div className="flex gap-0.5 sm:gap-1 px-2 sm:px-4">
+          <div className="flex items-center divide-x divide-gray-200">
+            <div className="flex gap-1 px-4">
               <button
                 onClick={() => handleModeChange('images')}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'images'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="font-medium text-xs sm:text-sm">{t('uploadDetail.photos')}</span>
-                <span className="font-medium text-xs sm:text-sm">({uploadImages.length})</span>
+                <ImageIcon className="w-4 h-4" />
+                <span className="font-medium">{t('uploadDetail.photos')}</span>
+                <span className="font-medium">({uploadImages.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('groups')}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'groups'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Users className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="font-medium text-xs sm:text-sm">{t('uploadDetail.people')}</span>
-                <span className="font-medium text-xs sm:text-sm">({uploadGroups.length})</span>
+                <Users className="w-4 h-4" />
+                <span className="font-medium">{t('uploadDetail.people')}</span>
+                <span className="font-medium">({uploadGroups.length})</span>
               </button>
               <button
                 onClick={() => handleModeChange('moments')}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-2 border-b-2 transition-colors ${
                   mode === 'moments'
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="font-medium text-xs sm:text-sm">{t('uploadDetail.moments')}</span>
-                <span className="font-medium text-xs sm:text-sm">({uploadMoments.length})</span>
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">{t('uploadDetail.moments')}</span>
+                <span className="font-medium">({uploadMoments.length})</span>
               </button>
             </div>
-          </div>
 
             {/* Controls */}
             {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <div className="flex items-center gap-2 sm:gap-3">
+              <>
+                <div className="flex items-center gap-3 px-4">
                   {/* Sort */}
                   <button
                     onClick={toggleSortDir}
-                    className="w-7 h-7 sm:w-8 sm:h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                     title={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
                     aria-label={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
                   >
-                    {sortDir === 'asc' ? <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+                    {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
                   </button>
+                </div>
 
+                <div className="flex items-center gap-3 px-4">
                   {/* Zoom Controls */}
                   <button
                     onClick={() => {
@@ -794,11 +979,11 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       setImageSize(newPercent / 100);
                     }}
                     disabled={imageSize <= 0.5}
-                    className="w-7 h-7 sm:w-8 sm:h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title={t('uploadDetail.decreaseSize')}
                     aria-label={t('uploadDetail.decreaseSize')}
                   >
-                    <Minus className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <Minus className="w-4 h-4" />
                   </button>
                   <input
                     type="text"
@@ -822,7 +1007,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                         setImageSizeInputValue(undefined);
                       }
                     }}
-                    className="text-xs sm:text-sm font-medium text-gray-700 w-10 sm:w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    className="text-sm font-medium text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
+                    style={{width: '3rem'}}
                   />
                   <button
                     onClick={() => {
@@ -833,20 +1019,20 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       setImageSize(newPercent / 100);
                     }}
                     disabled={imageSize >= 3}
-                    className="w-7 h-7 sm:w-8 sm:h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     title={t('uploadDetail.increaseSize')}
                     aria-label={t('uploadDetail.increaseSize')}
                   >
-                    <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Selection Mode */}
                 {uploadImages.length > 0 && (
-                  <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="flex items-center gap-3 px-4">
                     <button
                       onClick={() => setSelectionMode(!selectionMode)}
-                      className={`w-7 h-7 sm:w-8 sm:h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                      className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                         selectionMode 
                           ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
                           : 'hover:bg-gray-100 text-gray-700'
@@ -854,17 +1040,17 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       title={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
                       aria-label={selectionMode ? t('uploadDetail.cancelSelectionMode') : t('uploadDetail.showCheckboxes')}
                     >
-                      {selectionMode ? <CheckSquare className="w-3 h-3 sm:w-4 sm:h-4" /> : <Square className="w-3 h-3 sm:w-4 sm:h-4" />}
+                      {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                     </button>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
 
-          {/* Notes field */}
+          {/* Notes field - Desktop */}
           {upload && (
-            <div className="mt-2 sm:mt-3 px-0 sm:px-4 text-xs sm:text-sm">
+            <div className="mt-3 px-4 text-sm">
               {editingNotes ? (
                 <div className="flex items-center gap-2">
                   <span className="text-gray-600">{t('uploadDetail.notes')}:</span>
