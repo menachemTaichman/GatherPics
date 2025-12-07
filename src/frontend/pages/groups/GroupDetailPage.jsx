@@ -1578,63 +1578,75 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   </PermissionGate>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 flex-1 min-w-0">
+              <div className="flex flex-col items-start gap-1 sm:gap-3 flex-1 min-w-0">
                 {isEditingTitle ? (
-                  <div className="flex items-center gap-2 flex-1 min-w-0" onBlur={(e) => {
+                  <div className="flex flex-col gap-1 flex-1 min-w-0" onBlur={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget)) {
                       handleTitleCancel();
                     }
                   }}>
-                    <div className="relative flex-1 min-w-0">
-                      <input
-                        type="text"
-                        id="edit-group-title"
-                        name="edit-group-title"
-                        value={editingTitle}
-                        onChange={(e) => {
-                          setEditingTitle(e.target.value);
-                          checkNameConflict(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleTitleSave();
-                          } else if (e.key === 'Escape') {
-                            handleTitleCancel();
-                          }
-                        }}
-                        dir={isRTL ? 'rtl' : 'ltr'}
-                        className={`text-xl sm:text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-full max-w-[200px] ${
-                          nameConflict ? 'border-red-500' : 'border-primary-500'
-                        }`}
-                        autoFocus
-                      />
-                      {nameConflict && (
-                        <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>{t('groupDetail.nameAlreadyExists')}</span>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="relative flex-1 min-w-0">
+                        <input
+                          type="text"
+                          id="edit-group-title"
+                          name="edit-group-title"
+                          value={editingTitle}
+                          onChange={(e) => {
+                            setEditingTitle(e.target.value);
+                            checkNameConflict(e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleTitleSave();
+                            } else if (e.key === 'Escape') {
+                              handleTitleCancel();
+                            }
+                          }}
+                          dir={isRTL ? 'rtl' : 'ltr'}
+                          className={`text-xl sm:text-3xl font-bold text-gray-900 bg-transparent border-b-2 focus:outline-none w-full max-w-[200px] ${
+                            nameConflict ? 'border-red-500' : 'border-primary-500'
+                          }`}
+                          autoFocus
+                        />
+                        {nameConflict && (
+                          <div className={`absolute top-full ${startClass('0')} mt-1 flex items-center gap-1 text-red-500 text-xs`}>
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>{t('groupDetail.nameAlreadyExists')}</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleTitleSave}
+                        className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
+                        title={t('groupDetail.save')}
+                        aria-label={t('groupDetail.save')}
+                      >
+                        <Check className="w-4 h-4 text-green-600" />
+                      </button>
+                      <button
+                        onClick={handleTitleCancel}
+                        className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"
+                        title={t('groupDetail.cancel')}
+                        aria-label={t('groupDetail.cancel')}
+                      >
+                        <X className="w-4 h-4 text-red-600" />
+                      </button>
                     </div>
-                    <button
-                      onClick={handleTitleSave}
-                      className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
-                      title={t('groupDetail.save')}
-                      aria-label={t('groupDetail.save')}
-                    >
-                      <Check className="w-4 h-4 text-green-600" />
-                    </button>
-                    <button
-                      onClick={handleTitleCancel}
-                      className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"
-                      title={t('groupDetail.cancel')}
-                      aria-label={t('groupDetail.cancel')}
-                    >
-                      <X className="w-4 h-4 text-red-600" />
-                    </button>
-
+                    <div className="relative">
+                      <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
+                        {showCrops ? (
+                          `${sortedImages.length} ${t('groupDetail.faces')}`
+                        ) : (
+                          sortedImages.length === getImageCount(group)
+                            ? `${sortedImages.length} ${t('groupDetail.photos')}`
+                            : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
+                        )}
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex flex-col gap-1 min-w-0">
                     <h1 
                       className={`text-xl sm:text-3xl font-bold text-gray-900 truncate ${
                         (isUnassociatedGroup || !permissions.canEdit) ? '' : 'cursor-pointer hover:text-primary-600 transition-colors'
@@ -1643,19 +1655,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     >
                       {group.label || `${t('groupDetail.person')} ${group.id}`}
                     </h1>
+                    <div className="relative">
+                      <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
+                        {showCrops ? (
+                          `${sortedImages.length} ${t('groupDetail.faces')}`
+                        ) : (
+                          sortedImages.length === getImageCount(group)
+                            ? `${sortedImages.length} ${t('groupDetail.photos')}`
+                            : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
+                        )}
+                      </p>
+                    </div>
                   </div>
                 )}
-                <div className="relative">
-                  <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
-                    {showCrops ? (
-                      `${sortedImages.length} ${t('groupDetail.faces')}`
-                    ) : (
-                      sortedImages.length === getImageCount(group)
-                        ? `${sortedImages.length} ${t('groupDetail.photos')}`
-                        : `${sortedImages.length} ${t('groupDetail.of')} ${getImageCount(group)} ${t('groupDetail.photos')}`
-                    )}
-                  </p>
-                </div>
               </div>
             </div>
           </div>
