@@ -263,6 +263,20 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // Only handle click outside if this modal is the topmost modal
     if (!isTopmostModal()) return;
     if (!modalRef.current.contains(e.target)) {
+      // Check if click is on PhotoSwipe elements (PhotoSwipe appends to document.body, outside modalRef)
+      const pswpElement = e.target.closest('.pswp');
+      if (pswpElement) {
+        // Don't close if clicking on PhotoSwipe elements - they're part of the modal content
+        return;
+      }
+      
+      // Check if click is on Vaul Drawer elements (they are in a Portal)
+      const vaulDrawer = e.target.closest('[data-vaul-drawer]');
+      const vaulOverlay = e.target.closest('[data-vaul-overlay]');
+      if (vaulDrawer || vaulOverlay) {
+        return;
+      }
+
       // Check if the click is on the toggle button (for BucketDrawer or NotificationsDropdown)
       let target = e.target;
       while (target && target !== document.body) {

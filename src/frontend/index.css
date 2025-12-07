@@ -277,4 +277,28 @@ h1 {
   button {
     background-color: #f9f9f9;
   }
-} 
+}
+
+/* PhotoSwipe custom styles */
+.pswp__button--info {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: white !important;
+}
+
+.pswp__button--info svg {
+  stroke: white;
+}
+
+/* Ensure Vaul drawer is above PhotoSwipe */
+[data-vaul-drawer-wrapper] {
+  z-index: 100000;
+}
+
+div[data-radix-collection-item] {
+  z-index: 100001; /* Ensure drawer content is high */
+}
