@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
-import { Upload, Trash2, Plus } from 'lucide-react';
+import { Upload, Trash2, Plus, ArrowLeft, ArrowRight } from 'lucide-react';
 import { uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadsList } from '../../utils/dataManager';
@@ -120,6 +120,20 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
           <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                {eventUrl && (
+                  <Link
+                    to={`/${eventUrl}`}
+                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                    title={t('uploadsGallery.backToEvent')}
+                    aria-label={t('uploadsGallery.backToEvent')}
+                  >
+                    {isRTL ? (
+                      <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    ) : (
+                      <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    )}
+                  </Link>
+                )}
                 <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                   <Upload className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
                 </div>

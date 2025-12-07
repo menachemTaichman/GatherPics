@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Bell, Calendar, Users, Image as ImageIcon } from 'lucide-react';
+import { ShoppingBag, Bell, Users, Image as ImageIcon, LayoutGrid } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import HamburgerMenu from './HamburgerMenu.jsx';
@@ -177,7 +177,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                   className={isActiveRoute('/timeline') ? activeNavLinkClass : navLinkClass}
                   title={t('navigation.timeline')}
                 >
-                  <Calendar 
+                  <ImageIcon 
                     className={`w-5 h-5 ${isActiveRoute('/timeline') ? (isLight ? 'text-primary-600' : 'text-white') : ''}`}
                     strokeWidth={isActiveRoute('/timeline') ? 2.5 : 2}
                   />
@@ -201,7 +201,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                   className={isActiveRoute('/albums') ? activeNavLinkClass : navLinkClass}
                   title={t('navigation.albums')}
                 >
-                  <ImageIcon 
+                  <LayoutGrid 
                     className={`w-5 h-5 ${isActiveRoute('/albums') ? (isLight ? 'text-primary-600' : 'text-white') : ''}`}
                     strokeWidth={isActiveRoute('/albums') ? 2.5 : 2}
                   />

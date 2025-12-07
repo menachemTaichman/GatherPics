@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings as SettingsIcon, AlertCircle, HardDrive, Activity, Save, Calendar, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, AlertCircle, HardDrive, Activity, Save, Calendar, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { settingsAPI, eventsAPI } from '../../utils/apiService';
@@ -1018,6 +1019,18 @@ export default function SettingsPage() {
           <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <Link
+                  to="/dashboard"
+                  className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                  title={t('settings.backToDashboard')}
+                  aria-label={t('settings.backToDashboard')}
+                >
+                  {isRTL ? (
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                  ) : (
+                    <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                  )}
+                </Link>
                 <div className="w-8 h-8 sm:w-12 sm:h-12 bg-primary-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                   <SettingsIcon className="w-4 h-4 sm:w-6 sm:h-6 text-primary-600" />
                 </div>

@@ -4,6 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   ArrowLeft, 
+  ArrowRight,
   ArrowUp,
   ArrowDown,
   Image as ImageIcon,
@@ -568,7 +569,11 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               title={t('albumDetail.backToAllAlbums')}
               aria-label={t('albumDetail.backToAllAlbums')}
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              {isRTL ? (
+                <ArrowRight className="w-5 h-5 text-gray-600" />
+              ) : (
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              )}
             </Link>
             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
               <div className="relative flex-shrink-0">

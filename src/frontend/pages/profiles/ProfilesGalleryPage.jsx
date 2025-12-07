@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X } from 'lucide-react';
+import { User, Trash2, Plus, Link as LinkIcon, RotateCcw, Minus, ChevronDown, Calendar, Copy, X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import { useToast } from '../../contexts/ToastContext';
@@ -17,7 +17,7 @@ import { TopNavigationBar } from '../../components/layout';
 import { useAuth } from '../../contexts/authContext';
 import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { ScrollableTable } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -1110,6 +1110,33 @@ export default function ProfilesGalleryPage() {
           <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                {eventUrl ? (
+                  <Link
+                    to={`/${eventUrl}`}
+                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                    title={t('profilesGallery.backToEvent')}
+                    aria-label={t('profilesGallery.backToEvent')}
+                  >
+                    {isRTL ? (
+                      <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    ) : (
+                      <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    )}
+                  </Link>
+                ) : (
+                  <Link
+                    to="/dashboard"
+                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                    title={t('profilesGallery.backToDashboard')}
+                    aria-label={t('profilesGallery.backToDashboard')}
+                  >
+                    {isRTL ? (
+                      <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    ) : (
+                      <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    )}
+                  </Link>
+                )}
                 <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                   <User className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
                 </div>

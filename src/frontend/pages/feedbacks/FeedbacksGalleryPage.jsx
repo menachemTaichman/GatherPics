@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MessageSquare, Trash2, CheckCircle, XCircle, Clock, Trash } from 'lucide-react';
+import { MessageSquare, Trash2, CheckCircle, XCircle, Clock, Trash, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { feedbacksAPI } from '../../utils/apiService';
@@ -217,6 +218,18 @@ export default function FeedbacksGalleryPage() {
         <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+              <Link
+                to="/dashboard"
+                className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                title={t('feedbacksGallery.backToDashboard')}
+                aria-label={t('feedbacksGallery.backToDashboard')}
+              >
+                {isRTL ? (
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                ) : (
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                )}
+              </Link>
               <div className="w-8 h-8 sm:w-12 sm:h-12 bg-primary-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                 <MessageSquare className="w-4 h-4 sm:w-6 sm:h-6 text-primary-600" />
               </div>

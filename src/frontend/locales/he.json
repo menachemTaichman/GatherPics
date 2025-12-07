@@ -654,7 +654,8 @@
     "deleteEventConfirm": "האם אתה בטוח שברצונך למחוק את \"{label}\"?",
     "deleteEventConfirmNoLabel": "האם אתה בטוח שברצונך למחוק את האירוע הזה?",
     "deleteEventCaption": "פעולה זו לא ניתנת לביטול. כל נתוני האירוע יימחקו לצמיתות.",
-    "createNewEvent": "צור אירוע חדש"
+    "createNewEvent": "צור אירוע חדש",
+    "backToDashboard": "חזרה ללוח הבקרה"
   },
   "editEventModal": {
     "createEvent": "צור אירוע",
@@ -745,7 +746,8 @@
     "feedbackDeletedSuccessfully": "משוב נמחק בהצלחה",
     "successfullyDeleted": "נמחק בהצלחה",
     "feedbackSingular": "משוב",
-    "feedbacksPlural": "משובים"
+    "feedbacksPlural": "משובים",
+    "backToDashboard": "חזרה ללוח הבקרה"
   },
   "profilesGallery": {
     "profiles": "פרופילים",
@@ -845,7 +847,9 @@
     "untitledProfile": "פרופיל ללא שם",
     "noEventsFound": "לא נמצאו אירועים",
     "noEventsAvailable": "אין אירועים זמינים",
-    "untitledEvent": "אירוע ללא שם"
+    "untitledEvent": "אירוע ללא שם",
+    "backToDashboard": "חזרה ללוח הבקרה",
+    "backToEvent": "חזרה לאירוע"
   },
   "editProfile": {
     "createProfile": "צור פרופיל",
@@ -1061,7 +1065,8 @@
     "noErrorsLoggedYet": "אין שגיאות שנרשמו עדיין",
     "noAuditLogs": "אין יומני ביקורת",
     "noAuditLogsMatchFilters": "אין יומני ביקורת התואמים לסינונים הנוכחיים",
-    "noAuditLogsAvailableYet": "אין יומני ביקורת זמינים עדיין"
+    "noAuditLogsAvailableYet": "אין יומני ביקורת זמינים עדיין",
+    "backToDashboard": "חזרה ללוח הבקרה"
   },
   "requestsGallery": {
     "requestsTitle": "בקשות",
@@ -1107,7 +1112,8 @@
     "permissionsMayHaveChanged": "הערה: הרשאות עשויות להשתנות מאז שהבקשות הללו עודכנו",
     "approvedGroups": "קבוצות שאושרו",
     "deniedGroups": "קבוצות שנדחו",
-    "pendingGroups": "קבוצות ממתינות"
+    "pendingGroups": "קבוצות ממתינות",
+    "backToEvent": "חזרה לאירוע"
   },
   "groupsGallery": {
     "peopleGallery": "גלריית אנשים",
@@ -1344,7 +1350,8 @@
     "cancel": "ביטול",
     "notesUpdated": "הערות עודכנו",
     "failedToUpdateNotes": "נכשל בעדכון הערות",
-    "uploadNewPhotos": "העלה תמונות חדשות"
+    "uploadNewPhotos": "העלה תמונות חדשות",
+    "backToEvent": "חזרה לאירוע"
   },
   "uploadDetail": {
     "upload": "העלאה",

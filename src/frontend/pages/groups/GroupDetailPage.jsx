@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
+  ArrowRight,
   ArrowUp,
   ArrowDown,
   Filter, 
@@ -1543,7 +1544,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               title={t('groupDetail.backToAllPeople')}
               aria-label={t('groupDetail.backToAllPeople')}
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              {isRTL ? (
+                <ArrowRight className="w-5 h-5 text-gray-600" />
+              ) : (
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              )}
             </Link>
             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
               <div className="relative flex-shrink-0">

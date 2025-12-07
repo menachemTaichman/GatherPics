@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Eye, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Eye, Plus, Trash2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 import { eventsAPI, profilesAPI } from '../../utils/apiService';
@@ -320,6 +320,18 @@ export default function EventsGalleryPage() {
           <div className="w-full px-4 sm:px-8 py-2 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+                <Link
+                  to="/dashboard"
+                  className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                  title={t('eventsGallery.backToDashboard')}
+                  aria-label={t('eventsGallery.backToDashboard')}
+                >
+                  {isRTL ? (
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                  ) : (
+                    <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                  )}
+                </Link>
                 <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                   <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
