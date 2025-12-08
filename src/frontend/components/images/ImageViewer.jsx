@@ -934,6 +934,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Destroy existing instance
     if (pswpInstanceRef.current) {
+      // Clean up RTL counter observer if it exists
+      if (pswpInstanceRef.current._rtlCounterObserver) {
+        pswpInstanceRef.current._rtlCounterObserver.disconnect();
+      }
       pswpInstanceRef.current.destroy();
       pswpInstanceRef.current = null;
     }
@@ -984,61 +988,46 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         onNavigate('jump', newIndex);
       }
       
-      // Fix PhotoSwipe counter for RTL (show correct non-reversed index)
-      if (isRTL) {
-        const counterEl = pswp.element?.querySelector('.pswp__counter');
-        if (counterEl) {
-          const displayIndex = newIndex + 1;
-          counterEl.textContent = `${displayIndex} / ${pswpItems.length}`;
-          counterEl.style.direction = 'ltr'; // Prevent RTL from flipping "3/18" to "18/3"
-        }
-      }
     });
 
     // Initialize PhotoSwipe
     pswp.init();
     
-    // Fix initial PhotoSwipe counter for RTL
+    // Fix PhotoSwipe's counter for RTL mode - show correct non-reversed index
     if (isRTL) {
+      const updateCounter = () => {
+        const counterEl = pswp.element?.querySelector('.pswp__counter');
+        if (counterEl) {
+          const displayIndex = fromRTLIndex(pswp.currIndex) + 1;
+          counterEl.textContent = `${displayIndex} / ${pswpItems.length}`;
+          counterEl.style.direction = 'ltr';
+        }
+      };
+      
+      // Update counter after init and on every change
+      updateCounter();
+      // Also update after a brief delay in case PhotoSwipe updates it after init
+      setTimeout(updateCounter, 0);
+      setTimeout(updateCounter, 50);
+      
+      // Watch for PhotoSwipe's internal counter updates and fix them
       const counterEl = pswp.element?.querySelector('.pswp__counter');
       if (counterEl) {
-        const displayIndex = currentIndex + 1;
-        counterEl.textContent = `${displayIndex} / ${pswpItems.length}`;
-        counterEl.style.direction = 'ltr'; // Prevent RTL from flipping "3/18" to "18/3"
+        const observer = new MutationObserver(() => {
+          const displayIndex = fromRTLIndex(pswp.currIndex) + 1;
+          const expected = `${displayIndex} / ${pswpItems.length}`;
+          if (counterEl.textContent !== expected) {
+            counterEl.textContent = expected;
+          }
+        });
+        observer.observe(counterEl, { childList: true, characterData: true, subtree: true });
+        
+        // Store observer for cleanup
+        pswp._rtlCounterObserver = observer;
       }
     }
     
     // Inject RTL styles
-    if (isRTL) {
-      const styleId = 'pswp-rtl-css';
-      if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
-          /* RTL swipe direction is handled by reversing the dataSource array */
-          /* Only visual RTL adjustments needed here (arrow buttons) */
-
-          .pswp-rtl .pswp__button--arrow--next {
-            right: auto !important;
-            left: 10px !important;
-          }
-          
-          .pswp-rtl .pswp__button--arrow--next svg {
-            transform: scaleX(-1) !important; 
-          }
-
-          .pswp-rtl .pswp__button--arrow--prev {
-            left: auto !important;
-            right: 10px !important;
-          }
-
-          .pswp-rtl .pswp__button--arrow--prev svg {
-            transform: scaleX(-1);
-          }
-        `;
-        document.head.appendChild(style);
-      }
-    }
 
     // Add custom buttons directly to PhotoSwipe root after initialization
     // This ensures proper positioning relative to PhotoSwipe viewport
@@ -1110,7 +1099,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       
       // Adjust PhotoSwipe zoom button position and size
       // Add CSS to move zoom button further from info button and increase size
+      // Also add CSS to hide custom buttons when PhotoSwipe UI is hidden
       const styleId = 'pswp-zoom-button-spacing';
+      const customButtonStyles = `
+        .pswp .pswp__custom-button {
+          transition: opacity 0.25s ease !important;
+        }
+        .pswp:not(.pswp--ui-visible) .pswp__custom-button {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `;
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
@@ -1124,6 +1123,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             width: 40px !important;
             height: 40px !important;
           }
+          ${customButtonStyles}
         `;
         document.head.appendChild(style);
       } else {
@@ -1140,6 +1140,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             width: 40px !important;
             height: 40px !important;
           }
+          ${customButtonStyles}
         `;
       }
 
@@ -1312,6 +1313,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     return () => {
       if (pswpInstanceRef.current) {
+        // Clean up RTL counter observer if it exists
+        if (pswpInstanceRef.current._rtlCounterObserver) {
+          pswpInstanceRef.current._rtlCounterObserver.disconnect();
+        }
         pswpInstanceRef.current.destroy();
         pswpInstanceRef.current = null;
       }
