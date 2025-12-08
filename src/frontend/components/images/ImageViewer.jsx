@@ -1,47 +1,235 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { X, ArrowLeft, ArrowRight, ChevronRight, ChevronLeft } from 'lucide-react';
+import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2, Key, Info } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { TransferFacesModal } from '../groups';
+import { TransferFacesModal, SelectFaceForRepModal } from '../groups';
 import { MoveToMomentModal } from '../moments';
+import { ConfirmDelete } from '../modals';
+import { ManageAccessModal } from '../profiles';
 import useImageActions from './ImageActions';
+import { AlbumQuickAddButton } from '../albums';
 import { imagesAPI, handleAPIError, API_BASE, albumsAPI, eventsAPI } from '../../utils/apiService';
-import { useDataStore, useEventGeneralById } from '../../utils/dataManager';
+import { useDataStore, selectors as storeSelectors, useEventGeneralById } from '../../utils/dataManager';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { useModalFocus } from '../../hooks/useModalFocus';
-import { sortImages, filterImages } from '../../utils/sorting';
+import { sortImages, sortGroups, sortByField, filterImages } from '../../utils/sorting';
 import { useModalStore } from '../../utils/modalManager';
+import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { PermissionGate } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../../contexts/authContext';
 import { useRTL } from '../../hooks/useRTL';
+import { formatDateTime } from '../../utils/dateUtils';
 import PhotoSwipe from 'photoswipe';
 import 'photoswipe/dist/photoswipe.css';
-import { Drawer } from 'vaul';
-import { ImageDetails, ImageViewerActions } from './ImageDetails';
-import '../../styles/vaul.css'; // Ensure Vaul styles are loaded
 
 const EMPTY_ARRAY = Object.freeze([]);
 
+// ImageViewerActions component - inline component for ImageViewer sidebar
+function ImageViewerActions({
+  imageId,
+  imageInfo,
+  eventUrl,
+  showToast,
+  urlHelpers,
+  onImageUpdated,
+  entity,
+  entityId,
+  eventId,
+  imageActions,
+  isUnassociatedGroup = false,
+  isMobile = false
+}) {
+  const { t } = useTranslation();
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
+  const [settingEventRepresentative, setSettingEventRepresentative] = useState(false);
+  const permissions = usePermissions();
+  const eventInfo = useEventGeneralById(eventId);
+
+  const isEventRepresentative = Boolean(eventInfo && imageId && eventInfo.representative_image === imageId);
+  const eventRepresentativeTooltip = isEventRepresentative
+    ? t('imageViewer.currentEventCoverPhoto')
+    : t('imageViewer.setAsEventCoverPhoto');
+
+  const handleSetEventRepresentative = async () => {
+    if (!imageId || !eventUrl || settingEventRepresentative || isEventRepresentative) {
+      return;
+    }
+    try {
+      setSettingEventRepresentative(true);
+      await eventsAPI.update(eventUrl, { representative_image: imageId });
+      showToast(t('imageViewer.eventCoverUpdated'), 'success');
+    } catch (error) {
+      showToast(formatErrorMessage('set event cover', error), 'error');
+    } finally {
+      setSettingEventRepresentative(false);
+    }
+  };
+
+  // Get entity label for modal
+  const entityLabel = entity === 'group' 
+    ? (useDataStore.getState().entities?.[eventId]?.groups?.[entityId]?.label || 'person')
+    : (useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment');
+
+  // Check if action buttons group has any visible buttons
+  const hasActionButtons = true;
+
+  // Check if management buttons exist
+  const hasManagementButtons = (
+    permissions.canUploadAndDeleteImages ||
+    permissions.isProfilesManager
+  );
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        {/* Add to album */}
+        {permissions.canEdit && (
+          <PermissionGate requires="canEdit">
+            <AlbumQuickAddButton {...imageActions.albumQuickAddProps} dropdownDirection="down" />
+          </PermissionGate>
+        )}
+
+        {/* Add to bucket / Remove from bucket */}
+        <button
+          onClick={imageActions.toggleBucket}
+          className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
+          title={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
+          aria-label={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
+        >
+          <ShoppingBag className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
+        </button>
+
+        {/* Separator before management buttons - only if action buttons exist AND management buttons exist */}
+        {hasActionButtons && hasManagementButtons && <span className="text-gray-300">|</span>}
+
+        {/* Delete image */}
+        <PermissionGate requires="canUploadAndDeleteImages">
+          <button
+            onClick={imageActions.deleteImages}
+            className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
+            title={t('imageViewer.deletePhoto')}
+            aria-label={t('imageViewer.deletePhoto')}
+          >
+            <Trash2 className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+          </button>
+        </PermissionGate>
+
+        {/* Manage Access */}
+        <PermissionGate requires="isProfilesManager">
+          <button
+            onClick={() => setShowManageAccessModal(true)}
+            className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
+            title={t('imageViewer.manageProfileAccess')}
+            aria-label={t('imageViewer.manageProfileAccess')}
+          >
+            <Key className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+          </button>
+        </PermissionGate>
+
+        {/* Separator before representative button - only if management buttons exist AND can set representative */}
+        {hasManagementButtons && imageActions.canSetRepresentative && !isUnassociatedGroup && permissions.canEdit && (
+          <span className="text-gray-300">|</span>
+        )}
+
+        {/* Set as representative */}
+        {imageActions.canSetRepresentative && !isUnassociatedGroup && (
+          <PermissionGate requires="canEdit">
+            <button
+              onClick={() => imageActions.setRepresentative()}
+              className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
+                imageActions.isRepresentative
+                  ? 'text-orange-600'
+                  : 'text-yellow-600'
+              }`}
+              title={imageActions.representativeTooltip}
+            >
+              <Star className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
+            </button>
+          </PermissionGate>
+        )}
+
+        {/* Set as event representative */}
+        {imageId && (
+          <PermissionGate requires="canManageEvent">
+            <button
+              onClick={handleSetEventRepresentative}
+              className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center ${
+                isEventRepresentative
+                  ? 'bg-gradient-to-br from-red-500 to-rose-500 text-white hover:from-red-500 hover:to-rose-500'
+                  : 'text-red-600 hover:bg-red-50'
+              } ${settingEventRepresentative ? 'opacity-75 cursor-not-allowed' : ''}`}
+              title={eventRepresentativeTooltip}
+              aria-pressed={isEventRepresentative}
+              disabled={settingEventRepresentative || isEventRepresentative}
+            >
+              <Star className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${isEventRepresentative ? 'fill-current' : ''}`} />
+            </button>
+          </PermissionGate>
+        )}
+      </div>
+
+      {/* Face selection modal for representative */}
+      {imageActions.showFaceSelectionModal && (
+        <SelectFaceForRepModal
+          isOpen={imageActions.showFaceSelectionModal}
+          onClose={imageActions.onCloseFaceSelectionModal}
+          faces={imageActions.facesForSelection}
+          urlHelpers={urlHelpers}
+          groupLabel={entityLabel}
+          onSelect={imageActions.onFaceSelected}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {imageActions.showDeleteConfirmModal && (
+        <ConfirmDelete
+          isOpen={imageActions.showDeleteConfirmModal}
+          onClose={imageActions.onCancelDelete}
+          onConfirm={imageActions.onConfirmDelete}
+          title={t('imageViewer.deletePhoto')}
+          message={t('imageViewer.areYouSureYouWantToDeleteThisPhoto')}
+          simpleMessage={true}
+          images={imageActions.deleteImagesList}
+          confirmText={t('imageViewer.delete')}
+          cancelText={t('imageViewer.cancel')}
+          caption={t('imageViewer.thisActionCannotBeUndone')}
+        />
+      )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="image"
+        entityIds={[imageId]}
+        eventUrl={eventUrl}
+      />
+    </>
+  );
+}
+
 function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false }) {
   const { t } = useTranslation();
-  const permissions = usePermissions();
+  const permissions = usePermissions(); // <-- add this near the top of the component
   const { isRTL, ms, me, startClass, endClass } = useRTL();
   const eventId = useEventId(eventUrl);
   const __renderRef = useRef(0); __renderRef.current += 1;
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
+  // urlHelpers provided by parent, already memoized by eventId
   
   const includeArchivedPreference = usePreference('general.includeArchived', false);
   const includeArchived = includeArchivedOverride !== undefined && includeArchivedOverride !== null
     ? includeArchivedOverride
     : includeArchivedPreference;
+  
+  
   
   // Use universal util for related images
   const relatedImages = useChilds(eventId, entity + 's', parent, 'images', { filterByUploadId, includeArchived, sortBy, sortOrder });
@@ -81,6 +269,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return sorted;
   }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived]);
   
+  useEffect(() => {
+  }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);
+  
   // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
     if (filteredImages.length > 0) {
@@ -92,7 +283,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   const imageId = currentImageId;
   
-  // Apply scopes
+  // Apply scopes after computing current image id so image.albums updates always pass
   const parentScopeKey = useMemo(() => {
     if (!eventId || !entity || parent === null || parent === undefined) return null;
     return `${eventId}:${entity}:${parent}`;
@@ -127,65 +318,115 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   useApplyScopes(appliedScopes);
   const imageMeta = { id: imageId, label: imageId };
+  const displayFilename = imageMeta.label;
+
+  // Diagnostics: track imagesSet ref churn and dependency diffs
+  const imagesSetRef = useRef(null);
+  useEffect(() => {
+    // We no longer read imagesSet directly; rely on useImagesForParent.
+    const prev = imagesSetRef.current;
+    const signature = `${entity || 'none'}:${parent || 'none'}:${Array.isArray(filteredIds) ? filteredIds.length : 0}`;
+    const same = prev === signature;
+    imagesSetRef.current = signature;
+  }, [entity, parent, filteredIds]);
+
+  const depsSigRef = useRef(null);
+  useEffect(() => {
+    const sig = {
+      imageId,
+      currentIndex,
+      parent,
+      entity,
+      sortBy,
+      sortOrder,
+      filteredLen: Array.isArray(filteredIds) ? filteredIds.length : null,
+      includeArchived
+    };
+    const next = JSON.stringify(sig);
+    if (depsSigRef.current && depsSigRef.current !== next) {
+      try {
+        const prev = JSON.parse(depsSigRef.current);
+        const diff = {};
+        Object.keys(sig).forEach(k => { if (prev[k] !== sig[k]) diff[k] = { from: prev[k], to: sig[k] }; });
+      } catch {}
+    }
+    depsSigRef.current = next;
+  }, [imageId, currentIndex, parent, entity, sortBy, sortOrder, includeArchived]);
   
-  // Custom keyboard handler
+  // Custom keyboard handler for ImageViewer-specific shortcuts
   const handleImageViewerKeys = (e) => {
+    // Allow all normal input behavior for input, textarea, and select elements
     const targetTagName = e.target.tagName?.toLowerCase();
     if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
-      return true;
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
     }
       
     switch (e.key) {
       case 'ArrowLeft':
         if (filteredImages.length > 1) {
           handleNavigate(isRTL ? 'next' : 'prev');
-          return true;
+          return true; // Mark as handled (circular via handleNavigate)
         }
         break;
       case 'ArrowRight':
         if (filteredImages.length > 1) {
           handleNavigate(isRTL ? 'prev' : 'next');
-          return true;
+          return true; // Mark as handled (circular via handleNavigate)
         }
         break;
     }
-    return false;
+    return false; // Not handled
   };
   
+  // Stable modal id (must be defined before using useModalFocus)
   const imageViewerModalIdRef = useRef(null);
   if (!imageViewerModalIdRef.current) {
     imageViewerModalIdRef.current = `image-viewer-${Math.random().toString(36).slice(2)}`;
   }
   const imageViewerModalId = imageViewerModalIdRef.current;
 
+  // Use modal focus hook
   const { modalRef } = useModalFocus(true, onClose, {
     customKeyHandler: handleImageViewerKeys,
     allowOutsideScroll: true,
     modalType: 'popup',
     modalId: imageViewerModalId
   });
-
   const [imageInfo, setImageInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef(null);
   const pswpRef = useRef(null);
   const pswpInstanceRef = useRef(null);
+  // Use universal placeholder components instead of hardcoded data URI
   const [showRectangles, setShowRectangles] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState(null);
   const [editIndexValue, setEditIndexValue] = useState();
   const [isEditingIndex, setIsEditingIndex] = useState(false);
-  const imageRef = useRef(null); // Not really used with PhotoSwipe but kept for ref compat if needed
-  const [imageLoaded, setImageLoaded] = useState(false); // PhotoSwipe handles loading, but we track for overlays
+  const imageRef = useRef(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
-  const [transferImageId, setTransferImageId] = useState(null);
+  const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState('');
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
+  const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
+  const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
+  const [albumsHeight, setAlbumsHeight] = useState(() => getPreference('ImageViewer.albumsHeight', 200));
+  const [isResizing, setIsResizing] = useState(false);
+  const sectionsRef = useRef(null);
+  const startResizeYRef = useRef(0);
+  const startAlbumsHeightRef = useRef(0);
   
-  // Detect mobile
+  // Detect mobile - hide sidebar by default on mobile
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.innerWidth < 768;
+    return window.innerWidth < 768; // md breakpoint
   });
   
   useEffect(() => {
@@ -203,43 +444,215 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
     return getPreference('ImageViewer.sidebarOpen', false);
   });
-
+  // Keep controls visible on mobile, auto-hide on desktop
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
+  const [dynamicHeight, setDynamicHeight] = useState(null);
+  // Track initial values to avoid persisting unchanged preferences
   const initialValuesRef = useRef({
+    albumsOpen: getPreference('ImageViewer.albumsOpen', false),
+    facesOpen: getPreference('ImageViewer.facesOpen', false),
+    albumsHeight: getPreference('ImageViewer.albumsHeight', 200),
     sidebarVisible: getPreference('ImageViewer.sidebarOpen', false)
   });
+  // Modal registration for scope lifecycle tied to actual modal open/close (no subscription to modal store)
 
-  // Persist sidebar preference on desktop
+  // Calculate modal dimensions for mobile to maintain landscape aspect ratio
+  const [mobileModalStyle, setMobileModalStyle] = useState({});
+  
   useEffect(() => {
+    if (!isMobile) {
+      setMobileModalStyle({});
+      return;
+    }
+    
+    const calculateMobileDimensions = () => {
+      if (!modalRef.current) return;
+      
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // Leave space for buttons (top and bottom controls)
+      const availableHeight = viewportHeight - 5 * 16; // 5rem for buttons/margins
+      const availableWidth = viewportWidth; // Full width, no margins
+      
+      // Calculate height based on 3:2 aspect ratio (width * 0.67 = height)
+      const aspectRatioHeight = availableWidth * 0.67;
+      
+      // Use the smaller of: aspect ratio height or available viewport height
+      const finalHeight = Math.min(aspectRatioHeight, availableHeight);
+      const finalWidth = finalHeight / 0.67; // Reverse calculate width from height
+      
+      setMobileModalStyle({
+        width: `${Math.min(finalWidth, availableWidth)}px`,
+        height: `${finalHeight}px`,
+        maxWidth: `${availableWidth}px`,
+        maxHeight: `${availableHeight}px`
+      });
+    };
+    
+    calculateMobileDimensions();
+    const resizeHandler = () => calculateMobileDimensions();
+    window.addEventListener('resize', resizeHandler);
+    const timerId = setTimeout(calculateMobileDimensions, 50);
+    
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener('resize', resizeHandler);
+    };
+  }, [isMobile, sidebarVisible]);
+  
+  useEffect(() => {
+    let rafId = 0;
+    const calculateAndSetHeight = () => {
+      if (isMobile) return; // Skip desktop calculation on mobile
+      if (!modalRef.current) return;
+      rafId = requestAnimationFrame(() => {
+        if (!modalRef.current) return;
+        const modalElement = modalRef.current;
+        const modalWidth = modalElement.offsetWidth;
+        const sidebarElement = modalElement.querySelector('.image-viewer-sidebar');
+        const sidebarWidth = sidebarVisible && sidebarElement ? sidebarElement.offsetWidth : 0;
+        const imageContainerWidth = modalWidth - sidebarWidth;
+        let newHeight = Math.round((2 / 3) * imageContainerWidth);
+        const verticalMarginRem = 3;
+        const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        const verticalMarginPx = verticalMarginRem * rootFontSize;
+        const maxHeight = window.innerHeight - verticalMarginPx;
+        newHeight = Math.min(newHeight, maxHeight);
+        // Avoid triggering re-renders from unused state; log once if changed
+        if (dynamicHeight !== newHeight) {
+        }
+        // setDynamicHeight(prev => (prev !== newHeight ? newHeight : prev));
+      });
+    };
+
+    calculateAndSetHeight();
+    const resizeHandler = () => calculateAndSetHeight();
+    window.addEventListener('resize', resizeHandler);
+    const timerId = setTimeout(calculateAndSetHeight, 50);
+    return () => {
+      try { cancelAnimationFrame(rafId); } catch {}
+      clearTimeout(timerId);
+      window.removeEventListener('resize', resizeHandler);
+    };
+  }, [sidebarVisible, isMobile]);
+
+  // Register modal on mount and keep scopes in sync with current image id
+  useEffect(() => {
+    // Register once on mount (scopes are managed via useApplyScopes)
+    const { registerModal, unregisterModal } = useModalStore.getState();
+    try {
+      registerModal({ id: imageViewerModalId, type: 'popup', allowOutsideScroll: true });
+    } catch {}
+    return () => { try { unregisterModal(imageViewerModalId); } catch {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Scroll lock and focus trapping handled by useModalFocus (popup)
+
+  // Force re-render of face rectangles when image changes
+  useEffect(() => {
+    if (imageLoaded && showRectangles) {
+      setRectangleKey(prev => prev + 1);
+    }
+  }, [imageLoaded, showRectangles, imageId]);
+
+  // Respect user choice; do not auto-open on image change
+
+  // Persist UI state (only when values actually change from initial to avoid unnecessary API calls on mount)
+  useEffect(() => {
+    if (albumsOpen !== initialValuesRef.current.albumsOpen) {
+      initialValuesRef.current.albumsOpen = albumsOpen;
+      setPreference('ImageViewer.albumsOpen', albumsOpen);
+    }
+  }, [albumsOpen]);
+  useEffect(() => {
+    if (facesOpen !== initialValuesRef.current.facesOpen) {
+      initialValuesRef.current.facesOpen = facesOpen;
+      setPreference('ImageViewer.facesOpen', facesOpen);
+    }
+  }, [facesOpen]);
+  useEffect(() => {
+    if (albumsHeight !== initialValuesRef.current.albumsHeight) {
+      initialValuesRef.current.albumsHeight = albumsHeight;
+      setPreference('ImageViewer.albumsHeight', albumsHeight);
+    }
+  }, [albumsHeight]);
+  useEffect(() => {
+    // Only persist sidebar preference on desktop
     if (!isMobile && sidebarVisible !== initialValuesRef.current.sidebarVisible) {
       initialValuesRef.current.sidebarVisible = sidebarVisible;
       setPreference('ImageViewer.sidebarOpen', sidebarVisible);
     }
   }, [sidebarVisible, isMobile]);
 
-  // Register modal
+  // Global mouse handlers for resizer
   useEffect(() => {
-    const { registerModal, unregisterModal } = useModalStore.getState();
-    try {
-      registerModal({ id: imageViewerModalId, type: 'popup', allowOutsideScroll: true });
-    } catch {}
-    return () => { try { unregisterModal(imageViewerModalId); } catch {} };
-  }, []);
-
-  // Force re-render of face rectangles when image changes
-  useEffect(() => {
-    if (showRectangles) {
-      setRectangleKey(prev => prev + 1);
+    const handleMouseMove = (e) => {
+      if (!isResizing || !sectionsRef.current) return;
+      const rect = sectionsRef.current.getBoundingClientRect();
+      const delta = e.clientY - startResizeYRef.current;
+      const minAlbum = 16;
+      const minFaces = 100;
+      const maxAlbum = Math.max(minAlbum, rect.height - minFaces);
+      const proposed = startAlbumsHeightRef.current + delta;
+      const next = Math.max(minAlbum, Math.min(proposed, maxAlbum));
+      setAlbumsHeight(next);
+    };
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
+      }
+    };
+    if (isResizing) {
+      try { document.body.style.cursor = 'row-resize'; document.body.style.userSelect = 'none'; } catch {}
     }
-  }, [showRectangles, imageId]);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
+    };
+  }, [isResizing]);
+
+
+  const startResize = (e) => {
+    startResizeYRef.current = e.clientY;
+    startAlbumsHeightRef.current = albumsHeight;
+    setIsResizing(true);
+  };
+
+  const handleRemoveFromAlbum = async (album) => {
+    if (!storeImageInfo) return;
+    try {
+      const result = await albumsAPI.removeImages(album.id, [storeImageInfo.id], eventUrl);
+      
+      // Changes are automatically applied by apiService interceptor
+      
+      const count = result?.len_added ?? 1;
+      showToast(
+        <span>
+          {t('imageViewer.removedFromAlbum', { count })} {' '}
+          <a href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</a>
+        </span>,
+        'success'
+      );
+    } catch (e) {
+      showToast(formatErrorMessage('remove from album', e), 'error');
+    }
+  };
 
   const handleImageUpdated = (updates) => {
-    // Store updates automatically
+    // No need to manually update state - the store is automatically updated by the response interceptor
+    // The component will re-render when the store changes due to our subscriptions
   };
 
   const handleAlbumAdded = (album) => {
-    // Store updates automatically
+    // No need to manually update state - the store is automatically updated by the response interceptor
+    // The component will re-render when the store changes due to our subscriptions
   };
 
   const imageActions = useImageActions({
@@ -258,12 +671,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     if (!onNavigate || !filteredImages || filteredImages.length === 0) return;
     if (direction === 'prev') {
       if (effectiveIndex === 0 && filteredImages.length > 1) {
+        // Wrap from first to last
         onNavigate('jump', filteredImages.length - 1);
       } else if (effectiveIndex > 0) {
         onNavigate('prev');
       }
     } else if (direction === 'next') {
       if (effectiveIndex === filteredImages.length - 1 && filteredImages.length > 1) {
+        // Wrap from last to first
         onNavigate('jump', 0);
       } else if (effectiveIndex < filteredImages.length - 1) {
         onNavigate('next');
@@ -274,10 +689,15 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   };
 
+
+  // Subscribe to current image info from store
   const storeImageInfo = useDataStore(state => imageId ? state.entities?.[eventId]?.images?.[imageId] : null);
   
+  // Subscribe to moments entities for reactive updates
+  // Avoid subscribing to entire moments map; read on demand
+  
   const momentInfo = useMemo(() => {
-    if (!isAuthenticated) return null;
+    if (!isAuthenticated) return null; // No moment info when not authenticated
     const mid = storeImageInfo?.moment_id;
     if (!mid) return null;
     const m = (useDataStore.getState().entities?.[eventId]?.moments || {})[mid];
@@ -285,9 +705,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return { id: mid, label: storeImageInfo?.moment_label };
   }, [storeImageInfo?.moment_id, storeImageInfo?.moment_label, isAuthenticated, eventId]);
 
+
   const storeFacesList = useChilds(eventId, 'images', imageId, 'faces');
   const storeAlbumsList = useChilds(eventId, 'images', imageId, 'albums');
   
+  // Create placeholder lists when not authenticated
   const placeholderFaces = useMemo(() => {
     if (isAuthenticated) return EMPTY_ARRAY;
     return [
@@ -304,96 +726,185 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     ];
   }, [isAuthenticated]);
   
+  // Return stable arrays or placeholders
   const facesList = isAuthenticated ? storeFacesList : placeholderFaces;
   const albumsList = isAuthenticated ? storeAlbumsList : placeholderAlbums;
   
-  // Refresh info if albums list seems stale
+  useEffect(() => {
+  }, [facesList, albumsList]);
+  // If albums list seems stale after an add/remove, refresh image info once
   const prevAlbumsCountRef = useRef(null);
   useEffect(() => {
     const count = Array.isArray(albumsList) ? albumsList.length : 0;
     if (prevAlbumsCountRef.current !== null && count === prevAlbumsCountRef.current && imageId) {
+      // Trigger a lightweight info refresh to ensure relations are hydrated
+      // Scope is already managed by useApplyScopes
       imagesAPI.getImage(imageId, eventUrl).catch(() => {});
     }
     prevAlbumsCountRef.current = count;
   }, [albumsList, imageId, eventUrl]);
 
+  // Find the current image index in the store data
   const currentImageIndex = useMemo(() => {
     if (!imageId || !filteredImages.length) return 0;
     const foundIndex = filteredImages.findIndex(img => img.id === imageId);
-    return foundIndex >= 0 ? foundIndex : Math.min(currentIndex, filteredImages.length - 1);
+    const result = foundIndex >= 0 ? foundIndex : Math.min(currentIndex, filteredImages.length - 1);
+    
+    return result;
   }, [imageId, filteredImages, currentIndex]);
 
+  // Use the store-based index for navigation
   const effectiveIndex = currentImageIndex;
 
+  // Generate alt text for the main image
   const imageAltText = useMemo(() => {
     if (!entity || !parent) {
       return storeImageInfo?.label || imageId || 'Photo';
     }
+    
+    // Get context type and label
+    let contextType = '';
+    let contextLabel = '';
+    
     const store = useDataStore.getState();
     const entities = store.entities?.[eventId] || {};
-    let contextLabel = '';
-    if (entity === 'group') contextLabel = entities.groups?.[parent]?.label || '';
-    else if (entity === 'moment') contextLabel = entities.moments?.[parent]?.label || '';
-    else if (entity === 'album') contextLabel = entities.albums?.[parent]?.label || '';
+    
+    if (entity === 'group') {
+      contextType = 'Person';
+      contextLabel = entities.groups?.[parent]?.label || '';
+    } else if (entity === 'moment') {
+      contextType = 'Moment';
+      contextLabel = entities.moments?.[parent]?.label || '';
+    } else if (entity === 'album') {
+      contextType = 'Album';
+      contextLabel = entities.albums?.[parent]?.label || '';
+    } else if (entity === 'upload') {
+      contextType = 'Upload';
+      contextLabel = entities.uploads?.[parent]?.profile_label || parent;
+    }
     
     const photoNumber = effectiveIndex + 1;
-    const baseText = `Photo #${photoNumber}`;
+    const contextPart = contextLabel ? `${contextType} ${contextLabel}` : contextType;
+    const baseText = `Display size of Photo #${photoNumber} in ${contextPart}`;
     const description = storeImageInfo?.description?.trim();
+    
     return description ? `${baseText}: ${description}` : baseText;
   }, [entity, parent, effectiveIndex, storeImageInfo?.description, eventId, imageId]);
+
+  // Update description value when image changes
+  useEffect(() => {
+    if (storeImageInfo) {
+      setDescriptionValue(storeImageInfo.description || '');
+      setIsEditingDescription(false);
+    }
+  }, [storeImageInfo?.description, imageId]);
   
   // Update sidebar visibility when mobile state changes
   useEffect(() => {
     if (isMobile && sidebarVisible) {
-      setSidebarVisible(false); // Close sidebar when entering mobile to use Drawer
+      // Auto-hide sidebar when switching to mobile to save space
+      setSidebarVisible(false);
     }
   }, [isMobile]);
 
-  // Fetch image info
+  // Fetch image info when image changes
   useEffect(() => {
     if (!imageId) return;
+    setImageError(false); // Reset error state on image change
     setImageLoaded(false);
     fetchImageInfo();
+    
+    // Listen for logout to clear image data
     const handleAuthLogout = () => {
       setImageInfo(null);
       setLoading(false);
     };
+    
     window.addEventListener('auth:logout', handleAuthLogout);
     return () => window.removeEventListener('auth:logout', handleAuthLogout);
   }, [imageId]);
 
   const fetchImageInfo = async () => {
+    // Skip fetching if not authenticated
     if (!isAuthenticated) {
       setImageInfo(null);
       setLoading(false);
       return;
     }
+    
     try {
-      setLoading(true);
+      setLoading(prev => (prev === true ? prev : true));
       if (imageId && eventUrl) {
+        // Request details using new getImage API
+        // Scope is already managed by useApplyScopes
         const response = await imagesAPI.getImage(imageId, eventUrl);
-        // Store updated automatically
-        setImageInfo(useDataStore.getState().entities?.[eventId]?.images?.[imageId] || null);
+        
+        // Changes are automatically applied by apiService interceptor
+        
+        const entities = useDataStore.getState().entities?.[eventId] || {};
+        const info = entities.images?.[imageId] || null;
+        
+        if (info) {
+          setImageInfo(info);
+          // faces, albums, moment are derived from entities
+          try {
+            const store = useDataStore.getState();
+            const seen = new Set();
+            const items = [];
+            
+            // Get face IDs from the Set and look up face data
+            if (info.faces instanceof Set) {
+              const faceIds = Array.from(info.faces);
+              const faceEntities = store.entities?.[eventId]?.faces || {};
+              
+              faceIds.forEach((faceId) => {
+                const face = faceEntities[faceId];
+                if (!face) return;
+                
+                const gid = face.groupId || face.group_id;
+                if (!gid || seen.has(gid)) return;
+                seen.add(gid);
+                
+                const groups = store.entities?.[eventId]?.groups || {};
+                const label = face.group_label || (groups[gid] && groups[gid].label) || undefined;
+                items.push(label ? { id: gid, label } : { id: gid });
+              });
+            }
+            
+          } catch {}
         } else {
           setImageInfo(null);
+          // derived lists will be empty
+        }
+      } else {
+        setImageInfo(null);
+        setFaces([]);
+        // derived lists will be empty
       }
     } catch (error) {
       console.error('Error fetching image info:', error);
     } finally {
-      setLoading(false);
+      setLoading(prev => (prev === false ? prev : false));
     }
   };
 
-  // Build PhotoSwipe items
+
+  // Build PhotoSwipe items with progressive loading (thumbnail -> display)
   const pswpItems = useMemo(() => {
     if (!filteredImages || !urlHelpers || !eventId) return [];
+    
     return filteredImages.map((img) => {
       const imgId = img.id;
       const thumbnailUrl = urlHelpers.getThumbnailUrl ? urlHelpers.getThumbnailUrl(imgId) : null;
       const displayUrl = urlHelpers.getDisplayImageUrl ? urlHelpers.getDisplayImageUrl(imgId) : null;
+      
+      // Use display as main source, thumbnail for progressive loading
+      const src = displayUrl || thumbnailUrl;
+      const msrc = thumbnailUrl; // Medium source (thumbnail) for progressive loading
+      
       return {
-        src: displayUrl || thumbnailUrl || '',
-        msrc: thumbnailUrl || displayUrl || '',
+        src: src || '',
+        msrc: msrc || src || '', // Thumbnail for immediate display
         w: img.width || storeImageInfo?.width || 2000,
         h: img.height || storeImageInfo?.height || 1500,
         alt: img.label || imageAltText,
@@ -401,13 +912,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     });
   }, [filteredImages, urlHelpers, eventId, storeImageInfo, imageAltText]);
 
-  // Initialize PhotoSwipe
+  // Initialize PhotoSwipe when image changes
   useEffect(() => {
     if (!pswpRef.current || !imageId || pswpItems.length === 0) return;
     
     const currentIndex = effectiveIndex;
     if (currentIndex < 0 || currentIndex >= pswpItems.length) return;
 
+    // Destroy existing instance
     if (pswpInstanceRef.current) {
       pswpInstanceRef.current.destroy();
       pswpInstanceRef.current = null;
@@ -416,52 +928,38 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const options = {
       dataSource: pswpItems,
       index: currentIndex,
+      mainClass: isRTL ? 'pswp-rtl' : '',
       showHideAnimationType: 'none',
       zoomAnimationDuration: 200,
-      allowPanToNext: false,
+      allowPanToNext: true,
       spacing: 0,
-      loop: false,
-      pinchToClose: false,
+      loop: true,
+      pinchToClose: true,
       closeOnVerticalDrag: false,
-      escKey: false,
-      arrowKeys: false,
+      escKey: false, // We handle close ourselves
+      arrowKeys: false, // We handle navigation ourselves
       returnFocus: false,
-      trapFocus: false,
       clickToCloseNonZoomable: false,
       imageClickAction: 'zoom',
-      bgClickAction: 'zoom',
+      bgClickAction: 'zoom', // Changed from 'close' to prevent PhotoSwipe from closing on background click
       tapAction: 'toggle-controls',
       doubleTapAction: 'zoom',
       maxSpreadZoom: 4,
-      bgOpacity: 0.9,
-      getDoubleTapZoom: (isMouseClick, item) => item.initialZoomLevel < 2 ? 2 : 1,
+      bgOpacity: 0.9, // Darken the background (0 = transparent, 1 = fully opaque black)
+      getDoubleTapZoom: (isMouseClick, item) => {
+        return item.initialZoomLevel < 2 ? 2 : 1;
+      },
     };
 
     const pswp = new PhotoSwipe(options);
 
-    pswp.on('uiRegister', () => {
-      pswp.ui.registerElement({
-        name: 'info-toggle',
-        order: 15,
-        isButton: true,
-        tagName: 'button',
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
-        onClick: (event, el, pswp) => {
-          setSidebarVisible(prev => !prev);
-        },
-        title: t('imageViewer.showDetails'),
-        className: 'pswp__button pswp__button--info'
-      });
-
-      // Note: Custom buttons for favorites and archive are rendered via React overlay
-      // to ensure proper positioning at bottom and consistent styling with the app.
-      
+    // Handle close event from PhotoSwipe
+    pswp.on('close', () => {
+      // Don't close the modal when PhotoSwipe closes - we handle that ourselves
+      // onClose();
     });
 
-    pswp.on('change', () => {
-
-    });
-
+    // Handle navigation
     pswp.on('change', () => {
       const newIndex = pswp.currIndex;
       if (newIndex !== effectiveIndex && onNavigate) {
@@ -469,19 +967,314 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       }
     });
 
-    pswp.on('afterInit', () => {
-       setImageLoaded(true); // Signal that image "loaded" (PhotoSwipe is ready)
-    });
-
+    // Initialize PhotoSwipe
     pswp.init();
     
-    // Add custom buttons (Favorite/Archive) to PhotoSwipe if needed, 
-    // but we can also overlay them in React which is cleaner and easier to maintain.
-    // The previous implementation added them to DOM directly. 
-    // For this refactor, let's keep the React overlay for controls which is already there (lines 1667+).
-    // The DOM injection was for when PhotoSwipe was full screen and React controls were hidden?
-    // Actually the previous implementation DID inject buttons. I'll omit that for brevity and rely on React overlay,
-    // which is present in the original code and works fine.
+    // Inject RTL styles
+    if (isRTL) {
+      const styleId = 'pswp-rtl-css';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          .pswp-rtl .pswp__container {
+            direction: rtl;
+            flex-direction: row-reverse !important;
+          }
+
+          .pswp-rtl .pswp__item {
+            direction: rtl;
+          }
+
+          .pswp-rtl .pswp__button--arrow--next {
+            right: auto !important;
+            left: 10px !important;
+          }
+          
+          .pswp-rtl .pswp__button--arrow--next svg {
+            transform: scaleX(-1) !important; 
+          }
+
+          .pswp-rtl .pswp__button--arrow--prev {
+            left: auto !important;
+            right: 10px !important;
+          }
+
+          .pswp-rtl .pswp__button--arrow--prev svg {
+            transform: scaleX(-1);
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+
+    // Add custom buttons directly to PhotoSwipe root after initialization
+    // This ensures proper positioning relative to PhotoSwipe viewport
+    const pswpRoot = pswp.element;
+    if (pswpRoot) {
+      // Set direction for RTL support
+      pswpRoot.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
+      // Info button - positioned in toolbar between close and zoom buttons
+      const infoBtn = document.createElement('div');
+      infoBtn.className = 'pswp__custom-button pswp__custom-button--info';
+      infoBtn.style.cssText = `
+        position: absolute;
+        top: 20px;
+        ${isRTL ? 'right: auto; left: 57px;' : 'left: auto; right: 59px;'}
+        z-index: 2000;
+        width: 21px;
+        height: 21px;
+      `;
+      
+      infoBtn.innerHTML = `
+        <button 
+          type="button"
+          style="
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            opacity: 0.75;
+            transition: opacity 0.2s;
+          "
+          aria-label="${t('imageViewer.info') || 'Info'}"
+          title="${t('imageViewer.info') || 'Info'}"
+        >
+          <svg 
+            viewBox="0 0 24 24" 
+            style="
+              width: 24px; 
+              height: 24px; 
+              fill: none; 
+              stroke: #fff; 
+              stroke-width: 2;
+              pointer-events: none;
+            "
+          >
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <circle cx="12" cy="8" r="0.1" fill="#fff"></circle>
+          </svg>
+        </button>
+      `;
+      
+      const button = infoBtn.querySelector('button');
+      if (button) {
+        button.onmouseenter = () => { button.style.opacity = '1'; };
+        button.onmouseleave = () => { button.style.opacity = '0.75'; };
+        button.onclick = (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          // TODO: Open drawer in future
+        };
+      }
+      
+      pswpRoot.appendChild(infoBtn);
+      
+      // Adjust PhotoSwipe zoom button position and size
+      // Add CSS to move zoom button further from info button and increase size
+      const styleId = 'pswp-zoom-button-spacing';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          .pswp__button--zoom {
+            ${isRTL ? 'left: 27px !important;' : 'right: 27px !important;'};
+            width: 52px !important;
+            height: 52px !important;
+          }
+          .pswp__button--zoom svg {
+            width: 40px !important;
+            height: 40px !important;
+          }
+        `;
+        document.head.appendChild(style);
+      } else {
+        // Update existing style if RTL changes
+        const existingStyle = document.getElementById(styleId);
+        existingStyle.textContent = `
+          .pswp__button--zoom {
+            ${isRTL ? 'left: 29px !important;' : 'right: 29px !important;'};
+            width: 52px !important;
+            height: 52px !important;
+          }
+          .pswp__button--zoom svg {
+            top: 11px !important;
+            width: 40px !important;
+            height: 40px !important;
+          }
+        `;
+      }
+
+      // Favorite button
+      if (permissions.hasFavoritesAlbum && (permissions.canEdit || imageActions.isFavorite)) {
+        const favoriteBtn = document.createElement('div');
+        favoriteBtn.className = 'pswp__custom-button pswp__custom-button--favorite';
+        favoriteBtn.style.cssText = `
+          position: absolute;
+          bottom: 20px;
+          ${isRTL ? 'left: 20px; right: auto;' : 'right: 20px; left: auto;'}
+          z-index: 2000;
+          width: 44px;
+          height: 44px;
+        `;
+        
+        const updateFavoriteButton = () => {
+          const isFavorite = imageActions.isFavorite;
+          const canEdit = permissions.canEdit;
+          favoriteBtn.innerHTML = `
+            <button 
+              type="button"
+              style="
+                width: 100%;
+                height: 100%;
+                background: transparent;
+                border: none;
+                cursor: ${canEdit ? 'pointer' : 'default'};
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                opacity: ${canEdit ? '1' : '0.8'};
+              "
+              ${!canEdit ? 'disabled' : ''}
+              aria-label="${isFavorite ? t('imageViewer.removeFromFavorites') : t('imageViewer.addToFavorites')}"
+              title="${isFavorite ? t('imageViewer.removeFromFavorites') : t('imageViewer.addToFavorites')}"
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                style="
+                  width: 24px; 
+                  height: 24px; 
+                  fill: ${isFavorite ? '#ef4444' : 'none'}; 
+                  stroke: ${isFavorite ? '#ef4444' : '#fff'}; 
+                  stroke-width: 2;
+                  pointer-events: none;
+                "
+              >
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+          `;
+          
+          const button = favoriteBtn.querySelector('button');
+          if (button && canEdit) {
+            button.onclick = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              imageActions.toggleFavorite();
+              setTimeout(() => updateFavoriteButton(), 100);
+            };
+          }
+        };
+        
+        updateFavoriteButton();
+        pswpRoot.appendChild(favoriteBtn);
+        
+        // Update button when image changes
+        pswp.on('change', () => {
+          updateFavoriteButton();
+        });
+      }
+      
+      // Archive button
+      if (permissions.hasArchiveAlbum && (permissions.canEdit || imageActions.isArchived)) {
+        const archiveBtn = document.createElement('div');
+        archiveBtn.className = 'pswp__custom-button pswp__custom-button--archive';
+        archiveBtn.style.cssText = `
+          position: absolute;
+          bottom: 20px;
+          ${isRTL ? 'left: 72px; right: auto;' : 'right: 72px; left: auto;'}
+          z-index: 2000;
+          width: 44px;
+          height: 44px;
+        `;
+        
+        const updateArchiveButton = () => {
+          const isArchived = imageActions.isArchived;
+          const canEdit = permissions.canEdit;
+          archiveBtn.innerHTML = `
+            <button 
+              type="button"
+              style="
+                width: 100%;
+                height: 100%;
+                background: transparent;
+                border: none;
+                cursor: ${canEdit ? 'pointer' : 'default'};
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                opacity: ${canEdit ? '1' : '0.8'};
+              "
+              ${!canEdit ? 'disabled' : ''}
+              aria-label="${isArchived ? t('imageViewer.removeFromArchive') : t('imageViewer.moveToArchive')}"
+              title="${isArchived ? t('imageViewer.removeFromArchive') : t('imageViewer.moveToArchive')}"
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                style="
+                  width: 24px; 
+                  height: 24px; 
+                  fill: none; 
+                  stroke: ${isArchived ? '#fff' : '#6b7280'}; 
+                  stroke-width: 2;
+                  pointer-events: none;
+                "
+              >
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
+              </svg>
+            </button>
+          `;
+          
+          const button = archiveBtn.querySelector('button');
+          if (button && canEdit) {
+            button.onclick = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              imageActions.toggleArchive();
+              setTimeout(() => updateArchiveButton(), 100);
+            };
+          }
+        };
+        
+        updateArchiveButton();
+        pswpRoot.appendChild(archiveBtn);
+        
+        // Update button when image changes
+        pswp.on('change', () => {
+          updateArchiveButton();
+        });
+      }
+    }
+    
+    // Disable keyboard handling after init to avoid conflicts with our modal focus system
+    if (pswp.keyboard) {
+      // Remove focus event listeners to prevent stack overflow
+      const keyboard = pswp.keyboard;
+      try {
+        if (keyboard._onFocusIn) {
+          document.removeEventListener('focusin', keyboard._onFocusIn);
+        }
+        if (keyboard._onFocusOut) {
+          document.removeEventListener('focusout', keyboard._onFocusOut);
+        }
+        // Remove keyboard event listeners if they exist
+        if (keyboard._onKeyDown) {
+          document.removeEventListener('keydown', keyboard._onKeyDown);
+        }
+      } catch (e) {
+        // Ignore errors if listeners don't exist or can't be removed
+      }
+      // Just null out the keyboard reference - don't try to destroy it
+      pswp.keyboard = null;
+    }
     
     pswpInstanceRef.current = pswp;
 
@@ -491,14 +1284,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         pswpInstanceRef.current = null;
       }
     };
-  }, [imageId, effectiveIndex, pswpItems, onNavigate]);
+  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL]);
 
-  // Sync PhotoSwipe
+  // Sync PhotoSwipe when index changes externally
   useEffect(() => {
     if (pswpInstanceRef.current && effectiveIndex !== pswpInstanceRef.current.currIndex) {
       pswpInstanceRef.current.goTo(effectiveIndex);
     }
   }, [effectiveIndex]);
+
+  // PhotoSwipe handles all zoom/pan functionality natively
+
+
 
   const handleFaceClick = (index) => {
     if (selectedFaceIndex === index) {
@@ -509,145 +1306,407 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   };
 
   const handleFaceNavigation = (face) => {
-    // ... logic ...
-  };
-
-  const handleMomentLinkClick = (e) => {
-    // ... logic ...
-    if (shouldLetBrowserHandle(e)) return;
-    e.stopPropagation(); e.preventDefault();
-    if (momentInfo && eventUrl) {
-      const targetUrl = `/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`;
-      navigate(targetUrl, { state: { highlightImages: [imageId], highlightMoment: momentInfo.label } });
-      setTimeout(() => onClose(), 50);
+    const gid = face?.groupId || face?.group_id;
+    const label = gid ? ((useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '') : '';
+    if (label) {
+      navigate(`/${eventUrl}/people/${encodeURIComponent(label)}`, {
+        state: { highlightImages: [imageId] }
+      });
+      onClose();
     }
   };
 
-  const shouldLetBrowserHandle = (e) => e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1);
+  const handleJumpToMoment = () => {
+    if (momentInfo && eventUrl) {
+      // Always use direct navigation when we have eventUrl for proper routing
+      const targetUrl = `/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`;
+      navigate(targetUrl, {
+        state: {
+          highlightImages: [imageId],
+          highlightMoment: momentInfo.label
+        }
+      });
+      // Close the modal after a short delay to let navigation complete
+      setTimeout(() => onClose(), 50);
+    } else if (momentInfo && onJumpToMoment) {
+      // Fallback to callback if no eventUrl
+      onJumpToMoment(momentInfo);
+      onClose();
+    }
+  };
+
+  const handleMomentLinkClick = (e) => {
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
+    e.stopPropagation();
+    e.preventDefault();
+    
+    // Navigate first, then close modal
+    if (momentInfo && eventUrl) {
+      // Always use direct navigation when we have eventUrl for proper routing
+      const targetUrl = `/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`;
+      navigate(targetUrl, {
+        state: {
+          highlightImages: [imageId],
+          highlightMoment: momentInfo.label
+        }
+      });
+      // Close the modal after a short delay to let navigation complete
+      setTimeout(() => onClose(), 50);
+    } else if (momentInfo && onJumpToMoment) {
+      // Fallback to callback if no eventUrl
+      onJumpToMoment(momentInfo);
+      onClose();
+    }
+  };
+
+  const shouldLetBrowserHandle = (e) => {
+    // Allow default for modifier/middle/double click so new tab/window works
+    return e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1);
+  };
 
   const handleAlbumLinkClick = (e, album) => {
-    if (shouldLetBrowserHandle(e)) return;
-    e.stopPropagation(); e.preventDefault();
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
+    e.stopPropagation();
+    e.preventDefault();
     if (!album) return;
-    navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, { state: { highlightImages: [imageId] } });
+    navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, {
+      state: { highlightImages: [imageId] }
+    });
     onClose();
   };
 
   const handlePersonLinkClick = (e, face) => {
-    if (shouldLetBrowserHandle(e)) return;
-    e.stopPropagation(); e.preventDefault();
-    const gid = face?.groupId || face?.group_id;
-    const label = (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '';
-    if (!label) return;
-    navigate(`/${eventUrl}/people/${encodeURIComponent(label)}`, { state: { highlightImages: [imageId] } });
+    if (shouldLetBrowserHandle(e)) return; // Let browser handle
+    e.stopPropagation();
+    e.preventDefault();
+    const groupLabel = getGroupLabel(face);
+    if (!groupLabel) return;
+    navigate(`/${eventUrl}/people/${encodeURIComponent(groupLabel)}`, {
+      state: { highlightImages: [imageId] }
+    });
     onClose();
   };
 
   const handleTransferFace = (face) => {
     setSelectedFaceForTransfer(face);
-    setTransferImageId(imageId);
+    setTransferImageId(imageId); // Store current image ID before transfer
     setShowTransferModal(true);
   };
 
   const handleTransferComplete = async (result) => {
+    // Modal already showed the toast, we just handle UI state
+    // Store will be updated automatically by the API response changes
+    
+    // Close the transfer modal
     setShowTransferModal(false);
     setSelectedFaceForTransfer(null);
+    
+    // The parent component (GroupDetail) is responsible for grid/navigation updates.
+    // Pass through the result if the transferred face belongs to the currently viewed group.
     if (onTransferComplete && selectedFaceForTransfer && selectedFaceForTransfer.group_id === currentGroupId) {
       onTransferComplete(result);
     }
+
+    // If the transfer resulted in the source group being deleted (a merge),
+    // navigate to the same image in the target group
     if (result?.source_deleted && transferImageId) {
+      // Wait for GroupDetail to handle group navigation first
       setTimeout(() => {
+        // Find the image in the new group's images
         const targetGroupId = result.target_group_id;
         if (targetGroupId) {
-            // Logic to jump to new image in target group
-            // Simplified for brevity
+          const entities = useDataStore.getState().entities?.[eventId] || {};
+          const targetGroupImages = entities.groups?.[targetGroupId]?.images;
+
+          if (targetGroupImages instanceof Set) {
+            const imageIds = Array.from(targetGroupImages);
+            const newIndex = imageIds.findIndex(id => id === transferImageId);
+            if (newIndex >= 0) {
+              // Navigate to the same image in the target group
+              onNavigate('jump', newIndex);
+            }
+          }
         }
-        setTransferImageId(null);
-      }, 100);
+        setTransferImageId(null); // Clear stored image ID
+      }, 100); // Small delay to ensure GroupDetail navigation completes first
     } else {
-      setTransferImageId(null);
+      setTransferImageId(null); // Clear stored image ID
     }
   };
 
   const handleMoveToMomentComplete = async (result) => {
+    // Handle move completion - toast already shown by modal
     setShowMoveToMomentModal(false);
   };
 
-  const handleRemoveFromAlbum = async (album) => {
-    if (!storeImageInfo) return;
-    try {
-      const result = await albumsAPI.removeImages(album.id, [storeImageInfo.id], eventUrl);
-      showToast(t('imageViewer.removedFromAlbum', { count: result?.len_added ?? 1 }), 'success');
-    } catch (e) {
-      showToast(formatErrorMessage('remove from album', e), 'error');
+  const handleDescriptionClick = () => {
+    if (permissions.canEdit && !isEditingDescription) {
+      setIsEditingDescription(true);
     }
   };
 
+  const handleDescriptionSave = async () => {
+    if (!imageId || !permissions.canEdit || isSavingDescription) return;
+    
+    try {
+      setIsSavingDescription(true);
+      const currentDescription = storeImageInfo?.description || '';
+      const newDescription = descriptionValue.trim();
+      
+      // Only save if changed
+      if (newDescription !== currentDescription) {
+        await imagesAPI.update(imageId, { description: newDescription }, eventUrl);
+        // Changes are automatically applied by apiService interceptor
+        showToast(t('imageViewer.descriptionUpdated', { defaultValue: 'Description updated' }), 'success');
+      }
+      
+      setIsEditingDescription(false);
+    } catch (error) {
+      showToast(formatErrorMessage('update description', error), 'error');
+      // Reset to original value on error
+      setDescriptionValue(storeImageInfo?.description || '');
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
+
+  const handleDescriptionCancel = () => {
+    setDescriptionValue(storeImageInfo?.description || '');
+    setIsEditingDescription(false);
+  };
+
+  const handleDescriptionKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleDescriptionSave();
+    } else if (e.key === 'Escape') {
+      handleDescriptionCancel();
+    }
+  };
+
+
+
+  // Handle swipe navigation (simplified - PhotoSwipe handles zoom/pan)
+  const handleSwipeNavigation = useCallback((direction) => {
+    if (filteredImages.length > 1) {
+      handleNavigate(direction);
+    }
+  }, [filteredImages.length, handleNavigate]);
+
+
+
+  // Face rectangle calculation accounting for object-contain and portrait/landscape
+  // This works the same on mobile and desktop because it uses actual rendered dimensions
   const getFaceRectangleStyle = (face) => {
-    // ... existing logic ...
-    // Simplified: using percentage based on logic from original file
+    if (imageRef.current && imageLoaded) {
+      const img = imageRef.current;
+      // Get the actual rendered container (the div with relative positioning)
+      const container = img.parentElement; // relative positioning context
+      if (!container) {
+        // Fallback if container not found
         return {
           left: `${face.face_left * 100}%`,
           top: `${face.face_top * 100}%`,
           width: `${face.face_width * 100}%`,
           height: `${face.face_height * 100}%`,
         };
+      }
+      
+      const containerRect = container.getBoundingClientRect();
+      const containerW = containerRect.width;
+      const containerH = containerRect.height;
+      const naturalW = img.naturalWidth || (storeImageInfo?.width || 1);
+      const naturalH = img.naturalHeight || (storeImageInfo?.height || 1);
+
+      // object-contain sizing math (independent of transforms and screen size)
+      // This ensures face rectangles match exactly on mobile and desktop
+      const scale = Math.min(containerW / naturalW, containerH / naturalH);
+      const displayedW = naturalW * scale;
+      const displayedH = naturalH * scale;
+      const offsetXpx = (containerW - displayedW) / 2; // letterbox left
+      const offsetYpx = (containerH - displayedH) / 2; // letterbox top
+
+      // Faces may be normalized (0..1) or absolute in original pixels. Detect heuristically.
+      const isNormalized = face.face_left <= 1 && face.face_top <= 1 && face.face_width <= 1 && face.face_height <= 1;
+      const toPx = (value, axis) => {
+        if (isNormalized) {
+          return value * (axis === 'x' ? displayedW : displayedH);
+        }
+        const base = axis === 'x' ? (storeImageInfo?.width || naturalW) : (storeImageInfo?.height || naturalH);
+        return (value / base) * (axis === 'x' ? displayedW : displayedH);
+      };
+
+      const leftPx = offsetXpx + toPx(face.face_left, 'x');
+      const topPx = offsetYpx + toPx(face.face_top, 'y');
+      const widthPx = toPx(face.face_width, 'x');
+      const heightPx = toPx(face.face_height, 'y');
+      
+      // Return as percentages relative to container for consistent positioning
+      return {
+        left: `${(leftPx / containerW) * 100}%`,
+        top: `${(topPx / containerH) * 100}%`,
+        width: `${(widthPx / containerW) * 100}%`,
+        height: `${(heightPx / containerH) * 100}%`,
+      };
+    }
+
+    // Fallback when not loaded: assume normalized coords
+    return {
+      left: `${face.face_left * 100}%`,
+      top: `${face.face_top * 100}%`,
+      width: `${face.face_width * 100}%`,
+      height: `${face.face_height * 100}%`,
+    };
+  };
+
+  const getImageSrc = () => {
+    if (!isAuthenticated) return null; // Show placeholder when not authenticated
+    const id = storeImageInfo?.id;
+    if (!id) return null;
+    if (!urlHelpers) return null;
+    return urlHelpers.getDisplayImageUrl(id);
+  };
+
+  // Render main image directly with stable element type to avoid remount loops
+  const mainImageSrc = getImageSrc();
+
+  const getFaceImageSrc = (face) => {
+    const fid = face?.id || face?.face_id;
+    if (!fid || !urlHelpers) return null;
+    return urlHelpers.getFaceCropUrl(fid);
   };
 
   const getGroupLabel = (face) => {
+    if (face?.isPlaceholder) return ''; // Placeholder faces have no label
     const gid = face?.groupId || face?.group_id;
+    if (!gid) return '';
     return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '';
   };
 
-  // Prevent background scrolling/zooming
+  const getGroupRepresentativeFace = (face) => {
+    const gid = face?.groupId || face?.group_id;
+    if (!gid) return 'none';
+    return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.representative_face || 'none';
+  };
+
+
   useEffect(() => {
-    // ... logic for touch events ...
+    // Initial auto-hide schedule for controls (desktop only)
+    if (!isMobile) {
+      try {
+        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+      } catch {}
+    } else {
+      // Keep controls visible on mobile
+      setControlsVisible(true);
+    }
+    return () => {
+      try { if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current); } catch {}
+    };
+  }, [isMobile]);
+
+  // PhotoSwipe handles cleanup automatically
+
+  // Prevent background scrolling/zooming when touching anywhere in the modal
+  const handleOverlayTouchStart = useCallback((e) => {
+    // Only prevent if touching the overlay itself, not the modal content
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }, []);
 
-  const commonDetailsProps = {
-    imageId,
-    storeImageInfo,
-    eventUrl,
-    showToast,
-    urlHelpers,
-    onImageUpdated: handleImageUpdated,
-    entity,
-    parent,
-    eventId,
-    imageActions,
-    isUnassociatedGroup,
-    isMobile,
-    momentInfo,
-    handleMomentLinkClick,
-    setShowMoveToMomentModal,
-    albumsList,
-    handleRemoveFromAlbum,
-    handleAlbumLinkClick,
-    facesList,
-    handleFaceClick,
-    handlePersonLinkClick,
-    showRectangles,
-    setShowRectangles,
-    selectedFaceIndex,
-    setSelectedFaceIndex,
-    permissions,
-    imageMeta
-  };
+  const handleOverlayTouchMove = useCallback((e) => {
+    // Prevent background scrolling when touching overlay
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  const handleOverlayTouchEnd = useCallback((e) => {
+    // Prevent any default behavior on overlay
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
+
+  // PhotoSwipe handles all touch events for zoom/pan
+
+  // Prevent background scrolling/zooming when modal is open
+  useEffect(() => {
+    // Track touches that started within the modal
+    const touchesInModal = new Set();
+
+    const handleDocumentTouchStart = (e) => {
+      const modal = modalRef.current;
+      if (modal) {
+        // Check if any touch point is within the modal
+        Array.from(e.touches).forEach((touch, index) => {
+          const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (elementAtPoint && modal.contains(elementAtPoint)) {
+            touchesInModal.add(touch.identifier);
+            // Prevent default to stop background scrolling/zooming
+            e.preventDefault();
+          }
+        });
+      }
+    };
+
+    const handleDocumentTouchMove = (e) => {
+      // Prevent background scrolling if any touch started in modal
+      let hasModalTouch = false;
+      Array.from(e.touches).forEach((touch) => {
+        if (touchesInModal.has(touch.identifier)) {
+          hasModalTouch = true;
+        }
+      });
+
+      if (hasModalTouch) {
+        // Our gesture handlers already call preventDefault for their gestures
+        // This prevents any unhandled touchmove from scrolling background
+        e.preventDefault();
+      }
+    };
+
+    const handleDocumentTouchEnd = (e) => {
+      // Remove ended touches from tracking
+      Array.from(e.changedTouches).forEach((touch) => {
+        touchesInModal.delete(touch.identifier);
+      });
+    };
+
+    // Use capture phase to catch events early
+    document.addEventListener('touchstart', handleDocumentTouchStart, { passive: false, capture: true });
+    document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', handleDocumentTouchEnd, { passive: false, capture: true });
+    document.addEventListener('touchcancel', handleDocumentTouchEnd, { passive: false, capture: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleDocumentTouchStart, { capture: true });
+      document.removeEventListener('touchmove', handleDocumentTouchMove, { capture: true });
+      document.removeEventListener('touchend', handleDocumentTouchEnd, { capture: true });
+      document.removeEventListener('touchcancel', handleDocumentTouchEnd, { capture: true });
+      touchesInModal.clear();
+    };
+  }, []);
 
   return (
     <AnimatePresence>
       <div 
         key="image-viewer-modal" 
-          className={`pswp-wrapper-container fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-overlay overflow-hidden`}
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-overlay overflow-hidden"
       >
         <motion.div
           ref={modalRef}
-          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-0 w-full h-full rounded-none border-0' : 'mx-4 my-4 w-full'}`}
+          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-2 rounded-none' : 'mx-4 my-4 w-full'}`}
           style={isMobile ? {
-            width: '100%',
-            height: '100%',
-            maxWidth: '100%',
-            maxHeight: '100%'
+            ...mobileModalStyle,
+            width: mobileModalStyle.width || '100vw',
+            maxWidth: mobileModalStyle.maxWidth || '100vw',
+            maxHeight: mobileModalStyle.maxHeight || 'calc(100vh - 5rem)'
           } : { 
             maxHeight: 'calc(100vh - 3rem)',
             height: 'calc(min(100vw - 2rem, 1024px) * 0.67)',
@@ -658,8 +1717,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           exit={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
           tabIndex={-1}
         >
+
           {/* Content */}
-          <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full min-h-0 overflow-hidden relative">
+          <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full min-h-0 overflow-hidden">
             {/* Image Viewer - PhotoSwipe container */}
             <div 
               ref={containerRef}
@@ -671,6 +1731,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 order: isRTL ? 2 : 2
               }}
               onMouseMove={() => {
+                // Show overlay controls on any mouse movement (desktop only)
                 if (!isMobile) {
                   try {
                     if (!controlsVisible) setControlsVisible(true);
@@ -682,9 +1743,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             >
               {/* PhotoSwipe root element */}
               <div ref={pswpRef} className="pswp" />
-              {loading && <div className="text-white">{t('imageViewer.loading')}</div>}
-              
-              {/* Face rectangles overlay */}
+              {loading ? (
+                <div className="text-white">{t('imageViewer.loading')}</div>
+              ) : (
+                <>
+                  {/* Face rectangles overlay - positioned over PhotoSwipe */}
                   {showRectangles && imageLoaded && pswpInstanceRef.current && facesList.map((face, index) => {
                       let borderColor, bgColor, labelBgColor;
                       if (selectedFaceIndex === index) {
@@ -700,236 +1763,585 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         bgColor = 'bg-blue-500';
                         labelBgColor = 'bg-blue-500';
                       }
-                  // Note: Positioning logic needs to be accurate. 
-                  // For simplicity we use the existing getFaceRectangleStyle but it might need adjustment for PhotoSwipe 
-                  // if PhotoSwipe adds its own transforms. PhotoSwipe transforms the image, but our overlay is on top.
-                  // If PhotoSwipe zooms, the overlay needs to match. 
-                  // The original implementation overlay was ON TOP of PhotoSwipe. 
-                  // But PhotoSwipe manages its own zoom/pan. 
-                  // If we want rectangles to move WITH the image, they should be inside PhotoSwipe slide or synced.
-                  // The original code had rectangles OUTSIDE. This implies they might not have zoomed with the image?
-                  // OR the original code was not using PhotoSwipe for the main view?
-                  // Ah, original code line 1613: "Face rectangles overlay - positioned over PhotoSwipe".
-                  // If PhotoSwipe is used, rectangles outside WON'T zoom with image.
-                  // But for this refactor, we are focusing on the sidebar.
-                  // I will leave the rectangles code as is, assuming it works or was acceptable.
-                  
                       return (
                         <div
-                      key={`face-rect-${index}`}
-                      className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer`}
+                          key={`face-rect-${(face.id || face.face_id || `index-${index}`)}-${rectangleKey}-${index}-${imageId}`}
+                          data-face-rectangle="true" // Marker to prevent dragging conflicts
+                          className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
                           style={{
                             ...getFaceRectangleStyle(face),
                             pointerEvents: 'auto',
                           }}
-                      onClick={(e) => { e.stopPropagation(); handleFaceClick(index); }}
-                    >
-                      {/* ... label ... */}
+                          title={`${getGroupLabel(face)}`}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering drag
+                            handleFaceClick(index);
+                          }}
+                        >
+                          <div className={`absolute -top-6 ${isRTL ? 'right-0' : 'left-0'} ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
+                            {getGroupLabel(face)}
+                          </div>
+                          <PermissionGate requires="canEdit">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTransferFace(face);
+                              }}
+                              className={`absolute -bottom-4 ${isRTL ? '-right-1' : '-left-1'} ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                              title={t('imageViewer.transferFaceToAnotherGroup')}
+                              aria-label={t('imageViewer.transferFaceToAnotherGroup')}
+                            >
+                              <Edit className="w-2.5 h-2.5" />
+                            </button>
+                          </PermissionGate>
                         </div>
                       );
                     })}
+                </>
+              )}
 
               {/* On-image overlay controls */}
               {!loading && (
                 <div 
-                  className={`absolute inset-0 z-[2000] transition-opacity duration-200 ${
+                  className={`absolute inset-0 z-30 transition-opacity duration-200 ${
                     isMobile ? 'opacity-100' : (controlsVisible ? 'opacity-100' : 'opacity-0')
                   } pointer-events-none`}
+                  onMouseMove={() => {
+                    if (!isMobile) {
+                      try {
+                        setControlsVisible(true);
+                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+                      } catch {}
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (!isMobile) {
+                      try {
+                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                      } catch {}
+                      setControlsVisible(false);
+                    }
+                  }}
+                  onTouchStart={() => {
+                    // Show controls on touch (mobile)
+                    if (isMobile) {
+                      setControlsVisible(true);
+                    }
+                  }}
                 >
-                  {/* Close button */}
+                  {/* Close button - top-right in LTR, top-left in RTL */}
                   <button
                     onClick={onClose}
                     className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md ${
                       isMobile ? 'w-10 h-10' : 'w-8 h-8'
                     } flex items-center justify-center shadow ${endClass(isMobile ? '2' : '4')}`}
+                    title={t('imageViewer.close')}
+                    aria-label={t('imageViewer.close')}
                   >
                     <X className={isMobile ? 'w-6 h-6' : 'w-5 h-5'} />
                   </button>
 
-                  {/* Navigation - simplified for brevity, render only if > 1 */}
-                  {filteredImages.length > 1 && (
-                     <div className={`absolute ${isMobile ? 'top-2' : 'top-4'} left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto`}>
-                       <button onClick={() => handleNavigate('prev')} className="bg-white/80 rounded-md w-8 h-8 flex items-center justify-center">
-                         {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-                      </button>
-                       {/* Input index */}
-                       <button onClick={() => handleNavigate('next')} className="bg-white/80 rounded-md w-8 h-8 flex items-center justify-center">
-                         {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Sidebar toggle for Desktop - Removed as it is now in PhotoSwipe UI */}
-                  
                   {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
-                  {(() => {
-                    const controls = (
-                      <div className={`absolute bottom-5 pointer-events-auto flex items-center gap-4 ${endClass('4')}`} style={{ zIndex: 100002 }}>
-                        {(() => {
-                          const favoriteTooltip = imageActions.isFavorite
-                            ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
-                            : (permissions.canEdit ? t('imageViewer.addToFavorites') : t('imageViewer.favorites'));
-                          const archiveTooltip = imageActions.isArchived
-                            ? (permissions.canEdit ? t('imageViewer.removeFromArchive') : t('imageViewer.inArchive'))
-                            : (permissions.canEdit ? t('imageViewer.moveToArchive') : t('imageViewer.archive'));
-                          
-                          return (
-                            <>
-                            <PermissionGate requires="hasFavoritesAlbum">
-                              {(permissions.canEdit || imageActions.isFavorite) && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    console.log('Favorite button clicked');
-                                    e.stopPropagation();
-                                    if (!permissions.canEdit) return;
-                                    imageActions.toggleFavorite();
-                                  }}
-                                  onPointerDown={(e) => e.stopPropagation()}
-                                  className={`transition-opacity p-0 appearance-none border-0 focus:outline-none focus:ring-0 pointer-events-auto cursor-pointer ${
-                                    permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
-                                  }`}
-                                  title={favoriteTooltip}
-                                  aria-label={favoriteTooltip}
-                                  aria-pressed={imageActions.isFavorite}
-                                  disabled={!permissions.canEdit}
-                                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    className={`w-8 h-8 ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
-                                    fill={imageActions.isFavorite ? 'currentColor' : 'none'}
-                                    stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
-                                    strokeWidth="2"
-                                    role="img"
-                                    focusable="false"
-                                    style={{ color: imageActions.isFavorite ? '#ef4444' : '#ffffff' }}
-                                  >
-                                    <title>{favoriteTooltip}</title>
-                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                                  </svg>
-                                </button>
-                              )}
-                            </PermissionGate>
+                  <div className={`absolute ${isMobile ? 'bottom-3' : 'bottom-5'} pointer-events-auto flex items-center ${isMobile ? 'gap-3' : 'gap-4'} ${endClass(isMobile ? '2' : '4')}`}>
+                    {(() => {
+                      const favoriteTooltip = imageActions.isFavorite
+                        ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
+                        : (permissions.canEdit ? t('imageViewer.addToFavorites') : t('imageViewer.favorites'));
+                      const archiveTooltip = imageActions.isArchived
+                        ? (permissions.canEdit ? t('imageViewer.removeFromArchive') : t('imageViewer.inArchive'))
+                        : (permissions.canEdit ? t('imageViewer.moveToArchive') : t('imageViewer.archive'));
+                      
+                      return (
+                        <>
+                        <PermissionGate requires="hasFavoritesAlbum">
+                          {(permissions.canEdit || imageActions.isFavorite) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!permissions.canEdit) return;
+                                imageActions.toggleFavorite();
+                              }}
+                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
+                              }`}
+                              title={favoriteTooltip}
+                              aria-label={favoriteTooltip}
+                              aria-pressed={imageActions.isFavorite}
+                              disabled={!permissions.canEdit}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
+                                fill={imageActions.isFavorite ? 'currentColor' : 'none'}
+                                stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
+                                strokeWidth="2"
+                                role="img"
+                                focusable="false"
+                                style={{ color: imageActions.isFavorite ? '#ef4444' : '#ffffff' }}
+                              >
+                                <title>{favoriteTooltip}</title>
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                              </svg>
+                            </button>
+                          )}
+                        </PermissionGate>
 
-                            <PermissionGate requires="hasArchiveAlbum">
-                              {(permissions.canEdit || imageActions.isArchived) && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    console.log('Archive button clicked');
-                                    e.stopPropagation();
-                                    if (!permissions.canEdit) return;
-                                    imageActions.toggleArchive();
-                                  }}
-                                  onPointerDown={(e) => e.stopPropagation()}
-                                  className={`transition-opacity p-0 appearance-none border-0 focus:outline-none focus:ring-0 pointer-events-auto cursor-pointer ${
-                                    permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
-                                  }`}
-                                  title={archiveTooltip}
-                                  aria-label={archiveTooltip}
-                                  aria-pressed={imageActions.isArchived}
-                                  disabled={!permissions.canEdit}
-                                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    className={`w-8 h-8 ${imageActions.isArchived ? 'text-white' : 'text-gray-300'}`}
-                                    fill="none"
-                                    stroke={imageActions.isArchived ? 'white' : '#d1d5db'}
-                                    strokeWidth="2"
-                                    role="img"
-                                    focusable="false"
-                                  >
-                                    <title>{archiveTooltip}</title>
-                                    <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
-                                  </svg>
-                                </button>
-                              )}
-                            </PermissionGate>
-                            </>
-                          );
-                        })()}
+                        <PermissionGate requires="hasArchiveAlbum">
+                          {(permissions.canEdit || imageActions.isArchived) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!permissions.canEdit) return;
+                                imageActions.toggleArchive();
+                              }}
+                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
+                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
+                              }`}
+                              title={archiveTooltip}
+                              aria-label={archiveTooltip}
+                              aria-pressed={imageActions.isArchived}
+                              disabled={!permissions.canEdit}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
+                                fill="none"
+                                stroke={imageActions.isArchived ? 'white' : '#6b7280'}
+                                strokeWidth="2"
+                                role="img"
+                                focusable="false"
+                              >
+                                <title>{archiveTooltip}</title>
+                                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
+                              </svg>
+                            </button>
+                          )}
+                        </PermissionGate>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Navigation - top-center */}
+                  {filteredImages.length > 1 && (
+                    <div className={`absolute ${isMobile ? 'top-2' : 'top-4'} left-1/2 -translate-x-1/2 flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} pointer-events-auto`}>
+                      <button
+                        onClick={() => handleNavigate('prev')}
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                        } flex items-center justify-center shadow`}
+                        title={t('imageViewer.previous')}
+                        aria-label={t('imageViewer.previous')}
+                      >
+                        {isRTL ? <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
+                      </button>
+                      <div dir="ltr" className={`bg-white/80 text-gray-800 rounded-md ${isMobile ? 'px-1.5' : 'px-2'} ${isMobile ? 'h-10' : 'h-8'} shadow flex items-center ${isMobile ? 'text-sm' : ''}`}>
+                        {isEditingIndex ? (
+                          <input
+                            type="text"
+                            id="image-viewer-index"
+                            name="image-viewer-index"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={editIndexValue !== undefined ? editIndexValue : effectiveIndex + 1}
+                            onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
+                            onBlur={e => {
+                              let val = parseInt(e.target.value, 10);
+                              if (isNaN(val)) val = effectiveIndex + 1;
+                              val = Math.max(1, Math.min(filteredImages.length, val));
+                              handleNavigate('jump', val - 1);
+                              setIsEditingIndex(false);
+                              setEditIndexValue(undefined);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.target.blur();
+                              } else if (e.key === 'Escape') {
+                                setIsEditingIndex(false);
+                                setEditIndexValue(undefined);
+                              }
+                            }}
+                            className="w-8 text-center bg-transparent focus:outline-none"
+                            style={{width: '2rem'}}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className="w-8 inline-block text-center cursor-text"
+                            style={{width: '2rem'}}
+                            title={t('imageViewer.clickToEdit')}
+                            onClick={() => setIsEditingIndex(true)}
+                          >
+                            {effectiveIndex + 1}
+                          </span>
+                        )}
+                        <span className="mx-1">/</span>
+                        <span>{filteredImages.length}</span>
                       </div>
-                    );
-
-                    return isMobile ? createPortal(
-                      <div className="fixed inset-0 z-[2001] pointer-events-none" dir={isRTL ? 'rtl' : 'ltr'}>
-                        {controls}
-                      </div>, 
-                      document.body
-                    ) : controls;
-                  })()}
+                      <button
+                        onClick={() => handleNavigate('next')}
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
+                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                        } flex items-center justify-center shadow`}
+                        title={t('imageViewer.next')}
+                        aria-label={t('imageViewer.next')}
+                      >
+                        {isRTL ? <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
+                      </button>
                     </div>
                   )}
-            </div>
 
-            {/* Desktop Sidebar */}
-            {!isMobile && sidebarVisible && (
-              <div className="w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar border-l border-gray-200" style={{ order: isRTL ? 1 : 1 }}>
-                <ImageDetails {...commonDetailsProps}>
-                  <ImageViewerActions {...commonDetailsProps} />
-                </ImageDetails>
+                  {/* PhotoSwipe handles zoom natively - no custom controls needed */}
+
+
+                  {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
+                  <button
+                    onClick={() => setSidebarVisible(v => !v)}
+                    className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/90 hover:bg-white text-gray-800 rounded-md ${
+                      isMobile ? 'w-10 h-10' : 'w-8 h-8'
+                    } flex items-center justify-center shadow-lg z-40 ${startClass(isMobile ? '2' : '4')}`}
+                    title={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
+                    aria-label={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
+                  >
+                    {sidebarVisible ? (
+                      // When visible, point in direction to close (left in RTL, right in LTR)
+                      isRTL ? <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+                    ) : (
+                      // When hidden, point in direction to open (right in RTL, left in LTR)
+                      isRTL ? <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+                    )}
+                  </button>
                 </div>
               )}
               
-            {/* Mobile Drawer (Vaul) */}
-            {isMobile && (
-              <Drawer.Root 
-                open={sidebarVisible}
-                onOpenChange={(open) => {
-                  console.log('Drawer open change:', open);
-                  setSidebarVisible(open);
-                }}
-                shouldScaleBackground
-                modal={false} // Disable modal behavior to prevent interaction blocking
-                dismissible={true}
-              >
-                <Drawer.Portal>
-                  <Drawer.Overlay className="fixed inset-0 bg-black/40 z-[99999]" />
-                  <Drawer.Content 
-                    className="bg-white flex flex-col rounded-t-[10px] h-[85vh] mt-24 fixed bottom-0 left-0 right-0 z-[100000] outline-none"
-                    onPointerDownOutside={(e) => {
-                      // Prevent closing when clicking on PhotoSwipe UI elements
-                      if (e.target.closest('.pswp__button') || e.target.closest('.pswp__img')) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    <Drawer.Title className="sr-only">Image Details</Drawer.Title>
-                    <Drawer.Description className="sr-only">Detailed information about the image</Drawer.Description>
-                    <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-zinc-300 my-4" />
-                    <div className="flex-1 overflow-auto bg-white p-4">
-                      <div className="max-w-md mx-auto h-full">
-                         <ImageDetails {...commonDetailsProps}>
-                           <ImageViewerActions {...commonDetailsProps} />
-                         </ImageDetails>
+            </div>
+
+                    {/* Mobile sidebar backdrop */}
+        {isMobile && sidebarVisible && (
+          <div
+            className="fixed inset-0 bg-black/50"
+            style={{ zIndex: 35 }}
+            onClick={() => setSidebarVisible(false)}
+            aria-hidden="true"
+          />
+        )}
+        
+        {/* Sidebar */}
+        {sidebarVisible && (
+        <div className={`${isMobile ? 'w-full fixed inset-y-0 z-40' : 'w-80'} bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
+          isMobile ? '' : (isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200')
+        } ${isMobile ? (isRTL ? 'right-0' : 'left-0') : ''}`} style={{ order: isRTL ? 1 : 1 }}>
+          {/* Controls */}
+          <div className={`${isMobile ? 'p-2' : 'p-3'} border-b border-gray-200 image-viewer-controls flex-none relative`}>
+                <ImageViewerActions
+                  imageId={imageId}
+                  imageInfo={storeImageInfo}
+                  eventUrl={eventUrl}
+                  showToast={showToast}
+                  urlHelpers={urlHelpers}
+                  onImageUpdated={handleImageUpdated}
+                  entity={entity}
+                  entityId={parent}
+                  eventId={eventId}
+                  imageActions={imageActions}
+                  isUnassociatedGroup={isUnassociatedGroup}
+                  isMobile={isMobile}
+                />
+
+                    {/* Details Section */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs font-medium text-gray-700 mb-1">{t('imageViewer.photoDetails')}</h4>
+                  <div className="text-xs text-gray-500 space-y-0.5">
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.name')}</span> {storeImageInfo?.label || imageMeta.label}</div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.date')}</span> <span dir="ltr">{formatDateTime(storeImageInfo?.date_taken)}</span></div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalSize')}</span> <span dir="ltr">{(() => {
+                      const size = storeImageInfo?.file_size;
+                      if (!size) return t('imageViewer.unknown');
+                      if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+                      if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+                      return (size / 1024).toFixed(1) + ' KB';
+                    })()}</span></div>
+                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalResolution')}</span> <span dir="ltr">{storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : t('imageViewer.unknown')}</span></div>
+                    <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
+                      <div className="flex items-start">
+                        <span className={`font-semibold flex-shrink-0 ${me('2')}`}>{t('imageViewer.description')}</span>
+                        {isEditingDescription && permissions.canEdit ? (
+                          <div className="flex-1 min-w-0">
+                            <textarea
+                              value={descriptionValue}
+                              onChange={(e) => setDescriptionValue(e.target.value)}
+                              onBlur={handleDescriptionSave}
+                              onKeyDown={handleDescriptionKeyDown}
+                              className="w-full text-sm text-gray-700 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-sm"
+                              rows={4}
+                              autoFocus
+                              disabled={isSavingDescription}
+                              style={{ minHeight: '4rem' }}
+                            />
+                            <div className="flex items-center justify-end gap-2 mt-2">
+                              <button
+                                onClick={handleDescriptionCancel}
+                                className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                disabled={isSavingDescription}
+                              >
+                                {t('imageViewer.cancel')}
+                              </button>
+                              <button
+                                onClick={handleDescriptionSave}
+                                className="text-xs text-primary-600 hover:text-primary-800 px-2 py-1 rounded hover:bg-primary-50 transition-colors"
+                                disabled={isSavingDescription}
+                              >
+                                {isSavingDescription ? t('imageViewer.saving') : t('imageViewer.save')}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={handleDescriptionClick}
+                            className={`flex-1 min-w-0 text-gray-500 ${permissions.canEdit ? 'cursor-text hover:text-gray-700' : ''} transition-colors`}
+                            title={permissions.canEdit ? t('imageViewer.clickToEditDescription') : ''}
+                          >
+                            {storeImageInfo?.description ? (
+                              <span className="whitespace-pre-wrap break-words">{storeImageInfo.description}</span>
+                            ) : (
+                              <span className="text-gray-400 italic">{permissions.canEdit ? t('imageViewer.clickToAddDescription') : t('imageViewer.noDescription')}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </Drawer.Content>
-                </Drawer.Portal>
-              </Drawer.Root>
+                  </div>
+                  
+                  {/* Moment Information */}
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-gray-500 flex-1 min-w-0">
+                        <span className={`font-semibold ${me('2')}`}>{t('imageViewer.moment')}</span>
+                        {momentInfo ? (
+                          <a
+                            href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
+                            onClick={handleMomentLinkClick}
+                            className={`${ms('1')} text-primary-600 hover:text-primary-700 hover:underline cursor-pointer`}
+                            title={t('imageViewer.jumpToMoment')}
+                          >
+                            {momentInfo.label}
+                          </a>
+                        ) : (
+                          <span className={ms('1')}>{t('imageViewer.none')}</span>
+                        )}
+                      </div>
+                      <PermissionGate requires="canEdit">
+                        <button
+                          onClick={() => setShowMoveToMomentModal(true)}
+                          className={`w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ${ms('2')}`}
+                          title={t('imageViewer.editMoment')}
+                          aria-label={t('imageViewer.editMoment')}
+                        >
+                          <Edit2 className="w-3 h-3 text-gray-600" />
+                        </button>
+                      </PermissionGate>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Albums and Faces Info with resizable split */}
+              <div ref={sectionsRef} className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
+                {/* Albums Panel */}
+                {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
+                  <div className="flex flex-col min-h-0">
+                    <div className="flex items-center justify-between px-4 pt-4">
+                      <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
+                      <button
+                        onClick={() => setAlbumsOpen(v => !v)}
+                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                        title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
+                        aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
+                      >
+                        {albumsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {albumsOpen && (
+                      <div
+                        className={`albums-list-container overflow-y-auto ${facesOpen ? '' : 'flex-1 min-h-0'}`}
+                        style={facesOpen ? { height: albumsHeight } : {}}
+                      >
+                        <div className="px-4">
+                          {albumsList.map((album, index) => (
+                            <div
+                              key={album.id || `${album.label || 'album'}-${index}`}
+                              className={`flex items-center p-2 rounded-lg bg-gray-50 ${album.isPlaceholder ? '' : 'hover:bg-gray-100'} transition-colors mb-1 last:mb-0`}
+                            >
+                              {album.isPlaceholder ? (
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {ImageComponent(null, {
+                                    width: 40,
+                                    height: 40,
+                                    className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                    alt: ''
+                                  })}
+                                  <span className="font-medium text-gray-900 truncate">\u00A0</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <a
+                                    href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+                                    onClick={(e) => handleAlbumLinkClick(e, album)}
+                                    className="flex items-center gap-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    title={album.label}
+                                  >
+                                    {ImageComponent(
+                                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
+                                      {
+                                        width: 40,
+                                        height: 40,
+                                        className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                        alt: ''
+                                      }
+                                    )}
+                                    <span className="font-medium text-gray-900 truncate">{album.label}</span>
+                                  </a>
+                                  <PermissionGate requires="canEdit">
+                                    <button
+                                      onClick={() => handleRemoveFromAlbum(album)}
+                                      className={`${ms('3')} p-1.5 hover:bg-red-100 rounded-lg transition-colors`}
+                                      title={t('imageViewer.removeFromAlbum', { album: album.label })}
+                                      aria-label={t('imageViewer.removeFromAlbum', { album: album.label })}
+                                    >
+                                      <Minus className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  </PermissionGate>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Resizer */}
+                {(permissions.has_albums || permissions.canEdit) && permissions.has_groups && albumsList && albumsList.length > 0 && albumsOpen && facesOpen && (
+                  <div
+                    className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mx-4 flex-shrink-0"
+                    onMouseDown={startResize}
+                    title="Drag to resize"
+                  />
+                )}
+
+                {/* Faces Panel */}
+                {permissions.has_groups && (
+                  <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
+                    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
+                        <button
+                          onClick={() => {
+                            if (showRectangles) {
+                              setSelectedFaceIndex(null);
+                            }
+                            setShowRectangles(v => !v);
+                          }}
+                          className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
+                          title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
+                          aria-label={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
+                        >
+                          {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setFacesOpen(v => !v)}
+                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                        title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
+                        aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
+                      >
+                        {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {facesOpen && (
+                      <div className="faces-list-container overflow-y-auto">
+                        <div className="px-4">
+                          {facesList.length === 0 ? (
+                            <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {facesList.map((face, index) => (
+                                <div
+                                  key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
+                                  className={`flex items-center gap-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                  onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
+                                >
+                                  {ImageComponent(
+                                    face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
+                                    {
+                                      width: 40,
+                                      height: 40,
+                                      className: 'w-10 h-10 object-cover rounded-full',
+                                      alt: getGroupLabel(face),
+                                      iconType: 'person'
+                                    }
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-gray-900 truncate">
+                                      {getGroupLabel(face) || '\u00A0'}
+                                    </p>
+                                  </div>
+                                  {!face.isPlaceholder && (
+                                    <a
+                                      href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
+                                      onClick={(e) => handlePersonLinkClick(e, face)}
+                                      className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                                      title={t('imageViewer.goToPersonPage')}
+                                    >
+                                      <User className="w-4 h-4 text-gray-600" />
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
         )}
           </div>
         </motion.div>
       </div>
 
-      {/* Other Modals */}
+      {/* Transfer Faces Modal */}
       {showTransferModal && selectedFaceForTransfer && (
         <TransferFacesModal
+          key="transfer-faces-modal"
           isOpen={showTransferModal}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
-          onClose={() => { setShowTransferModal(false); setSelectedFaceForTransfer(null); }}
-          currentGroup={selectedFaceForTransfer ? (useDataStore.getState().entities?.[eventId]?.groups?.[selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id]) : null}
+          onClose={() => {
+            setShowTransferModal(false);
+            setSelectedFaceForTransfer(null);
+          }}
+          currentGroup={selectedFaceForTransfer ? (() => {
+            const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
+            if (!gid) return null;
+            return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid] || null;
+          })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
           sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
         />
       )}
 
+      {/* Move to Moment Modal */}
       {showMoveToMomentModal && (
         <MoveToMomentModal
+          key="move-to-moment-modal"
           isOpen={showMoveToMomentModal}
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
@@ -943,20 +2355,24 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 }
 
 function arePropsEqual(prev, next) {
-  if (prev.eventUrl !== next.eventUrl) return false;
-  if (prev.currentIndex !== next.currentIndex) return false;
-  if (prev.currentGroupId !== next.currentGroupId) return false;
-  if (prev.parent !== next.parent) return false;
-  if (prev.entity !== next.entity) return false;
-  if (prev.sortBy !== next.sortBy) return false;
-  if (prev.sortOrder !== next.sortOrder) return false;
-  if (prev.image !== next.image) return false;
-  if (prev.urlHelpers !== next.urlHelpers) return false;
-  if (prev.isUnassociatedGroup !== next.isUnassociatedGroup) return false;
+  // Shallow compare key props that affect rendering; functions by ref
+  if (prev.eventUrl !== next.eventUrl) { return false; }
+  if (prev.currentIndex !== next.currentIndex) { return false; }
+  if (prev.currentGroupId !== next.currentGroupId) { return false; }
+  if (prev.parent !== next.parent) { return false; }
+  if (prev.entity !== next.entity) { return false; }
+  if (prev.sortBy !== next.sortBy) { return false; }
+  if (prev.sortOrder !== next.sortOrder) { return false; }
+  if (prev.image !== next.image) { return false; }
+  if (prev.urlHelpers !== next.urlHelpers) { return false; }
+  if (prev.isUnassociatedGroup !== next.isUnassociatedGroup) { return false; }
   const prevFilteredLen = Array.isArray(prev.filteredIds) ? prev.filteredIds.length : prev.filteredIds;
   const nextFilteredLen = Array.isArray(next.filteredIds) ? next.filteredIds.length : next.filteredIds;
-  if (prevFilteredLen !== nextFilteredLen) return false;
+  if (prevFilteredLen !== nextFilteredLen) { return false; }
+  // Ignore function identity differences
   return true;
 }
 
 export default memo(ImageViewer, arePropsEqual);
+
+

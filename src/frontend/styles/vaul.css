@@ -4,8 +4,6 @@
   transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
   animation-duration: 0.5s;
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Ensure it sits above PhotoSwipe */
-  z-index: 100000;
 }
 
 [data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
@@ -129,11 +127,6 @@
   top: 0;
   bottom: 0;
   width: 200%;
-}
-
-[data-vaul-overlay] {
-    /* Ensure overlay is also above PhotoSwipe */
-    z-index: 99999;
 }
 
 [data-vaul-overlay][data-vaul-snap-points='true']:not([data-vaul-snap-points-overlay='true']):not(

@@ -270,13 +270,6 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         return;
       }
       
-      // Check if click is on Vaul Drawer elements (they are in a Portal)
-      const vaulDrawer = e.target.closest('[data-vaul-drawer]');
-      const vaulOverlay = e.target.closest('[data-vaul-overlay]');
-      if (vaulDrawer || vaulOverlay) {
-        return;
-      }
-
       // Check if the click is on the toggle button (for BucketDrawer or NotificationsDropdown)
       let target = e.target;
       while (target && target !== document.body) {
