@@ -40,6 +40,7 @@ import { PermissionGate } from '../../components/common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 import { useRTL } from '../../hooks/useRTL';
+import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -77,6 +78,9 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  
+  // Pinch-to-zoom for mobile
+  const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
   const [imageClasses, setImageClasses] = useState({});
@@ -837,6 +841,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
           </motion.div>
         ) : (
           <motion.div
+            ref={setGridContainerRef}
             className="w-full photo-gallery-grid"
             style={{
               gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,

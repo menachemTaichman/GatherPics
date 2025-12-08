@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 import { useRTL } from '../../hooks/useRTL';
+import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -34,6 +35,9 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
   const cardSize = usePreference('general.size', 1.0);
   const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
+  
+  // Pinch-to-zoom for mobile
+  const setGridContainerRef = usePinchToZoom(cardSize, setCardSize);
   const [imageClasses, setImageClasses] = useState({});
   const { defaultAlbumIds, archiveAlbumId, eventData } = useEventDefaultAlbums(eventId, eventUrl);
   const defaultAlbumsReady = eventData !== null;
@@ -406,16 +410,17 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
             </p>
           </motion.div>
         ) : (
-          <motion.div 
-            className="photo-gallery-grid"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * cardSize)}px, 1fr))`,
-              gridAutoRows: `${Math.max(120, 266 * cardSize)}px`
-            }}
-          >
+          <div ref={setGridContainerRef}>
+            <motion.div 
+              className="photo-gallery-grid"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * cardSize)}px, 1fr))`,
+                gridAutoRows: `${Math.max(120, 266 * cardSize)}px`
+              }}
+            >
             {filteredAndSortedAlbums.map((album, index) => {
               const imageSrc = urlHelpers?.getRepresentativeUrl 
                 ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` 
@@ -464,7 +469,8 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                 </motion.div>
               );
             })}
-          </motion.div>
+            </motion.div>
+          </div>
         ))}
       </div>
       

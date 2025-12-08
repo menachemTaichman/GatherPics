@@ -122,16 +122,72 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-other_profile_id = '10d60cb9-6aec-4540-b15e-6df187f19b3c'
-result = general_models.get_childs('profiles', other_profile_id, 'events', return_ids=True)
-print(result)
-print('--------------------------------')
-result2 = db.execute_query('SELECT * FROM events_profiles_ctx WHERE profile_id = %s;', (other_profile_id,), return_format=ReturnFormat.LIST_TUPLES)
-print(result2)
-print('--------------------------------')
-result3 = db.execute_query('SELECT * FROM events_ctx;', (other_profile_id,), return_format=ReturnFormat.LIST_TUPLES)
-print(result3)
-print('--------------------------------')
-result4 = db.execute_query('SELECT * FROM profiles_ctx WHERE profile_id = %s;', (other_profile_id,), return_format=ReturnFormat.LIST_TUPLES)
-print(result4)
+image_ids = ['854ab47a-6514-4f75-919f-169e045f3a70']
+event_data = event.models.get_entities('events', event_id, include_details=True)
+album_id = event_data['archive_album_id']
+
+add = False
+updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=ChildOperation.REMOVE)
+changes = []
+if updated_image_ids:
+    album = event.models.get_entities('albums', [album_id])
+    changes.append({
+        'type': 'UPDATE',
+        'entity': 'album',
+        'items': album
+    })
+    if add:
+        changes.append({
+            'type': 'RELATION_ADD',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'entities': event.models.get_entities('images', updated_image_ids)
+        })
+    else:
+        changes.append({
+            'type': 'RELATION_REMOVE',
+            'relation': 'album.images',
+            'parentId': album_id,
+            'ids': updated_image_ids
+        })
+
+    event_data = event.models.get_entities('events', event_id, include_details=True)
+    is_default_album = album_id in [
+        event_data['favorites_album_id'],
+        event_data['archive_album_id']
+    ]
+    if is_default_album:
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'image',
+            'items': event.models.get_entities('images', updated_image_ids)
+        })
+        if album_id == event_data['archive_album_id']:
+            all_parents = event.models.get_parents('images', updated_image_ids)
+            for entity, parent_to_images in all_parents.items():
+                parent_ids = list(parent_to_images.keys())
+                changes.append({
+                    'type': 'UPDATE',
+                    'entity': entity,
+                    'items': event.models.get_entities(entity, parent_ids)
+                })
+    else:
+        for image_id in updated_image_ids:
+            if add:
+                changes.append({
+                    'type': 'RELATION_ADD',
+                    'relation': 'image.albums',
+                    'parentId': image_id,
+                    'entities': album
+                })
+            else:
+                changes.append({
+                    'type': 'RELATION_REMOVE',
+                    'relation': 'image.albums',
+                    'parentId': image_id,
+                    'ids': [album_id]
+                })
+
+
+print(changes)
 print('--------------------------------')

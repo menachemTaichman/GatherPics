@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { ImageIconPlaceholder } from '../../hooks/useImage.jsx';
 import { useRTL } from '../../hooks/useRTL';
+import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -31,6 +32,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const cardSize = usePreference('general.size', 1.0);
   const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
+  
+  // Pinch-to-zoom for mobile
+  const setGridContainerRef = usePinchToZoom(cardSize, setCardSize);
 
   // Use the data store for groups
   const storeGroups = useGroupsList(eventId);
@@ -227,17 +231,18 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           </p>
         </motion.div>
       ) : (
-        <motion.div 
-          className={`gallery-grid size-${Math.round(cardSize * 100).toString().padStart(3, '0')}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          style={{
-            gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 175 * cardSize)}px, 1fr))`,
-            columnGap: `${Math.max(0.5, 0.25 + (cardSize - 0.75) * 0.3)}rem`,
-            rowGap: `${Math.max(0.75, 1.5 + (cardSize - 0.75) * 0.3)}rem`
-          }}
-        >
+        <div ref={setGridContainerRef}>
+          <motion.div 
+            className={`gallery-grid size-${Math.round(cardSize * 100).toString().padStart(3, '0')}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 175 * cardSize)}px, 1fr))`,
+              columnGap: `${Math.max(0.5, 0.25 + (cardSize - 0.75) * 0.3)}rem`,
+              rowGap: `${Math.max(0.75, 1.5 + (cardSize - 0.75) * 0.3)}rem`
+            }}
+          >
           {filteredAndSortedGroups.map((group, index) => (
             <motion.div
               key={group.id}
@@ -253,7 +258,8 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
               />
             </motion.div>
           ))}
-        </motion.div>
+          </motion.div>
+        </div>
       )}
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import usePinchToZoom from '../../hooks/usePinchToZoom';
 import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key } from 'lucide-react';
 import { uploadsAPI, groupsAPI, momentsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
@@ -44,6 +45,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  
+  // Pinch-to-zoom for mobile
+  const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
   const [expandedGroup, setExpandedGroup] = useState(null); // Single group ID
   const [expandedMoment, setExpandedMoment] = useState(null); // Single moment ID
   const [imageClasses, setImageClasses] = useState({});
@@ -1117,6 +1121,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                 </div>
               ) : (
                 <div 
+                  ref={setGridContainerRef}
                   className="photo-gallery-grid"
                   style={{
                     gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,

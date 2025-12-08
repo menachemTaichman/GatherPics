@@ -28,6 +28,7 @@ import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -91,6 +92,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const imageSize = usePreference('general.size', 1.0);
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  
+  // Pinch-to-zoom for mobile
+  const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const carouselVisible = usePreference('Moments.carouselExpanded', true);
   const setCarouselVisible = (value) => setPreference('Moments.carouselExpanded', value);
@@ -593,17 +597,19 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
               <button
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
-                  const subtractValue = currentPercent > 100 ? 25 : 10;
-                      const newPercent = Math.max(50, currentPercent - subtractValue);
-                      setImageSize(newPercent / 100);
-                    }}
-                    disabled={imageSize <= 0.5}
-                    className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('moments.decreaseSize')}
-                    aria-label={t('moments.decreaseSize')}
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
+                  const next25 = Math.ceil(currentPercent / 25) * 25;
+                  const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
+                  const subtract25 = currentPercent - 25;
+                  const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                  setImageSize(newPercent / 100);
+                }}
+                disabled={imageSize <= 0.5}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('moments.decreaseSize')}
+                aria-label={t('moments.decreaseSize')}
+              >
+                <Minus className="w-4 h-4" />
+              </button>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -628,8 +634,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                   <button
                     onClick={() => {
                       const currentPercent = Math.round(imageSize * 100);
-                      const addValue = currentPercent >= 100 ? 25 : 10;
-                      const newPercent = Math.min(300, currentPercent + addValue);
+                      const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
+                      const add25 = currentPercent + 25;
+                      const newPercent = Math.min(300, Math.min(add25, next25));
                       setImageSize(newPercent / 100);
                     }}
                     disabled={imageSize >= 3}
@@ -784,7 +791,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             <p className="text-sm sm:text-base text-gray-500">{t('moments.loadingPhotos')}</p>
           </div>
         ) : (
-          <div className="relative">
+          <div ref={setGridContainerRef} className="relative">
                          {/* Fixed right sidebar for sticky info - hidden on mobile */}
              <div className={`hidden md:block fixed ${endClass('4')} top-100 w-56 lg:w-64 z-30 bg-white/70 backdrop-blur-sm p-3 sm:p-4 rounded-lg shadow-lg border border-gray-200`}>
               {currentVisibleMoment ? (
