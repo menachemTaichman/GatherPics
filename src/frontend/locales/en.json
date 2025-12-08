@@ -1623,7 +1623,9 @@
     "noAlbumsAvailable": "No albums available",
     "loadingAlbums": "Loading albums...",
     "noAlbums": "No albums",
-    "albumName": "Album name"
+    "albumName": "Album name",
+    "addedToAlbumCount": "{{count}} added to",
+    "addedToNewAlbumCount": "{{count}} {{imageText}} added to new album"
   },
   "singleImageTile": {
     "removeFromArchive": "Remove from Archive",

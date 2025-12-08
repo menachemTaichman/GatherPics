@@ -164,7 +164,7 @@ export default function AlbumQuickAddButton({
         const images = imagesToAdd || [];
         showToast(
           <span>
-            {added} added to <a 
+            {t('albumQuickAdd.addedToAlbumCount', { count: added })} <a 
               href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -175,7 +175,7 @@ export default function AlbumQuickAddButton({
                 }
               }}
               className="underline hover:text-gray-100"
-            >{album.label}</a> album
+            >{album.label}</a>
           </span>,
           'success'
         );
@@ -217,10 +217,10 @@ export default function AlbumQuickAddButton({
           await albumsAPI.addImages(albumId, imagesToAdd, eventUrl);
         }
         
-        const imageText = imagesToAdd.length === 1 ? 'image' : 'images';
+        const imageText = imagesToAdd.length === 1 ? t('upload.image') : t('upload.imagesPlural');
         showToast(
           <span>
-            {imagesToAdd.length} {imageText} added to new album <a
+            {t('albumQuickAdd.addedToNewAlbumCount', { count: imagesToAdd.length, imageText })} <a
               href={`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`}
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {

@@ -1624,7 +1624,9 @@
     "noAlbumsAvailable": "אין אלבומים זמינים",
     "loadingAlbums": "טוען אלבומים...",
     "noAlbums": "אין אלבומים",
-    "albumName": "שם אלבום"
+    "albumName": "שם אלבום",
+    "addedToAlbumCount": "{{count}} נוספו לאלבום",
+    "addedToNewAlbumCount": "{{count}} {{imageText}} נוספו לאלבום חדש"
   },
   "singleImageTile": {
     "removeFromArchive": "הסר מארכיון",

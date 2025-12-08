@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useState } from 'react';
 import { useEventId } from '../../utils/storeUtils';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Shared ImageActions hook that handles all image-related actions
@@ -25,6 +26,7 @@ export default function useImageActions({
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
   const { addImages, removeFromQueue, queue, open } = useBucketStore();
+  const { t } = useTranslation();
   
   // State for face selection modal
   const [showFaceSelectionModal, setShowFaceSelectionModal] = useState(false);
@@ -78,7 +80,7 @@ export default function useImageActions({
           });
         }
         
-        const action = newFavoriteStatus ? 'Added to' : 'Removed from';
+        const action = newFavoriteStatus ? t('imageActions.addedTo') : t('imageActions.removedFrom');
         const actualCount = newFavoriteStatus ? result.len_added : result.len_removed;
         const countText = actualCount;
         
@@ -86,7 +88,7 @@ export default function useImageActions({
         showToast(
           <span>
             {countText} {action}{' '}
-            <a href={favoritesHref} className="underline hover:text-gray-100">Favorites</a>
+            <a href={favoritesHref} className="underline hover:text-gray-100">{t('imageActions.Favorites')}</a>
           </span>,
           'success'
         );
@@ -115,7 +117,7 @@ export default function useImageActions({
           });
         }
         
-        const action = newArchivedStatus ? 'moved to' : 'removed from';
+        const action = newArchivedStatus ? t('imageActions.movedTo') : t('imageActions.removedFrom');
         const actualCount = newArchivedStatus ? result.len_added : result.len_removed;
         const countText = actualCount;
         
@@ -123,7 +125,7 @@ export default function useImageActions({
         showToast(
           <span>
             {countText} {action}{' '}
-            <a href={archiveHref} className="underline hover:text-gray-100">Archive</a>
+            <a href={archiveHref} className="underline hover:text-gray-100">{t('imageActions.Archive')}</a>
           </span>,
           'success'
         );
@@ -139,14 +141,14 @@ export default function useImageActions({
     if (allInBucket) {
       // Remove all from bucket
       imageIdsArray.forEach(id => removeFromQueue(id));
-      showToast(`${imageIdsArray.length} removed from bucket`, 'success');
+      showToast(`${imageIdsArray.length} ${t('imageActions.removedFromBucket')}`, 'success');
     } else {
       // Add all to bucket
       const added = addImages(imageIdsArray);
       if (added > 0) {
-        showToast(`${added} added to bucket`, 'success');
+        showToast(`${added} ${t('imageActions.addedToBucket')}`, 'success');
       } else {
-        showToast('No new items added', 'success');
+        showToast(t('imageActions.noNewItemsAdded'), 'success');
       }
       open();
     }
