@@ -313,12 +313,12 @@ class DB:
                     'label',
                     'description',
                     'moment_id',
+                    'width',
+                    'height',
                 ],
                 'details_fields': [
                     'label',
                     'file_size',
-                    'width',
-                    'height',
                 ],
                 'relations': {
                     'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},
@@ -335,7 +335,7 @@ class DB:
                 'fields': ['label', 'images_count', 'active_images_count', 'representative_face', 'representative_image'],
                 'representative': {'field': 'representative_face', 'table': 'faces'},
                 'relations': {
-                    'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
+                    'images': {'relation_table': 'groups_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id', 'width', 'height']},
                     'faces': {'relation_table': 'faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']}
                 },
             },
@@ -344,7 +344,7 @@ class DB:
                 'fields': ['label', 'description', 'start_date', 'end_date', 'images_count', 'active_images_count', 'representative_image'],
                 'representative': {'field': 'representative_image', 'table': 'images'},
                 'relations': {
-                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id']},
+                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'upload_id', 'width', 'height']},
                 },
             },
             'albums': {
@@ -352,7 +352,7 @@ class DB:
                 'fields': ['label', 'description', 'images_count', 'active_images_count', 'representative_image'],
                 'representative': {'field': 'representative_image', 'table': 'images'},
                 'relations': {
-                    'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite']},
+                    'images': {'relation_table': 'albums_images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'width', 'height']},
                 },
             },
             'uploads': {
@@ -360,7 +360,7 @@ class DB:
                 'primary_key': 'upload_id',
                 'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
-                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id']},
+                    'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id', 'width', 'height']},
                     'faces': {'relation_table': 'uploads_faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']},
                     'groups': {
                         'relation_table': 'uploads_groups',
