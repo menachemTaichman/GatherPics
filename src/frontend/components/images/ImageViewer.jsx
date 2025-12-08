@@ -748,9 +748,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const currentImageIndex = useMemo(() => {
     if (!imageId || !filteredImages.length) return 0;
     const foundIndex = filteredImages.findIndex(img => img.id === imageId);
-    const result = foundIndex >= 0 ? foundIndex : Math.min(currentIndex, filteredImages.length - 1);
-    
-    return result;
+    return foundIndex >= 0 ? foundIndex : Math.min(currentIndex, filteredImages.length - 1);
   }, [imageId, filteredImages, currentIndex]);
 
   // Use the store-based index for navigation
@@ -893,7 +891,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const pswpItems = useMemo(() => {
     if (!filteredImages || !urlHelpers || !eventId) return [];
     
-    return filteredImages.map((img) => {
+    const items = filteredImages.map((img) => {
       const imgId = img.id;
       const thumbnailUrl = urlHelpers.getThumbnailUrl ? urlHelpers.getThumbnailUrl(imgId) : null;
       const displayUrl = urlHelpers.getDisplayImageUrl ? urlHelpers.getDisplayImageUrl(imgId) : null;
@@ -910,7 +908,22 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         alt: img.label || imageAltText,
       };
     });
-  }, [filteredImages, urlHelpers, eventId, storeImageInfo, imageAltText]);
+    
+    // Reverse items for RTL so swipe gestures match visual direction
+    // PhotoSwipe always treats swipe-left as "next", but in RTL swipe-left should go to "previous"
+    return isRTL ? [...items].reverse() : items;
+  }, [filteredImages, urlHelpers, eventId, storeImageInfo, imageAltText, isRTL]);
+  
+  // Helper to convert between normal index and RTL-reversed index
+  const toRTLIndex = useCallback((index) => {
+    if (!isRTL || pswpItems.length === 0) return index;
+    return pswpItems.length - 1 - index;
+  }, [isRTL, pswpItems.length]);
+  
+  const fromRTLIndex = useCallback((rtlIndex) => {
+    if (!isRTL || pswpItems.length === 0) return rtlIndex;
+    return pswpItems.length - 1 - rtlIndex;
+  }, [isRTL, pswpItems.length]);
 
   // Initialize PhotoSwipe when image changes
   useEffect(() => {
@@ -925,9 +938,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       pswpInstanceRef.current = null;
     }
 
+    // For RTL, we use reversed array and reversed index
+    const pswpIndex = toRTLIndex(currentIndex);
+
     const options = {
       dataSource: pswpItems,
-      index: currentIndex,
+      index: pswpIndex,
       mainClass: isRTL ? 'pswp-rtl' : '',
       showHideAnimationType: 'none',
       zoomAnimationDuration: 200,
@@ -961,14 +977,36 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Handle navigation
     pswp.on('change', () => {
-      const newIndex = pswp.currIndex;
+      const pswpNewIndex = pswp.currIndex;
+      // Convert from RTL-reversed index back to original index
+      const newIndex = fromRTLIndex(pswpNewIndex);
       if (newIndex !== effectiveIndex && onNavigate) {
         onNavigate('jump', newIndex);
+      }
+      
+      // Fix PhotoSwipe counter for RTL (show correct non-reversed index)
+      if (isRTL) {
+        const counterEl = pswp.element?.querySelector('.pswp__counter');
+        if (counterEl) {
+          const displayIndex = newIndex + 1;
+          counterEl.textContent = `${displayIndex} / ${pswpItems.length}`;
+          counterEl.style.direction = 'ltr'; // Prevent RTL from flipping "3/18" to "18/3"
+        }
       }
     });
 
     // Initialize PhotoSwipe
     pswp.init();
+    
+    // Fix initial PhotoSwipe counter for RTL
+    if (isRTL) {
+      const counterEl = pswp.element?.querySelector('.pswp__counter');
+      if (counterEl) {
+        const displayIndex = currentIndex + 1;
+        counterEl.textContent = `${displayIndex} / ${pswpItems.length}`;
+        counterEl.style.direction = 'ltr'; // Prevent RTL from flipping "3/18" to "18/3"
+      }
+    }
     
     // Inject RTL styles
     if (isRTL) {
@@ -977,14 +1015,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-          .pswp-rtl .pswp__container {
-            direction: rtl;
-            flex-direction: row-reverse !important;
-          }
-
-          .pswp-rtl .pswp__item {
-            direction: rtl;
-          }
+          /* RTL swipe direction is handled by reversing the dataSource array */
+          /* Only visual RTL adjustments needed here (arrow buttons) */
 
           .pswp-rtl .pswp__button--arrow--next {
             right: auto !important;
@@ -1284,14 +1316,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         pswpInstanceRef.current = null;
       }
     };
-  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL]);
+  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL, toRTLIndex, fromRTLIndex]);
 
   // Sync PhotoSwipe when index changes externally
   useEffect(() => {
-    if (pswpInstanceRef.current && effectiveIndex !== pswpInstanceRef.current.currIndex) {
-      pswpInstanceRef.current.goTo(effectiveIndex);
+    if (pswpInstanceRef.current) {
+      const pswpTargetIndex = toRTLIndex(effectiveIndex);
+      if (pswpTargetIndex !== pswpInstanceRef.current.currIndex) {
+        pswpInstanceRef.current.goTo(pswpTargetIndex);
+      }
     }
-  }, [effectiveIndex]);
+  }, [effectiveIndex, toRTLIndex]);
 
   // PhotoSwipe handles all zoom/pan functionality natively
 
