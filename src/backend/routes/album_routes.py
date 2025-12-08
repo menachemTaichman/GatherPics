@@ -170,6 +170,9 @@ def _edit_album_images(event_id: str, album_id: str, image_ids: list[str], add: 
             if album_id == event_data['archive_album_id']:
                 all_parents = event.models.get_parents('images', updated_image_ids)
                 for entity, parent_to_images in all_parents.items():
+                    # special case beacuse it's for view only within event 
+                    if entity == 'events_profiles_ctx':
+                        continue
                     parent_ids = list(parent_to_images.keys())
                     changes.append({
                         'type': 'UPDATE',
