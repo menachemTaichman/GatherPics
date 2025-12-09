@@ -1857,16 +1857,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     <AnimatePresence>
       <div 
         key="image-viewer-modal" 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-overlay overflow-hidden"
+        className={`fixed inset-0 ${isMobile ? 'bg-transparent' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50 modal-overlay overflow-hidden`}
       >
         <motion.div
           ref={modalRef}
-          className={`bg-transparent border-2 border-white/30 rounded-lg shadow-xl min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-2 rounded-none' : 'mx-4 my-4 w-full'}`}
+          className={`${isMobile ? 'bg-transparent border-0 shadow-none' : 'bg-transparent border-2 border-white/30 rounded-lg shadow-xl'} min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-0 rounded-none w-full h-full' : 'mx-4 my-4 w-full'}`}
           style={isMobile ? {
-            ...mobileModalStyle,
-            width: mobileModalStyle.width || '100vw',
-            maxWidth: mobileModalStyle.maxWidth || '100vw',
-            maxHeight: mobileModalStyle.maxHeight || 'calc(100vh - 5rem)'
+            width: '100vw',
+            height: '100vh',
+            maxWidth: '100vw',
+            maxHeight: '100vh'
           } : { 
             maxHeight: 'calc(100vh - 3rem)',
             height: 'calc(min(100vw - 2rem, 1024px) * 0.67)',
@@ -1883,7 +1883,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             {/* Image Viewer - PhotoSwipe container */}
             <div 
               ref={containerRef}
-              className="flex items-center justify-center bg-gray-900 relative overflow-hidden"
+              className={`flex items-center justify-center relative overflow-hidden ${isMobile ? 'bg-transparent' : 'bg-gray-900'}`}
               style={{ 
                 width: isMobile ? '100%' : 'calc(min(100vw - 2rem, 1024px))',
                 height: '100%',
@@ -1960,50 +1960,38 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 </>
               )}
 
-              {/* On-image overlay controls */}
-              {!loading && (
+              {/* On-image overlay controls - Desktop only (mobile uses PhotoSwipe UI and Vaul drawer) */}
+              {!loading && !isMobile && (
                 <div 
                   className={`absolute inset-0 z-30 transition-opacity duration-200 ${
-                    isMobile ? 'opacity-100' : (controlsVisible ? 'opacity-100' : 'opacity-0')
+                    controlsVisible ? 'opacity-100' : 'opacity-0'
                   } pointer-events-none`}
                   onMouseMove={() => {
-                    if (!isMobile) {
-                      try {
-                        setControlsVisible(true);
-                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-                      } catch {}
-                    }
+                    try {
+                      setControlsVisible(true);
+                      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+                    } catch {}
                   }}
                   onMouseLeave={() => {
-                    if (!isMobile) {
-                      try {
-                        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                      } catch {}
-                      setControlsVisible(false);
-                    }
-                  }}
-                  onTouchStart={() => {
-                    // Show controls on touch (mobile)
-                    if (isMobile) {
-                      setControlsVisible(true);
-                    }
+                    try {
+                      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+                    } catch {}
+                    setControlsVisible(false);
                   }}
                 >
                   {/* Close button - top-right in LTR, top-left in RTL */}
                   <button
                     onClick={onClose}
-                    className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md ${
-                      isMobile ? 'w-10 h-10' : 'w-8 h-8'
-                    } flex items-center justify-center shadow ${endClass(isMobile ? '2' : '4')}`}
+                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${endClass('4')}`}
                     title={t('imageViewer.close')}
                     aria-label={t('imageViewer.close')}
                   >
-                    <X className={isMobile ? 'w-6 h-6' : 'w-5 h-5'} />
+                    <X className="w-5 h-5" />
                   </button>
 
                   {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
-                  <div className={`absolute ${isMobile ? 'bottom-3' : 'bottom-5'} pointer-events-auto flex items-center ${isMobile ? 'gap-3' : 'gap-4'} ${endClass(isMobile ? '2' : '4')}`}>
+                  <div className={`absolute bottom-5 pointer-events-auto flex items-center gap-4 ${endClass('4')}`}>
                     {(() => {
                       const favoriteTooltip = imageActions.isFavorite
                         ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
@@ -2033,7 +2021,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             >
                               <svg
                                 viewBox="0 0 24 24"
-                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
+                                className={`w-6 h-6 ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
                                 fill={imageActions.isFavorite ? 'currentColor' : 'none'}
                                 stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
                                 strokeWidth="2"
@@ -2067,7 +2055,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                             >
                               <svg
                                 viewBox="0 0 24 24"
-                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
+                                className={`w-6 h-6 ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
                                 fill="none"
                                 stroke={imageActions.isArchived ? 'white' : '#6b7280'}
                                 strokeWidth="2"
@@ -2087,18 +2075,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
                   {/* Navigation - top-center */}
                   {filteredImages.length > 1 && (
-                    <div className={`absolute ${isMobile ? 'top-2' : 'top-4'} left-1/2 -translate-x-1/2 flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} pointer-events-auto`}>
+                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto`}>
                       <button
                         onClick={() => handleNavigate('prev')}
-                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
-                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
-                        } flex items-center justify-center shadow`}
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow`}
                         title={t('imageViewer.previous')}
                         aria-label={t('imageViewer.previous')}
                       >
-                        {isRTL ? <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
+                        {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
                       </button>
-                      <div dir="ltr" className={`bg-white/80 text-gray-800 rounded-md ${isMobile ? 'px-1.5' : 'px-2'} ${isMobile ? 'h-10' : 'h-8'} shadow flex items-center ${isMobile ? 'text-sm' : ''}`}>
+                      <div dir="ltr" className={`bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center`}>
                         {isEditingIndex ? (
                           <input
                             type="text"
@@ -2143,13 +2129,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       </div>
                       <button
                         onClick={() => handleNavigate('next')}
-                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md ${
-                          isMobile ? 'w-10 h-10' : 'w-8 h-8'
-                        } flex items-center justify-center shadow`}
+                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow`}
                         title={t('imageViewer.next')}
                         aria-label={t('imageViewer.next')}
                       >
-                        {isRTL ? <ArrowLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ArrowRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />}
+                        {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                       </button>
                     </div>
                   )}
@@ -2160,18 +2144,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
                   <button
                     onClick={() => setSidebarVisible(v => !v)}
-                    className={`absolute ${isMobile ? 'top-2' : 'top-4'} pointer-events-auto bg-white/90 hover:bg-white text-gray-800 rounded-md ${
-                      isMobile ? 'w-10 h-10' : 'w-8 h-8'
-                    } flex items-center justify-center shadow-lg z-40 ${startClass(isMobile ? '2' : '4')}`}
+                    className={`absolute top-4 pointer-events-auto bg-white/90 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow-lg z-40 ${startClass('4')}`}
                     title={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
                     aria-label={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
                   >
                     {sidebarVisible ? (
                       // When visible, point in direction to close (left in RTL, right in LTR)
-                      isRTL ? <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+                      isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
                     ) : (
                       // When hidden, point in direction to open (right in RTL, left in LTR)
-                      isRTL ? <ChevronRight className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} /> : <ChevronLeft className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
+                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
                     )}
                   </button>
                 </div>
@@ -2194,6 +2176,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 onTouchStart={handleDrawerTouchStart}
                 onTouchEnd={handleDrawerTouchEnd}
               >
+                <Drawer.Title className="sr-only">
+                  {t('imageViewer.photoDetails')}
+                </Drawer.Title>
+                <Drawer.Description className="sr-only">
+                  {t('imageViewer.photoDetails')}
+                </Drawer.Description>
                 <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />
                 <div className="flex flex-col h-full min-h-0 overflow-y-auto px-4 pb-8">
                   {/* Controls */}
