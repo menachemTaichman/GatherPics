@@ -813,26 +813,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const facesList = isAuthenticated ? storeFacesList : placeholderFaces;
   const albumsList = isAuthenticated ? storeAlbumsList : placeholderAlbums;
   
-  // Debug: Log facesList changes
-  useEffect(() => {
-    console.log('[FaceRectangles] facesList changed', {
-      length: facesList.length,
-      isAuthenticated,
-      faces: facesList.map(f => ({
-        id: f.id || f.face_id,
-        groupId: f.groupId || f.group_id,
-        face_left: f.face_left,
-        face_top: f.face_top,
-        face_width: f.face_width,
-        face_height: f.face_height,
-      })),
-    });
-  }, [facesList, isAuthenticated]);
-  
   // Sync refs with state for PhotoSwipe event handlers
   useEffect(() => {
     showRectanglesRef.current = showRectangles;
-    console.log('[FaceRectangles] showRectangles changed', showRectangles);
   }, [showRectangles]);
   
   useEffect(() => {
@@ -1500,16 +1483,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   // Update face rectangles when visibility, faces, or selection changes
   // CSS-first approach: Uses pure CSS transforms and DOM hierarchy, no manual pixel math
   useEffect(() => {
-    console.log('[FaceRectangles] useEffect triggered', {
-      showRectangles,
-      facesListLength: facesList.length,
-      imageId,
-      hasPswpInstance: !!pswpInstanceRef.current,
-      pswpCurrIndex: pswpInstanceRef.current?.currIndex,
-    });
-    
     if (!pswpInstanceRef.current) {
-      console.log('[FaceRectangles] No PhotoSwipe instance, returning');
       return;
     }
     
@@ -1517,10 +1491,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const currentSlide = pswp.currSlide;
     
     if (!currentSlide || !currentSlide.content) {
-      console.log('[FaceRectangles] Slide not ready', {
-        hasSlide: !!currentSlide,
-        hasContent: !!currentSlide?.content,
-      });
       return;
     }
     
@@ -1528,19 +1498,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const originalIndex = fromRTLIndex(pswp.currIndex);
     const currentImageId = filteredImages[originalIndex]?.id;
     
-    console.log('[FaceRectangles] Current slide info', {
-      originalIndex,
-      currentImageId,
-      expectedImageId: imageId,
-      matches: currentImageId === imageId,
-    });
-    
     // Only show rectangles for the current image
     if (currentImageId !== imageId) {
-      console.log('[FaceRectangles] Image ID mismatch, removing overlay');
       // Remove any existing overlay for wrong image
       const existingOverlay = currentSlide.content.element?.querySelector('.pswp-face-overlay');
       if (existingOverlay) {
+        // Clean up ResizeObserver before removing
+        if (existingOverlay._resizeObserver) {
+          existingOverlay._resizeObserver.disconnect();
+          delete existingOverlay._resizeObserver;
+        }
         existingOverlay.remove();
       }
       return;
@@ -1549,32 +1516,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     // Remove existing overlay
     const existingOverlay = currentSlide.content.element?.querySelector('.pswp-face-overlay');
     if (existingOverlay) {
-      console.log('[FaceRectangles] Removing existing overlay');
+      // Clean up ResizeObserver before removing
+      if (existingOverlay._resizeObserver) {
+        existingOverlay._resizeObserver.disconnect();
+        delete existingOverlay._resizeObserver;
+      }
       existingOverlay.remove();
     }
     
     // Re-inject if showRectangles is true
-    console.log('[FaceRectangles] Checking injection conditions', {
-      showRectangles,
-      facesListLength: facesList.length,
-      willInject: showRectangles && facesList.length > 0,
-    });
-    
     if (showRectangles && facesList.length > 0) {
       // Small delay to ensure PhotoSwipe has finished its layout
       const timeoutId = setTimeout(() => {
-        console.log('[FaceRectangles] Injection timeout fired');
-        
         if (!pswpInstanceRef.current) {
-          console.log('[FaceRectangles] No PhotoSwipe instance in timeout');
           return;
         }
         const slide = pswpInstanceRef.current.currSlide;
         if (!slide || !slide.content) {
-          console.log('[FaceRectangles] Slide not ready in timeout', {
-            hasSlide: !!slide,
-            hasContent: !!slide?.content,
-          });
           return;
         }
         
@@ -1582,17 +1540,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         const checkIndex = fromRTLIndex(pswpInstanceRef.current.currIndex);
         const checkImageId = filteredImages[checkIndex]?.id;
         if (checkImageId !== imageId) {
-          console.log('[FaceRectangles] Image ID changed during timeout', {
-            checkImageId,
-            imageId,
-          });
           return;
         }
         
         // Find content element - in PhotoSwipe v5, this might be the img itself
         const contentElement = slide.content.element;
         if (!contentElement) {
-          console.log('[FaceRectangles] No content element found');
           return;
         }
         
@@ -1603,24 +1556,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         }
         
         if (!img || img.tagName !== 'IMG') {
-          console.error('[FaceRectangles] No image found', {
-            contentElementTag: contentElement.tagName,
-            contentElementClass: contentElement.className,
-          });
           return;
         }
         
         // Get image natural dimensions for aspect ratio
         const imgW = img.naturalWidth || storeImageInfo?.width || 2000;
         const imgH = img.naturalHeight || storeImageInfo?.height || 1500;
-        
-        console.log('[FaceRectangles] Found image', {
-          img,
-          naturalWidth: img.naturalWidth,
-          naturalHeight: img.naturalHeight,
-          imgW,
-          imgH,
-        });
         
         // Find .pswp__zoom-wrap element (PhotoSwipe's zoom container)
         // This is the element that PhotoSwipe transforms for zoom/pan
@@ -1639,11 +1580,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         const container = zoomWrap || img.parentElement;
         
         if (!container || container.tagName === 'IMG') {
-          console.error('[FaceRectangles] Cannot find valid container', {
-            containerTag: container?.tagName,
-            imgParent: img.parentElement?.tagName,
-            imgParentClass: img.parentElement?.className,
-          });
           return;
         }
         
@@ -1651,67 +1587,48 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         const containerStyle = window.getComputedStyle(container);
         if (containerStyle.position === 'static' || !containerStyle.position || containerStyle.position === 'initial') {
           container.style.position = 'relative';
-          console.log('[FaceRectangles] Set container position to relative');
         }
         
-        console.log('[FaceRectangles] Found container', {
-          containerTag: container.tagName,
-          containerClasses: container.className,
-          isZoomWrap: container.classList.contains('pswp__zoom-wrap'),
-        });
-        
-        // Create overlay using CSS-first approach
-        // The overlay will be a sibling to the img and will match its dimensions exactly via CSS
+        // Create overlay using geometry clone strategy
+        // Measure the exact position and size of the rendered image and match it pixel-perfectly
         const overlay = document.createElement('div');
         overlay.className = 'pswp-face-overlay';
         
-        // CSS-first positioning: overlay matches image dimensions exactly
-        // Using inset: 0 with margin: auto centers the element within the container
-        // aspect-ratio ensures it maintains the same proportions as the image
-        // max-width and max-height ensure it fits within the container (like object-fit: contain)
-        // The browser automatically calculates the actual width/height to maintain aspect ratio
+        // Helper function to update overlay position based on image geometry
+        const updateOverlayPosition = () => {
+          if (!img || !overlay) return;
+          
+          // Copy exact geometry from img to overlay
+          overlay.style.left = `${img.offsetLeft}px`;
+          overlay.style.top = `${img.offsetTop}px`;
+          overlay.style.width = `${img.offsetWidth}px`;
+          overlay.style.height = `${img.offsetHeight}px`;
+        };
+        
+        // Initial positioning setup
         overlay.style.cssText = `
           position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          margin: auto;
-          max-width: 100%;
-          max-height: 100%;
-          aspect-ratio: ${imgW} / ${imgH};
           pointer-events: none;
           z-index: 9999;
           overflow: visible;
         `;
         
-        console.log('[FaceRectangles] Overlay setup', {
-          imgW,
-          imgH,
-          aspectRatio: `${imgW} / ${imgH}`,
-        });
+        // Initial call to position the overlay
+        updateOverlayPosition();
         
-        console.log('[FaceRectangles] Creating rectangles', {
-          facesCount: facesList.length,
-          imgW,
-          imgH,
-          originalIndex,
+        // Set up ResizeObserver to actively sync overlay position when image changes
+        const ro = new ResizeObserver(() => {
+          // Using requestAnimationFrame to ensure we sync with the repaint cycle
+          requestAnimationFrame(updateOverlayPosition);
         });
+        ro.observe(img);
+        
+        // Store ResizeObserver reference on overlay for cleanup
+        overlay._resizeObserver = ro;
         
         // Create rectangles using percentage-based positioning
         // Since overlay now matches image dimensions exactly via CSS, we can use percentages directly
         facesList.forEach((face, index) => {
-          console.log('[FaceRectangles] Processing face', {
-            index,
-            face: {
-              id: face.id || face.face_id,
-              face_left: face.face_left,
-              face_top: face.face_top,
-              face_width: face.face_width,
-              face_height: face.face_height,
-              groupId: face.groupId || face.group_id,
-            },
-          });
           
           // Determine if coordinates are normalized (0-1) or in pixels
           const isNormalized = face.face_left <= 1 && face.face_top <= 1 && 
@@ -1767,14 +1684,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             box-sizing: border-box;
           `;
           
-          console.log('[FaceRectangles] Rectangle dimensions', {
-            index,
-            leftPercent,
-            topPercent,
-            widthPercent,
-            heightPercent,
-          });
-          
           rect.title = groupLabel || '';
           
           rect.onmouseenter = () => {
@@ -1815,8 +1724,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             const editBtn = document.createElement('button');
             editBtn.style.cssText = `
               position: absolute;
-              ${isRTL ? 'left: 2px;' : 'right: 2px;'}
-              bottom: 2px;
+              ${isRTL ? 'left: -24px;' : 'right: -24px;'}
+              top: 0;
               width: 20px;
               height: 20px;
               background-color: ${borderColor};
@@ -1852,13 +1761,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           overlay.appendChild(rect);
         });
         
-        console.log('[FaceRectangles] Appending overlay to container', {
-          overlayChildren: overlay.children.length,
-          container: container,
-          containerTag: container.tagName,
-          containerClasses: container.className,
-        });
-        
         // Append overlay as a direct sibling to the img
         // Use img.after() to insert right after the image, ensuring it's a direct sibling
         if (img.parentElement === container) {
@@ -1871,14 +1773,19 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           // Fallback: append to img's parent
           img.parentElement?.appendChild(overlay);
         }
-        
-        console.log('[FaceRectangles] Overlay appended successfully', {
-          overlayInDOM: container.contains(overlay),
-          overlayChildren: overlay.children.length,
-        });
       }, 100);
       
-      return () => clearTimeout(timeoutId);
+      return () => {
+        clearTimeout(timeoutId);
+        // Clean up ResizeObserver if overlay exists
+        if (pswpInstanceRef.current?.currSlide?.content?.element) {
+          const existingOverlay = pswpInstanceRef.current.currSlide.content.element.querySelector('.pswp-face-overlay');
+          if (existingOverlay && existingOverlay._resizeObserver) {
+            existingOverlay._resizeObserver.disconnect();
+            delete existingOverlay._resizeObserver;
+          }
+        }
+      };
     }
   }, [showRectangles, facesList, selectedFaceIndex, imageId, effectiveIndex, currentGroupId, isRTL, permissions.canEdit, fromRTLIndex, filteredImages, storeImageInfo, eventId, t]);
 
@@ -2843,16 +2750,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
                           <button
                             onClick={() => {
-                              console.log('[FaceRectangles] Toggle clicked (mobile)', {
-                                currentValue: showRectangles,
-                                facesListLength: facesList.length,
-                              });
                               if (showRectangles) {
                                 setSelectedFaceIndex(null);
                               }
-                              const newValue = !showRectangles;
-                              setShowRectangles(newValue);
-                              console.log('[FaceRectangles] Toggle set to', newValue);
+                              setShowRectangles(!showRectangles);
                             }}
                             className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
                             title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
@@ -2928,28 +2829,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       onClose={() => setShowMoveToMomentModal(false)}
                       selectedImages={imageId ? new Set([imageId]) : new Set()}
                       onMoveComplete={handleMoveToMomentComplete}
-                    />
-                  )}
-
-                  {/* Transfer Faces Modal */}
-                  {showTransferModal && selectedFaceForTransfer && (
-                    <TransferFacesModal
-                      key="transfer-faces-modal-mobile"
-                      isOpen={showTransferModal}
-                      eventUrl={eventUrl}
-                      urlHelpers={urlHelpers}
-                      onClose={() => {
-                        setShowTransferModal(false);
-                        setSelectedFaceForTransfer(null);
-                      }}
-                      currentGroup={selectedFaceForTransfer ? (() => {
-                        const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
-                        if (!gid) return null;
-                        return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid] || null;
-                      })() : null}
-                      selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
-                      onTransferComplete={handleTransferComplete}
-                      sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
                     />
                   )}
                 </div>
@@ -3171,16 +3050,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
                         <button
                           onClick={() => {
-                            console.log('[FaceRectangles] Toggle clicked (desktop)', {
-                              currentValue: showRectangles,
-                              facesListLength: facesList.length,
-                            });
                             if (showRectangles) {
                               setSelectedFaceIndex(null);
                             }
-                            const newValue = !showRectangles;
-                            setShowRectangles(newValue);
-                            console.log('[FaceRectangles] Toggle set to', newValue);
+                            setShowRectangles(!showRectangles);
                           }}
                           className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
                           title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
@@ -3252,8 +3125,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         </motion.div>
       </div>
 
-      {/* Transfer Faces Modal - Desktop Only (rendered inside Drawer on mobile) */}
-      {!isMobile && showTransferModal && selectedFaceForTransfer && (
+      {/* Transfer Faces Modal */}
+      {showTransferModal && selectedFaceForTransfer && (
         <TransferFacesModal
           key="transfer-faces-modal"
           isOpen={showTransferModal}
