@@ -400,7 +400,7 @@ export default function AlbumQuickAddButton({
 
   // Render dropdown content
   const renderDropdownContent = () => (
-        <div className="w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg" dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="w-full max-w-64 sm:w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg" dir={isRTL ? 'rtl' : 'ltr'}>
       {loading || !defaultAlbumsReady ? (
         <div className="p-3 text-sm text-gray-500">{t('albumQuickAdd.loadingAlbums')}</div>
       ) : (
@@ -413,7 +413,7 @@ export default function AlbumQuickAddButton({
             albums.map((album, idx) => (
               <li key={album.id || album.album_id || `${album.label || 'album'}-${idx}`}>
                 <button
-                  className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50"
+                  className="w-full flex items-center gap-3 p-2 hover:bg-gray-50"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleAddToAlbum(album);
@@ -438,13 +438,14 @@ export default function AlbumQuickAddButton({
           <li>
             <div className="p-2">
               {isEditingName ? (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={newAlbumName}
                     onChange={(e) => setNewAlbumName(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={t('albumQuickAdd.albumName')}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                     className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
                     autoFocus
                   />
@@ -475,7 +476,7 @@ export default function AlbumQuickAddButton({
                     e.stopPropagation();
                     setIsEditingName(true);
                   }}
-                  className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50 rounded text-gray-600 hover:text-gray-800"
+                  className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded text-gray-600 hover:text-gray-800"
                 >
                   <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
                     <PlusIcon className="w-4 h-4 text-gray-400" />
