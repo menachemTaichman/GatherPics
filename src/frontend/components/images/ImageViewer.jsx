@@ -26,6 +26,7 @@ import { useRTL } from '../../hooks/useRTL';
 import { formatDateTime } from '../../utils/dateUtils';
 import PhotoSwipe from 'photoswipe';
 import 'photoswipe/dist/photoswipe.css';
+import { Drawer } from 'vaul';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -385,12 +386,27 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   }
   const imageViewerModalId = imageViewerModalIdRef.current;
 
+  // Drawer state - must be defined before useModalFocus to prevent closing while drawer is open
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerOpenRef = useRef(drawerOpen);
+  useEffect(() => {
+    drawerOpenRef.current = drawerOpen;
+  }, [drawerOpen]);
+
+  // Wrapped close handler that prevents closing while drawer is open
+  const handleModalClose = useCallback(() => {
+    if (drawerOpenRef.current) return; // Don't close ImageViewer while drawer is open
+    onClose();
+  }, [onClose]);
+
   // Use modal focus hook
-  const { modalRef } = useModalFocus(true, onClose, {
+  const { modalRef } = useModalFocus(true, handleModalClose, {
     customKeyHandler: handleImageViewerKeys,
     allowOutsideScroll: true,
     modalType: 'popup',
-    modalId: imageViewerModalId
+    modalId: imageViewerModalId,
+    // Disable focus trapping when drawer is open to prevent conflict with Vaul
+    enableFocusTrapping: !drawerOpen
   });
   const [imageInfo, setImageInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -423,6 +439,31 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const startResizeYRef = useRef(0);
   const startAlbumsHeightRef = useRef(0);
   
+  // Drawer swipe logic
+  const drawerTouchStartRef = useRef({ x: 0, y: 0 });
+  const handleDrawerTouchStart = (e) => {
+    drawerTouchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleDrawerTouchEnd = (e) => {
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const diffX = drawerTouchStartRef.current.x - endX;
+    const diffY = drawerTouchStartRef.current.y - endY;
+
+    // Check if horizontal swipe dominant (horizontal diff > vertical diff)
+    // and exceeds threshold (50px)
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      if (diffX > 0) {
+        // Swipe Left -> Next (content moves left, reveals right/next)
+        handleNavigate(isRTL ? 'prev' : 'next');
+      } else {
+        // Swipe Right -> Prev
+        handleNavigate(isRTL ? 'next' : 'prev');
+      }
+    }
+  };
+
   // Detect mobile - hide sidebar by default on mobile
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -444,6 +485,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
     return getPreference('ImageViewer.sidebarOpen', false);
   });
+  const isMobileRef = useRef(isMobile);
+  
+  useEffect(() => {
+    isMobileRef.current = isMobile;
+  }, [isMobile]);
   // Keep controls visible on mobile, auto-hide on desktop
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef(null);
@@ -666,10 +712,33 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     entityId: parent
   });
 
+  const [drawerDirection, setDrawerDirection] = useState('none');
+  const [drawerContentKey, setDrawerContentKey] = useState(imageId);
+
+  // Update content key and direction when imageId changes
+  useEffect(() => {
+    if (imageId !== drawerContentKey) {
+       // Determine direction
+       if (drawerContentKey) {
+         // Simple heuristic: if we are moving forward in index, slide left (content moves left)
+         // But we only have IDs here. The handleNavigate function knows the direction.
+         // We can use a ref to store the last direction from handleNavigate
+       }
+       setDrawerContentKey(imageId);
+    }
+  }, [imageId]);
+
+  // Use a ref to track navigation direction for animation
+  const lastNavDirectionRef = useRef('next');
+
   // Circular navigation
   const handleNavigate = (direction, index) => {
     if (!onNavigate || !filteredImages || filteredImages.length === 0) return;
+    
+    let targetDirection = 'next';
+    
     if (direction === 'prev') {
+      targetDirection = 'prev';
       if (effectiveIndex === 0 && filteredImages.length > 1) {
         // Wrap from first to last
         onNavigate('jump', filteredImages.length - 1);
@@ -677,6 +746,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         onNavigate('prev');
       }
     } else if (direction === 'next') {
+      targetDirection = 'next';
       if (effectiveIndex === filteredImages.length - 1 && filteredImages.length > 1) {
         // Wrap from last to first
         onNavigate('jump', 0);
@@ -685,8 +755,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       }
     } else if (direction === 'jump' && typeof index === 'number') {
       const clamped = Math.min(Math.max(0, index), Math.max(0, filteredImages.length - 1));
+      // Determine direction based on index diff
+      targetDirection = clamped > effectiveIndex ? 'next' : 'prev';
       onNavigate('jump', clamped);
     }
+    
+    lastNavDirectionRef.current = targetDirection;
+    setDrawerDirection(targetDirection);
   };
 
 
@@ -959,6 +1034,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       escKey: false, // We handle close ourselves
       arrowKeys: false, // We handle navigation ourselves
       returnFocus: false,
+      trapFocus: false, // CRITICAL: Disable PhotoSwipe focus trap to prevent conflict with Vaul
       clickToCloseNonZoomable: false,
       imageClickAction: 'zoom',
       bgClickAction: 'zoom', // Changed from 'close' to prevent PhotoSwipe from closing on background click
@@ -972,6 +1048,36 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     };
 
     const pswp = new PhotoSwipe(options);
+
+    // Initialize Vaul Swipe Up Logic
+    let startY = 0;
+    
+    pswp.on('pointerDown', (e) => {
+      if (isMobileRef.current && e.originalEvent) {
+        startY = e.originalEvent.clientY;
+      }
+    });
+
+    pswp.on('pointerUp', (e) => {
+      if (!isMobileRef.current || !e.originalEvent) return;
+      
+      // 1. Check if zoomed in (if so, return and do nothing)
+      if (pswp.currSlide && pswp.currSlide.pan.x !== pswp.currSlide.bounds.center.x) return;
+
+      const endY = e.originalEvent.clientY;
+      const diff = startY - endY; // Positive = Swipe Up
+
+      // 2. Threshold check (50px)
+      if (diff > 50) {
+        setDrawerOpen(true);
+      } else if (diff < -50) {
+        // Swipe Down -> Close Viewer
+        // Trigger exit animation by unmounting via onClose (which unmounts ImageViewer)
+        // Note: The AnimatePresence in parent will handle the exit animation
+        // We can add a custom class or state if we want to change the exit animation style specifically for swipe
+        onClose();
+      }
+    });
 
     // Handle close event from PhotoSwipe
     pswp.on('close', () => {
@@ -992,8 +1098,16 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Initialize PhotoSwipe
     pswp.init();
-    
-    // Fix PhotoSwipe's counter for RTL mode - show correct non-reversed index
+
+    // CRITICAL: Aggressively remove PhotoSwipe's focus listener to prevent stack overflow with Vaul
+    // Even with trapFocus: false, PhotoSwipe might still attach listeners in some versions
+    if (pswp.keyboard) {
+      const keyboard = pswp.keyboard;
+      if (keyboard._onFocusIn) {
+        document.removeEventListener('focusin', keyboard._onFocusIn);
+      }
+      pswp.keyboard = null;
+    }
     if (isRTL) {
       const updateCounter = () => {
         const counterEl = pswp.element?.querySelector('.pswp__counter');
@@ -1090,8 +1204,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         button.onmouseleave = () => { button.style.opacity = '0.75'; };
         button.onclick = (e) => {
           e.stopPropagation();
+          e.stopImmediatePropagation();
           e.preventDefault();
-          // TODO: Open drawer in future
+          // On mobile, open drawer; on desktop, toggle sidebar
+          if (isMobileRef.current) {
+            setDrawerOpen(true);
+          } else {
+            setSidebarVisible(v => !v);
+          }
         };
       }
       
@@ -2059,23 +2179,356 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               
             </div>
 
-                    {/* Mobile sidebar backdrop */}
-        {isMobile && sidebarVisible && (
-          <div
+                    {/* Mobile Vaul Drawer */}
+        {isMobile && (
+          <Drawer.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <Drawer.Portal>
+              <Drawer.Overlay 
             className="fixed inset-0 bg-black/50"
-            style={{ zIndex: 35 }}
-            onClick={() => setSidebarVisible(false)}
-            aria-hidden="true"
-          />
+                style={{ zIndex: 100001 }}
+              />
+              <Drawer.Content 
+                className="fixed bottom-0 left-0 right-0 flex flex-col bg-white rounded-t-[10px] max-h-[85vh]"
+                style={{ zIndex: 100001 }}
+                dir={isRTL ? 'rtl' : 'ltr'}
+                onTouchStart={handleDrawerTouchStart}
+                onTouchEnd={handleDrawerTouchEnd}
+              >
+                <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />
+                <div className="flex flex-col h-full min-h-0 overflow-y-auto px-4 pb-8">
+                  {/* Controls */}
+                  <div className="border-b border-gray-200 pb-3">
+                    <ImageViewerActions
+                      imageId={imageId}
+                      imageInfo={storeImageInfo}
+                      eventUrl={eventUrl}
+                      showToast={showToast}
+                      urlHelpers={urlHelpers}
+                      onImageUpdated={handleImageUpdated}
+                      entity={entity}
+                      entityId={parent}
+                      eventId={eventId}
+                      imageActions={imageActions}
+                      isUnassociatedGroup={isUnassociatedGroup}
+                      isMobile={isMobile}
+                    />
+                  </div>
+                  
+                  {/* Animated Content for Navigation */}
+                  <div className="flex-1 min-h-0 relative overflow-hidden">
+                    <AnimatePresence initial={false} mode="popLayout" custom={drawerDirection}>
+                      <motion.div
+                        key={imageId}
+                        custom={drawerDirection}
+                        initial={{ 
+                          x: (isRTL 
+                            ? (drawerDirection === 'next' ? '-100%' : '100%') 
+                            : (drawerDirection === 'next' ? '100%' : '-100%')), 
+                          opacity: 0 
+                        }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ 
+                          x: (isRTL 
+                            ? (drawerDirection === 'next' ? '100%' : '-100%') 
+                            : (drawerDirection === 'next' ? '-100%' : '100%')), 
+                          opacity: 0 
+                        }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className="h-full overflow-y-auto"
+                      >
+                  {/* Details Section */}
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <h4 className="text-xs font-medium text-gray-700 mb-1">{t('imageViewer.photoDetails')}</h4>
+                    <div className="text-xs text-gray-500 space-y-0.5">
+                      <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.name')}</span> {storeImageInfo?.label || imageMeta.label}</div>
+                      <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.date')}</span> <span dir="ltr">{formatDateTime(storeImageInfo?.date_taken)}</span></div>
+                      <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalSize')}</span> <span dir="ltr">{(() => {
+                        const size = storeImageInfo?.file_size;
+                        if (!size) return t('imageViewer.unknown');
+                        if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+                        if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+                        return (size / 1024).toFixed(1) + ' KB';
+                      })()}</span></div>
+                      <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalResolution')}</span> <span dir="ltr">{storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : t('imageViewer.unknown')}</span></div>
+                      <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
+                        <div className="flex items-start">
+                          <span className={`font-semibold flex-shrink-0 ${me('2')}`}>{t('imageViewer.description')}</span>
+                          {isEditingDescription && permissions.canEdit ? (
+                            <div className="flex-1 min-w-0">
+                              <textarea
+                                value={descriptionValue}
+                                onChange={(e) => setDescriptionValue(e.target.value)}
+                                onBlur={handleDescriptionSave}
+                                onKeyDown={handleDescriptionKeyDown}
+                                className="w-full text-sm text-gray-700 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-sm"
+                                rows={4}
+                                autoFocus
+                                disabled={isSavingDescription}
+                                style={{ minHeight: '4rem' }}
+                              />
+                              <div className="flex items-center justify-end gap-2 mt-2">
+                                <button
+                                  onClick={handleDescriptionCancel}
+                                  className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                  disabled={isSavingDescription}
+                                >
+                                  {t('imageViewer.cancel')}
+                                </button>
+                                <button
+                                  onClick={handleDescriptionSave}
+                                  className="text-xs text-primary-600 hover:text-primary-800 px-2 py-1 rounded hover:bg-primary-50 transition-colors"
+                                  disabled={isSavingDescription}
+                                >
+                                  {isSavingDescription ? t('imageViewer.saving') : t('imageViewer.save')}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={handleDescriptionClick}
+                              className={`flex-1 min-w-0 text-gray-500 ${permissions.canEdit ? 'cursor-text hover:text-gray-700' : ''} transition-colors`}
+                              title={permissions.canEdit ? t('imageViewer.clickToEditDescription') : ''}
+                            >
+                              {storeImageInfo?.description ? (
+                                <span className="whitespace-pre-wrap break-words">{storeImageInfo.description}</span>
+                              ) : (
+                                <span className="text-gray-400 italic">{permissions.canEdit ? t('imageViewer.clickToAddDescription') : t('imageViewer.noDescription')}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Moment Information */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-gray-500 flex-1 min-w-0">
+                          <span className={`font-semibold ${me('2')}`}>{t('imageViewer.moment')}</span>
+                          {momentInfo ? (
+                            <a
+                              href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
+                              onClick={handleMomentLinkClick}
+                              className={`${ms('1')} text-primary-600 hover:text-primary-700 hover:underline cursor-pointer`}
+                              title={t('imageViewer.jumpToMoment')}
+                            >
+                              {momentInfo.label}
+                            </a>
+                          ) : (
+                            <span className={ms('1')}>{t('imageViewer.none')}</span>
+                          )}
+                        </div>
+                        <PermissionGate requires="canEdit">
+                          <button
+                            onClick={() => setShowMoveToMomentModal(true)}
+                            className={`w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ${ms('2')}`}
+                            title={t('imageViewer.editMoment')}
+                            aria-label={t('imageViewer.editMoment')}
+                          >
+                            <Edit2 className="w-3 h-3 text-gray-600" />
+                          </button>
+                        </PermissionGate>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Albums Section */}
+                  {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
+                        <button
+                          onClick={() => setAlbumsOpen(v => !v)}
+                          className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                          title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
+                          aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
+                        >
+                          {albumsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {albumsOpen && (
+                        <div className="space-y-1">
+                          {albumsList.map((album, index) => (
+                            <div
+                              key={album.id || `${album.label || 'album'}-${index}`}
+                              className={`flex items-center p-2 rounded-lg bg-gray-50 ${album.isPlaceholder ? '' : 'hover:bg-gray-100'} transition-colors`}
+                            >
+                              {album.isPlaceholder ? (
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {ImageComponent(null, {
+                                    width: 40,
+                                    height: 40,
+                                    className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                    alt: ''
+                                  })}
+                                  <span className="font-medium text-gray-900 truncate">\u00A0</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <a
+                                    href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
+                                    onClick={(e) => handleAlbumLinkClick(e, album)}
+                                    className="flex items-center gap-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    title={album.label}
+                                  >
+                                    {ImageComponent(
+                                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
+                                      {
+                                        width: 40,
+                                        height: 40,
+                                        className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
+                                        alt: ''
+                                      }
+                                    )}
+                                    <span className="font-medium text-gray-900 truncate">{album.label}</span>
+                                  </a>
+                                  <PermissionGate requires="canEdit">
+                                    <button
+                                      onClick={() => handleRemoveFromAlbum(album)}
+                                      className={`${ms('3')} p-1.5 hover:bg-red-100 rounded-lg transition-colors`}
+                                      title={t('imageViewer.removeFromAlbum', { album: album.label })}
+                                      aria-label={t('imageViewer.removeFromAlbum', { album: album.label })}
+                                    >
+                                      <Minus className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  </PermissionGate>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Faces Section */}
+                  {permissions.has_groups && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
+                          <button
+                            onClick={() => {
+                              if (showRectangles) {
+                                setSelectedFaceIndex(null);
+                              }
+                              setShowRectangles(v => !v);
+                            }}
+                            className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
+                            title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
+                            aria-label={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
+                          >
+                            {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => setFacesOpen(v => !v)}
+                          className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
+                          title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
+                          aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
+                        >
+                          {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {facesOpen && (
+                        <div className="space-y-2">
+                          {facesList.length === 0 ? (
+                            <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
+                          ) : (
+                            facesList.map((face, index) => (
+                              <div
+                                key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
+                                className={`flex items-center gap-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
+                                onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
+                              >
+                                {ImageComponent(
+                                  face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
+                                  {
+                                    width: 40,
+                                    height: 40,
+                                    className: 'w-10 h-10 object-cover rounded-full',
+                                    alt: getGroupLabel(face),
+                                    iconType: 'person'
+                                  }
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {getGroupLabel(face) || '\u00A0'}
+                                  </p>
+                                </div>
+                                {!face.isPlaceholder && (
+                                  <a
+                                    href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
+                                    onClick={(e) => handlePersonLinkClick(e, face)}
+                                    className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                                    title={t('imageViewer.goToPersonPage')}
+                                  >
+                                    <User className="w-4 h-4 text-gray-600" />
+                                  </a>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                  
+                  {/* Mobile Modals: Render inside Drawer content to ensure correct context and focus handling */}
+                  {/* Move to Moment Modal */}
+                  {showMoveToMomentModal && (
+                    <div className="relative z-[100005]">
+                      <MoveToMomentModal
+                        key="move-to-moment-modal-mobile"
+                        isOpen={showMoveToMomentModal}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        onClose={() => setShowMoveToMomentModal(false)}
+                        selectedImages={imageId ? new Set([imageId]) : new Set()}
+                        onMoveComplete={handleMoveToMomentComplete}
+                      />
+                    </div>
+                  )}
+
+                  {/* Transfer Faces Modal */}
+                  {showTransferModal && selectedFaceForTransfer && (
+                    <div className="relative z-[100005]">
+                      <TransferFacesModal
+                        key="transfer-faces-modal-mobile"
+                        isOpen={showTransferModal}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        onClose={() => {
+                          setShowTransferModal(false);
+                          setSelectedFaceForTransfer(null);
+                        }}
+                        currentGroup={selectedFaceForTransfer ? (() => {
+                          const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
+                          if (!gid) return null;
+                          return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid] || null;
+                        })() : null}
+                        selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
+                        onTransferComplete={handleTransferComplete}
+                        sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
+                      />
+                    </div>
+                  )}
+                </div>
+              </Drawer.Content>
+            </Drawer.Portal>
+          </Drawer.Root>
         )}
         
-        {/* Sidebar */}
-        {sidebarVisible && (
-        <div className={`${isMobile ? 'w-full fixed inset-y-0 z-40' : 'w-80'} bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
-          isMobile ? '' : (isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200')
-        } ${isMobile ? (isRTL ? 'right-0' : 'left-0') : ''}`} style={{ order: isRTL ? 1 : 1 }}>
+        {/* Desktop Sidebar */}
+        {!isMobile && sidebarVisible && (
+        <div className={`w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
+          isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'
+        }`} style={{ order: isRTL ? 1 : 1 }}>
           {/* Controls */}
-          <div className={`${isMobile ? 'p-2' : 'p-3'} border-b border-gray-200 image-viewer-controls flex-none relative`}>
+          <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
                 <ImageViewerActions
                   imageId={imageId}
                   imageInfo={storeImageInfo}
@@ -2088,7 +2541,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   eventId={eventId}
                   imageActions={imageActions}
                   isUnassociatedGroup={isUnassociatedGroup}
-                  isMobile={isMobile}
+                  isMobile={false}
                 />
 
                     {/* Details Section */}
@@ -2356,8 +2809,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         </motion.div>
       </div>
 
-      {/* Transfer Faces Modal */}
-      {showTransferModal && selectedFaceForTransfer && (
+      {/* Transfer Faces Modal - Desktop Only (rendered inside Drawer on mobile) */}
+      {!isMobile && showTransferModal && selectedFaceForTransfer && (
         <TransferFacesModal
           key="transfer-faces-modal"
           isOpen={showTransferModal}
@@ -2378,8 +2831,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         />
       )}
 
-      {/* Move to Moment Modal */}
-      {showMoveToMomentModal && (
+      {/* Move to Moment Modal - Desktop Only (rendered inside Drawer on mobile) */}
+      {!isMobile && showMoveToMomentModal && (
         <MoveToMomentModal
           key="move-to-moment-modal"
           isOpen={showMoveToMomentModal}

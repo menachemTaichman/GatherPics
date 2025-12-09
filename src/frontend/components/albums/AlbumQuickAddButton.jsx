@@ -271,25 +271,25 @@ export default function AlbumQuickAddButton({
       const isUp = dropdownDirection === 'up';
       
       if (isUp) {
-        return {
-          position: 'fixed',
-          ...(isRTL 
-            ? { right: `${window.innerWidth - right}px` }
-            : { left: `${left}px` }
-          ),
-          bottom: `${window.innerHeight - top + 8}px`,
-          zIndex: 10000,
-        };
-      }
       return {
         position: 'fixed',
         ...(isRTL 
           ? { right: `${window.innerWidth - right}px` }
           : { left: `${left}px` }
         ),
-        top: `${bottom + 8}px`,
-        zIndex: 10000,
+        bottom: `${window.innerHeight - top + 8}px`,
+        zIndex: 100002,
       };
+    }
+    return {
+      position: 'fixed',
+      ...(isRTL 
+        ? { right: `${window.innerWidth - right}px` }
+        : { left: `${left}px` }
+      ),
+      top: `${bottom + 8}px`,
+      zIndex: 100002,
+    };
     }
     
     // Use button ref position (normal case)
@@ -306,7 +306,7 @@ export default function AlbumQuickAddButton({
           : { left: `${rect.left}px` }
         ),
         bottom: `${window.innerHeight - rect.top + 8}px`,
-        zIndex: 10000,
+        zIndex: 100002,
       };
     }
     return {
@@ -316,7 +316,7 @@ export default function AlbumQuickAddButton({
         : { left: `${rect.left}px` }
       ),
       top: `${rect.bottom + 8}px`,
-      zIndex: 10000,
+      zIndex: 100002,
     };
   };
 
@@ -429,6 +429,9 @@ export default function AlbumQuickAddButton({
           style={getDropdownPosition()} 
           data-album-dropdown="true"
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
         >
           {renderDropdownContent()}
         </div>,

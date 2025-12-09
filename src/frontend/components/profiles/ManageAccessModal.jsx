@@ -199,38 +199,38 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
 
   return (
     <div
-      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+      className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors gap-3 sm:gap-0"
       dir={isRTL ? 'rtl' : 'ltr'}
     >
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
           isSpecifyAllowed ? 'bg-green-100' :
           isSpecifyDenied ? 'bg-red-100' :
           isSpecifyMixed ? 'bg-yellow-100' :
           'bg-gray-100'
         }`}>
           {isSpecifyAllowed ? (
-            <Check className="w-5 h-5 text-green-600" />
+            <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
           ) : isSpecifyDenied ? (
-            <Minus className="w-5 h-5 text-red-600" />
+            <Minus className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
           ) : isSpecifyMixed ? (
-            <Key className="w-5 h-5 text-yellow-600" />
+            <Key className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
           ) : (
-            <Key className="w-5 h-5 text-gray-400" />
+            <Key className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
           )}
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="font-medium text-gray-900">{profile.label}</p>
+            <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{profile.label}</p>
             {actualStatus !== null && (
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <HelpCircle 
                   className={`w-3.5 h-3.5 ${getActualStatusColor()} cursor-help`}
                   onMouseEnter={() => setShowActualTooltip(true)}
                   onMouseLeave={() => setShowActualTooltip(false)}
                 />
                 {showActualTooltip && (
-                  <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-5 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-normal`}>
+                  <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-5 w-48 sm:w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-normal`}>
                     {getActualTooltipText()}
                   </div>
                 )}
@@ -247,11 +247,11 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 sm:flex-shrink-0">
         <button
           onClick={handleAllow}
           disabled={isLoadingAny || isSpecifyAllowed}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+          className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
             isSpecifyAllowed
               ? 'bg-green-100 text-green-700 hover:bg-green-200'
               : 'bg-green-600 text-white hover:bg-green-700'
@@ -267,7 +267,7 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         <button
           onClick={handleDeny}
           disabled={isLoadingAny || isSpecifyDenied}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+          className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
             isSpecifyDenied
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-red-600 text-white hover:bg-red-700'
