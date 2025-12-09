@@ -1498,6 +1498,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   }, [effectiveIndex, toRTLIndex]);
 
   // Update face rectangles when visibility, faces, or selection changes
+  // CSS-first approach: Uses pure CSS transforms and DOM hierarchy, no manual pixel math
   useEffect(() => {
     console.log('[FaceRectangles] useEffect triggered', {
       showRectangles,
@@ -1520,13 +1521,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         hasSlide: !!currentSlide,
         hasContent: !!currentSlide?.content,
       });
-      // Slide not ready yet, try again after a short delay
-      const timeoutId = setTimeout(() => {
-        if (pswpInstanceRef.current?.currSlide?.content) {
-          // Force re-run by checking again
-        }
-      }, 100);
-      return () => clearTimeout(timeoutId);
+      return;
     }
     
     // Get current image info
@@ -1566,7 +1561,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     });
     
     if (showRectangles && facesList.length > 0) {
-      // Wait a bit for PhotoSwipe to finish rendering
+      // Small delay to ensure PhotoSwipe has finished its layout
       const timeoutId = setTimeout(() => {
         console.log('[FaceRectangles] Injection timeout fired');
         
@@ -1601,7 +1596,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           return;
         }
         
-        // Check if contentElement is the image itself
+        // Find the img element
         let img = contentElement;
         if (contentElement.tagName !== 'IMG') {
           img = contentElement.querySelector('img.pswp__img');
@@ -1615,66 +1610,34 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           return;
         }
         
+        // Get image natural dimensions for aspect ratio
+        const imgW = img.naturalWidth || storeImageInfo?.width || 2000;
+        const imgH = img.naturalHeight || storeImageInfo?.height || 1500;
+        
         console.log('[FaceRectangles] Found image', {
-          img: img,
-          imgParent: img.parentElement,
-          imgParentTag: img.parentElement?.tagName,
-          imgParentClass: img.parentElement?.className,
-          imgGrandParent: img.parentElement?.parentElement,
-          imgGrandParentTag: img.parentElement?.parentElement?.tagName,
-          imgGrandParentClass: img.parentElement?.parentElement?.className,
+          img,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          imgW,
+          imgH,
         });
         
-        // Find the slide item container from PhotoSwipe's DOM structure
-        // Try to find .pswp__item that contains this slide
-        let container = null;
-        
-        // Method 1: Look for .pswp__zoom-wrap in parent hierarchy
+        // Find .pswp__zoom-wrap element (PhotoSwipe's zoom container)
+        // This is the element that PhotoSwipe transforms for zoom/pan
+        let zoomWrap = null;
         let current = img.parentElement;
         while (current && current !== pswp.element) {
           if (current.classList && current.classList.contains('pswp__zoom-wrap')) {
-            container = current;
+            zoomWrap = current;
             break;
           }
           current = current.parentElement;
         }
         
-        // Method 2: Look for .pswp__item-img-container
-        if (!container) {
-          current = img.parentElement;
-          while (current && current !== pswp.element) {
-            if (current.classList && current.classList.contains('pswp__item-img-container')) {
-              container = current;
-              break;
-            }
-            current = current.parentElement;
-          }
-        }
+        // If no .pswp__zoom-wrap found, use img's parent container
+        // Ensure it's positioned relatively for absolute children
+        const container = zoomWrap || img.parentElement;
         
-        // Method 3: Use img's parent if it's not an IMG
-        if (!container && img.parentElement && img.parentElement.tagName !== 'IMG') {
-          container = img.parentElement;
-          // Ensure parent has position relative for absolute children
-          const computedStyle = window.getComputedStyle(container);
-          if (computedStyle.position === 'static' || !computedStyle.position || computedStyle.position === 'initial') {
-            container.style.position = 'relative';
-            console.log('[FaceRectangles] Set container position to relative');
-          }
-        }
-        
-        // Method 4: Look for .pswp__item (slide container)
-        if (!container || container.tagName === 'IMG') {
-          current = img.parentElement;
-          while (current && current !== pswp.element) {
-            if (current.classList && current.classList.contains('pswp__item')) {
-              container = current;
-              break;
-            }
-            current = current.parentElement;
-          }
-        }
-        
-        // Final check: don't append to img element
         if (!container || container.tagName === 'IMG') {
           console.error('[FaceRectangles] Cannot find valid container', {
             containerTag: container?.tagName,
@@ -1684,9 +1647,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           return;
         }
         
-        // Ensure container has proper positioning
-        const computedStyle = window.getComputedStyle(container);
-        if (computedStyle.position === 'static' || !computedStyle.position || computedStyle.position === 'initial') {
+        // Ensure container has proper positioning for absolute children
+        const containerStyle = window.getComputedStyle(container);
+        if (containerStyle.position === 'static' || !containerStyle.position || containerStyle.position === 'initial') {
           container.style.position = 'relative';
           console.log('[FaceRectangles] Set container position to relative');
         }
@@ -1694,75 +1657,38 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         console.log('[FaceRectangles] Found container', {
           containerTag: container.tagName,
           containerClasses: container.className,
-          containerPosition: window.getComputedStyle(container).position,
-          containerRect: container.getBoundingClientRect(),
-          imgRect: img.getBoundingClientRect(),
-          containerContainsImg: container.contains(img),
+          isZoomWrap: container.classList.contains('pswp__zoom-wrap'),
         });
         
-        // Get image dimensions from PhotoSwipe item
-        const item = pswpItems[originalIndex];
-        const imgW = item.w || storeImageInfo?.width || 2000;
-        const imgH = item.h || storeImageInfo?.height || 1500;
-        
-        // Get actual dimensions
-        const imgRect = img.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        
-        // Calculate where the image is actually displayed within the container
-        // PhotoSwipe uses object-fit: contain, so we need to find the image bounds
-        const imageAspect = imgW / imgH;
-        const containerAspect = containerRect.width / containerRect.height;
-        
-        let imageDisplayWidth, imageDisplayHeight, imageOffsetX, imageOffsetY;
-        
-        if (containerRect.width > 0 && containerRect.height > 0 && !isNaN(containerAspect)) {
-          if (imageAspect > containerAspect) {
-            // Image is wider - fit to width
-            imageDisplayWidth = containerRect.width;
-            imageDisplayHeight = containerRect.width / imageAspect;
-            imageOffsetX = 0;
-            imageOffsetY = (containerRect.height - imageDisplayHeight) / 2;
-          } else {
-            // Image is taller - fit to height
-            imageDisplayHeight = containerRect.height;
-            imageDisplayWidth = containerRect.height * imageAspect;
-            imageOffsetX = (containerRect.width - imageDisplayWidth) / 2;
-            imageOffsetY = 0;
-          }
-        } else {
-          // Fallback: use container dimensions
-          imageDisplayWidth = containerRect.width || imgRect.width || imgW;
-          imageDisplayHeight = containerRect.height || imgRect.height || imgH;
-          imageOffsetX = 0;
-          imageOffsetY = 0;
-        }
-        
-        // Create overlay that matches the actual displayed image size and position
+        // Create overlay using CSS-first approach
+        // The overlay will be a sibling to the img and will match its dimensions exactly via CSS
         const overlay = document.createElement('div');
         overlay.className = 'pswp-face-overlay';
+        
+        // CSS-first positioning: overlay matches image dimensions exactly
+        // Using inset: 0 with margin: auto centers the element within the container
+        // aspect-ratio ensures it maintains the same proportions as the image
+        // max-width and max-height ensure it fits within the container (like object-fit: contain)
+        // The browser automatically calculates the actual width/height to maintain aspect ratio
         overlay.style.cssText = `
           position: absolute;
-          top: ${imageOffsetY}px;
-          left: ${imageOffsetX}px;
-          width: ${imageDisplayWidth}px;
-          height: ${imageDisplayHeight}px;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          margin: auto;
+          max-width: 100%;
+          max-height: 100%;
+          aspect-ratio: ${imgW} / ${imgH};
           pointer-events: none;
           z-index: 9999;
           overflow: visible;
         `;
         
         console.log('[FaceRectangles] Overlay setup', {
-          containerRect: { width: containerRect.width, height: containerRect.height },
-          imgRect: { width: imgRect.width, height: imgRect.height },
-          imageAspect,
-          containerAspect,
-          imageDisplayWidth,
-          imageDisplayHeight,
-          imageOffsetX,
-          imageOffsetY,
           imgW,
           imgH,
+          aspectRatio: `${imgW} / ${imgH}`,
         });
         
         console.log('[FaceRectangles] Creating rectangles', {
@@ -1772,7 +1698,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           originalIndex,
         });
         
-        // Create rectangles
+        // Create rectangles using percentage-based positioning
+        // Since overlay now matches image dimensions exactly via CSS, we can use percentages directly
         facesList.forEach((face, index) => {
           console.log('[FaceRectangles] Processing face', {
             index,
@@ -1785,9 +1712,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               groupId: face.groupId || face.group_id,
             },
           });
+          
+          // Determine if coordinates are normalized (0-1) or in pixels
           const isNormalized = face.face_left <= 1 && face.face_top <= 1 && 
                              face.face_width <= 1 && face.face_height <= 1;
           
+          // Convert to percentages (no pixel math needed)
           let leftPercent, topPercent, widthPercent, heightPercent;
           
           if (isNormalized) {
@@ -1817,10 +1747,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             return (useDataStore.getState().entities?.[eventId]?.groups || {})[gid]?.label || '';
           })();
           
-          // Calculate actual pixel dimensions based on displayed image size
-          const rectWidthPx = (imageDisplayWidth * widthPercent) / 100;
-          const rectHeightPx = (imageDisplayHeight * heightPercent) / 100;
-          
+          // Create rectangle using percentage positioning (no pixel conversions)
           const rect = document.createElement('div');
           rect.className = `pswp-face-rect pswp-face-rect-${face.id || index}`;
           rect.style.cssText = `
@@ -1846,11 +1773,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             topPercent,
             widthPercent,
             heightPercent,
-            rectWidthPx,
-            rectHeightPx,
-            imageDisplayWidth,
-            imageDisplayHeight,
           });
+          
           rect.title = groupLabel || '';
           
           rect.onmouseenter = () => {
@@ -1926,26 +1850,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           }
           
           overlay.appendChild(rect);
-          
-          // Debug: Log rectangle details after creation
-          const rectRect = rect.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(rect);
-          console.log('[FaceRectangles] Rectangle created', {
-            index,
-            leftPercent,
-            topPercent,
-            widthPercent,
-            heightPercent,
-            rectBoundingRect: rectRect,
-            rectComputedStyle: {
-              position: computedStyle.position,
-              zIndex: computedStyle.zIndex,
-              display: computedStyle.display,
-              visibility: computedStyle.visibility,
-              opacity: computedStyle.opacity,
-            },
-            rectStyle: rect.style.cssText,
-          });
         });
         
         console.log('[FaceRectangles] Appending overlay to container', {
@@ -1953,97 +1857,30 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           container: container,
           containerTag: container.tagName,
           containerClasses: container.className,
-          imgNextSibling: img.nextSibling,
-          imgParent: img.parentElement,
-          containerContainsImg: container.contains(img),
         });
         
-        // Append overlay to container - it should be a sibling of the image
-        // Insert right after the image if possible, otherwise just append
-        if (container.contains(img) && img.nextSibling) {
-          container.insertBefore(overlay, img.nextSibling);
+        // Append overlay as a direct sibling to the img
+        // Use img.after() to insert right after the image, ensuring it's a direct sibling
+        if (img.parentElement === container) {
+          // img is a direct child of container, insert overlay right after it
+          img.after(overlay);
         } else if (container.contains(img)) {
+          // img is in container but not direct child, append to container
           container.appendChild(overlay);
         } else {
-          // Fallback: append to container anyway
-          container.appendChild(overlay);
+          // Fallback: append to img's parent
+          img.parentElement?.appendChild(overlay);
         }
         
-        // Debug: Check overlay visibility after appending
-        setTimeout(() => {
-          const overlayRect = overlay.getBoundingClientRect();
-          const overlayComputed = window.getComputedStyle(overlay);
-          const containerRect = container.getBoundingClientRect();
-          const imgRect = img.getBoundingClientRect();
-          const firstRect = overlay.querySelector('.pswp-face-rect');
-          const firstRectRect = firstRect ? firstRect.getBoundingClientRect() : null;
-          const firstRectComputed = firstRect ? window.getComputedStyle(firstRect) : null;
-          
-          // Check all rectangles
-          const allRects = Array.from(overlay.querySelectorAll('.pswp-face-rect')).map(r => ({
-            element: r,
-            boundingRect: r.getBoundingClientRect(),
-            computedStyle: {
-              left: window.getComputedStyle(r).left,
-              top: window.getComputedStyle(r).top,
-              width: window.getComputedStyle(r).width,
-              height: window.getComputedStyle(r).height,
-              position: window.getComputedStyle(r).position,
-            },
-          }));
-          
-          console.log('[FaceRectangles] Overlay appended successfully', {
-            overlayInDOM: container.contains(overlay),
-            overlayBoundingRect: {
-              x: overlayRect.x,
-              y: overlayRect.y,
-              width: overlayRect.width,
-              height: overlayRect.height,
-            },
-            containerRect: {
-              x: containerRect.x,
-              y: containerRect.y,
-              width: containerRect.width,
-              height: containerRect.height,
-            },
-            imgRect: {
-              x: imgRect.x,
-              y: imgRect.y,
-              width: imgRect.width,
-              height: imgRect.height,
-            },
-            overlayComputedStyle: {
-              position: overlayComputed.position,
-              zIndex: overlayComputed.zIndex,
-              display: overlayComputed.display,
-              visibility: overlayComputed.visibility,
-              opacity: overlayComputed.opacity,
-              width: overlayComputed.width,
-              height: overlayComputed.height,
-              top: overlayComputed.top,
-              left: overlayComputed.left,
-            },
-            firstRectBoundingRect: firstRectRect ? {
-              x: firstRectRect.x,
-              y: firstRectRect.y,
-              width: firstRectRect.width,
-              height: firstRectRect.height,
-            } : null,
-            firstRectComputed: firstRectComputed ? {
-              left: firstRectComputed.left,
-              top: firstRectComputed.top,
-              width: firstRectComputed.width,
-              height: firstRectComputed.height,
-            } : null,
-            allRects,
-            overlayChildren: overlay.children.length,
-          });
-        }, 50);
+        console.log('[FaceRectangles] Overlay appended successfully', {
+          overlayInDOM: container.contains(overlay),
+          overlayChildren: overlay.children.length,
+        });
       }, 100);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [showRectangles, facesList, selectedFaceIndex, imageId, effectiveIndex, currentGroupId, isRTL, permissions.canEdit, fromRTLIndex, filteredImages, pswpItems, storeImageInfo, eventId, t]);
+  }, [showRectangles, facesList, selectedFaceIndex, imageId, effectiveIndex, currentGroupId, isRTL, permissions.canEdit, fromRTLIndex, filteredImages, storeImageInfo, eventId, t]);
 
   // PhotoSwipe handles all zoom/pan functionality natively
 
