@@ -43,7 +43,8 @@ function ImageViewerActions({
   eventId,
   imageActions,
   isUnassociatedGroup = false,
-  isMobile = false
+  isMobile = false,
+  portalContainer = null
 }) {
   const { t } = useTranslation();
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
@@ -91,7 +92,7 @@ function ImageViewerActions({
         {/* Add to album */}
         {permissions.canEdit && (
           <PermissionGate requires="canEdit">
-            <AlbumQuickAddButton {...imageActions.albumQuickAddProps} dropdownDirection="down" />
+            <AlbumQuickAddButton {...imageActions.albumQuickAddProps} dropdownDirection="down" portalContainer={portalContainer} />
           </PermissionGate>
         )}
 
@@ -389,6 +390,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   // Drawer state - must be defined before useModalFocus to prevent closing while drawer is open
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerOpenRef = useRef(drawerOpen);
+  const drawerContentRef = useRef(null);
+  const [drawerContentElement, setDrawerContentElement] = useState(null);
   useEffect(() => {
     drawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
@@ -2170,8 +2173,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 style={{ zIndex: 100001 }}
               />
               <Drawer.Content 
+                ref={(node) => {
+                  drawerContentRef.current = node;
+                  setDrawerContentElement(node);
+                }}
                 className="fixed bottom-0 left-0 right-0 flex flex-col bg-white rounded-t-[10px] max-h-[85vh]"
-                style={{ zIndex: 100001 }}
+                style={{ zIndex: 100001, position: 'fixed' }}
                 dir={isRTL ? 'rtl' : 'ltr'}
                 onTouchStart={handleDrawerTouchStart}
                 onTouchEnd={handleDrawerTouchEnd}
@@ -2199,6 +2206,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       imageActions={imageActions}
                       isUnassociatedGroup={isUnassociatedGroup}
                       isMobile={isMobile}
+                      portalContainer={isMobile ? drawerContentElement : null}
                     />
                   </div>
                   
@@ -2530,6 +2538,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   imageActions={imageActions}
                   isUnassociatedGroup={isUnassociatedGroup}
                   isMobile={false}
+                  portalContainer={null}
                 />
 
                     {/* Details Section */}

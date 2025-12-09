@@ -24,7 +24,8 @@ export default function AlbumQuickAddButton({
   onAlbumAdded, // Callback when album is added
   open: externalOpen, // External control for open state
   onOpenChange, // Callback when open state changes
-  externalButtonPosition // Position for external trigger (when button is hidden)
+  externalButtonPosition, // Position for external trigger (when button is hidden)
+  portalContainer // Custom portal container (e.g., for Vaul drawer)
 }) {
   const eventId = useEventId(eventUrl);
   const { defaultAlbumIds } = useEventDefaultAlbums(eventId, eventUrl);
@@ -265,31 +266,71 @@ export default function AlbumQuickAddButton({
 
   // Calculate dropdown position for portal rendering
   const getDropdownPosition = () => {
+    const useAbsolute = Boolean(portalContainer); // Use absolute when portaled inside a container
+    const positionType = useAbsolute ? 'absolute' : 'fixed';
+    
     // Use external position if provided (for hidden button scenarios)
     if (externalButtonPosition) {
       const { left, right, top, bottom } = externalButtonPosition;
       const isUp = dropdownDirection === 'up';
       
+      if (useAbsolute) {
+        // When using absolute, we need to calculate relative to the portal container
+        if (!portalContainer) return {};
+        const containerRect = portalContainer.getBoundingClientRect();
+        // Account for scroll position if the container is scrollable
+        const scrollTop = portalContainer.scrollTop || 0;
+        const scrollLeft = portalContainer.scrollLeft || 0;
+        
+        // Calculate position relative to container, accounting for scroll
+        const relativeLeft = left - containerRect.left + scrollLeft;
+        const relativeRight = containerRect.right - right - scrollLeft;
+        const relativeTop = top - containerRect.top + scrollTop;
+        const relativeBottom = bottom - containerRect.top + scrollTop;
+        
+        if (isUp) {
+          return {
+            position: 'absolute',
+            ...(isRTL 
+              ? { right: `${relativeRight}px` }
+              : { left: `${relativeLeft}px` }
+            ),
+            bottom: `${containerRect.height - relativeTop + 8}px`,
+            zIndex: 100002,
+          };
+        }
+        return {
+          position: 'absolute',
+          ...(isRTL 
+            ? { right: `${relativeRight}px` }
+            : { left: `${relativeLeft}px` }
+          ),
+          top: `${relativeBottom + 8}px`,
+          zIndex: 100002,
+        };
+      }
+      
+      // Fixed positioning (original behavior)
       if (isUp) {
+        return {
+          position: 'fixed',
+          ...(isRTL 
+            ? { right: `${window.innerWidth - right}px` }
+            : { left: `${left}px` }
+          ),
+          bottom: `${window.innerHeight - top + 8}px`,
+          zIndex: 100002,
+        };
+      }
       return {
         position: 'fixed',
         ...(isRTL 
           ? { right: `${window.innerWidth - right}px` }
           : { left: `${left}px` }
         ),
-        bottom: `${window.innerHeight - top + 8}px`,
+        top: `${bottom + 8}px`,
         zIndex: 100002,
       };
-    }
-    return {
-      position: 'fixed',
-      ...(isRTL 
-        ? { right: `${window.innerWidth - right}px` }
-        : { left: `${left}px` }
-      ),
-      top: `${bottom + 8}px`,
-      zIndex: 100002,
-    };
     }
     
     // Use button ref position (normal case)
@@ -298,6 +339,43 @@ export default function AlbumQuickAddButton({
     const isUp = dropdownDirection === 'up';
     const dropdownWidth = 256; // w-64 = 256px
 
+    if (useAbsolute) {
+      // When using absolute, calculate relative to the portal container
+      if (!portalContainer) return {};
+      const containerRect = portalContainer.getBoundingClientRect();
+      // Account for scroll position if the container is scrollable
+      const scrollTop = portalContainer.scrollTop || 0;
+      const scrollLeft = portalContainer.scrollLeft || 0;
+      
+      // Calculate position relative to container, accounting for scroll
+      const relativeLeft = rect.left - containerRect.left + scrollLeft;
+      const relativeRight = containerRect.right - rect.right - scrollLeft;
+      const relativeTop = rect.top - containerRect.top + scrollTop;
+      const relativeBottom = rect.bottom - containerRect.top + scrollTop;
+      
+      if (isUp) {
+        return {
+          position: 'absolute',
+          ...(isRTL 
+            ? { right: `${relativeRight}px` }
+            : { left: `${relativeLeft}px` }
+          ),
+          bottom: `${containerRect.height - relativeTop + 8}px`,
+          zIndex: 100002,
+        };
+      }
+      return {
+        position: 'absolute',
+        ...(isRTL 
+          ? { right: `${relativeRight}px` }
+          : { left: `${relativeLeft}px` }
+        ),
+        top: `${relativeBottom + 8}px`,
+        zIndex: 100002,
+      };
+    }
+
+    // Fixed positioning (original behavior)
     if (isUp) {
       return {
         position: 'fixed',
@@ -416,10 +494,18 @@ export default function AlbumQuickAddButton({
     <>
       <button
         ref={setButtonRef}
-        onClick={() => setOpen(!open)}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) {
+            setOpen(false);
+          } else {
+            setOpen(true);
+          }
+        }}
         className="w-10 h-10 md:w-8 md:h-8 border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 active:bg-gray-200 text-gray-700 flex-shrink-0"
-        title={t('albumQuickAdd.addToAlbum')}
-        aria-label={t('albumQuickAdd.addToAlbum')}
+        title={open ? t('albumQuickAdd.close') || t('albumQuickAdd.addToAlbum') : t('albumQuickAdd.addToAlbum')}
+        aria-label={open ? t('albumQuickAdd.close') || t('albumQuickAdd.addToAlbum') : t('albumQuickAdd.addToAlbum')}
+        aria-expanded={open}
       >
         <PlusIcon className="w-5 h-5 md:w-4 md:h-4" />
       </button>
@@ -435,7 +521,7 @@ export default function AlbumQuickAddButton({
         >
           {renderDropdownContent()}
         </div>,
-        document.body
+        portalContainer || document.body
       )}
     </>
   );
