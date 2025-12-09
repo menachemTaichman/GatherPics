@@ -55,7 +55,13 @@ FIELD_VALIDATORS = {
     'ip_address': TypeAdapter(Annotated[Optional[str], Field(None, max_length=50)]),
     'preference_group': TypeAdapter(Annotated[str, Field(max_length=100)]),
     'preference_key': TypeAdapter(Annotated[str, Field(max_length=100)]),
-    'preference_value': TypeAdapter(Annotated[Union[Annotated[str, Field(max_length=2000)], int, float, bool], Field()]),
+    'preference_value': TypeAdapter(Annotated[Union[
+        Annotated[str, Field(max_length=2000)],
+        Annotated[List[Annotated[str, Field(max_length=2000)]], Field()],
+        int,
+        float,
+        bool
+    ], Field()]),
     'password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
     'current_password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
     'new_password': TypeAdapter(Annotated[str, Field(min_length=1, max_length=255)]),
