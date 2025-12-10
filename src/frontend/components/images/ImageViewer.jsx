@@ -44,10 +44,10 @@ function ImageViewerActions({
   imageActions,
   isUnassociatedGroup = false,
   isMobile = false,
-  portalContainer = null
+  portalContainer = null,
+  onOpenManageAccess
 }) {
   const { t } = useTranslation();
-  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [settingEventRepresentative, setSettingEventRepresentative] = useState(false);
   const permissions = usePermissions();
   const eventInfo = useEventGeneralById(eventId);
@@ -124,7 +124,7 @@ function ImageViewerActions({
         {/* Manage Access */}
         <PermissionGate requires="isProfilesManager">
           <button
-            onClick={() => setShowManageAccessModal(true)}
+            onClick={() => onOpenManageAccess && onOpenManageAccess()}
             className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
             title={t('imageViewer.manageProfileAccess')}
             aria-label={t('imageViewer.manageProfileAccess')}
@@ -187,30 +187,7 @@ function ImageViewerActions({
         />
       )}
 
-      {/* Delete confirmation modal */}
-      {imageActions.showDeleteConfirmModal && (
-        <ConfirmDelete
-          isOpen={imageActions.showDeleteConfirmModal}
-          onClose={imageActions.onCancelDelete}
-          onConfirm={imageActions.onConfirmDelete}
-          title={t('imageViewer.deletePhoto')}
-          message={t('imageViewer.areYouSureYouWantToDeleteThisPhoto')}
-          simpleMessage={true}
-          images={imageActions.deleteImagesList}
-          confirmText={t('imageViewer.delete')}
-          cancelText={t('imageViewer.cancel')}
-          caption={t('imageViewer.thisActionCannotBeUndone')}
-        />
-      )}
 
-      {/* Manage Access Modal */}
-      <ManageAccessModal
-        isOpen={showManageAccessModal}
-        onClose={() => setShowManageAccessModal(false)}
-        entityType="image"
-        entityIds={[imageId]}
-        eventUrl={eventUrl}
-      />
     </>
   );
 }
@@ -436,6 +413,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState('');
   const [isSavingDescription, setIsSavingDescription] = useState(false);
@@ -491,22 +469,68 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  const [sidebarVisible, setSidebarVisible] = useState(() => {
-    // Hide sidebar by default on mobile
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return false;
-    }
-    return getPreference('ImageViewer.sidebarOpen', false);
-  });
+  // Sidebar state removed - desktop now uses drawer
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const isMobileRef = useRef(isMobile);
   
   useEffect(() => {
     isMobileRef.current = isMobile;
   }, [isMobile]);
-  // Keep controls visible on mobile, auto-hide on desktop
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const hideControlsTimerRef = useRef(null);
-  const [dynamicHeight, setDynamicHeight] = useState(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+  
+    // ניהול ה-Class
+    const shouldBeOpen = !isMobile && drawerOpen;
+    if (shouldBeOpen) {
+        document.body.classList.add('drawer-open');
+    } else {
+        document.body.classList.remove('drawer-open');
+    }
+  
+    if (!isMobile && pswpInstanceRef.current) {
+      const pswp = pswpInstanceRef.current;
+  
+      // טיימר 1: עדכון תוך כדי תנועה (אופציונלי, לפעמים עוזר לחלקות)
+      const t1 = setTimeout(() => {
+         try { pswp.updateSize(true); } catch(e){}
+      }, 50);
+
+      // טיימר 2: עדכון סופי לאחר שהמגירה סיימה לזוז
+      const t2 = setTimeout(() => {
+        try {
+          // 1. קריאת הגדלים החדשים מה-DOM (אחרי שה-CSS סיים להזיז את ה-div)
+          pswp.updateSize(true);
+  
+          // 2. פקודה שממקמת מחדש את התמונה במרכז
+          if (pswp.currSlide) {
+            pswp.currSlide.zoomAndPanToInitial();
+          }
+        } catch (_) {}
+      }, 350); // חייב להיות יותר מ-300ms (זמן ה-CSS transition)
+  
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        
+        // ביציאה: אם המגירה נסגרת, צריך להחזיר את התמונה למרכז המסך המלא
+        if (!drawerOpen) {
+            setTimeout(() => {
+                try {
+                    pswp.updateSize(true);
+                    pswp.currSlide?.zoomAndPanToInitial();
+                } catch(e){}
+            }, 350);
+        }
+      };
+    }
+    
+    return () => {
+       document.body.classList.remove('drawer-open');
+    };
+  }, [drawerOpen, isMobile]);
+
+  // Desktop overlay controls removed - now using PhotoSwipe UI and Vaul drawer
   // Track initial values to avoid persisting unchanged preferences
   const initialValuesRef = useRef({
     albumsOpen: getPreference('ImageViewer.albumsOpen', false),
@@ -561,41 +585,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     };
   }, [isMobile, sidebarVisible]);
   
-  useEffect(() => {
-    let rafId = 0;
-    const calculateAndSetHeight = () => {
-      if (isMobile) return; // Skip desktop calculation on mobile
-      if (!modalRef.current) return;
-      rafId = requestAnimationFrame(() => {
-        if (!modalRef.current) return;
-        const modalElement = modalRef.current;
-        const modalWidth = modalElement.offsetWidth;
-        const sidebarElement = modalElement.querySelector('.image-viewer-sidebar');
-        const sidebarWidth = sidebarVisible && sidebarElement ? sidebarElement.offsetWidth : 0;
-        const imageContainerWidth = modalWidth - sidebarWidth;
-        let newHeight = Math.round((2 / 3) * imageContainerWidth);
-        const verticalMarginRem = 3;
-        const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        const verticalMarginPx = verticalMarginRem * rootFontSize;
-        const maxHeight = window.innerHeight - verticalMarginPx;
-        newHeight = Math.min(newHeight, maxHeight);
-        // Avoid triggering re-renders from unused state; log once if changed
-        if (dynamicHeight !== newHeight) {
-        }
-        // setDynamicHeight(prev => (prev !== newHeight ? newHeight : prev));
-      });
-    };
-
-    calculateAndSetHeight();
-    const resizeHandler = () => calculateAndSetHeight();
-    window.addEventListener('resize', resizeHandler);
-    const timerId = setTimeout(calculateAndSetHeight, 50);
-    return () => {
-      try { cancelAnimationFrame(rafId); } catch {}
-      clearTimeout(timerId);
-      window.removeEventListener('resize', resizeHandler);
-    };
-  }, [sidebarVisible, isMobile]);
+  // Desktop sidebar width calculation removed - desktop now uses drawer
 
   // Register modal on mount and keep scopes in sync with current image id
   useEffect(() => {
@@ -638,13 +628,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       setPreference('ImageViewer.albumsHeight', albumsHeight);
     }
   }, [albumsHeight]);
-  useEffect(() => {
-    // Only persist sidebar preference on desktop
-    if (!isMobile && sidebarVisible !== initialValuesRef.current.sidebarVisible) {
-      initialValuesRef.current.sidebarVisible = sidebarVisible;
-      setPreference('ImageViewer.sidebarOpen', sidebarVisible);
-    }
-  }, [sidebarVisible, isMobile]);
+  // Sidebar preference persistence removed - desktop now uses drawer
 
   // Global mouse handlers for resizer
   useEffect(() => {
@@ -898,13 +882,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   }, [storeImageInfo?.description, imageId]);
   
-  // Update sidebar visibility when mobile state changes
-  useEffect(() => {
-    if (isMobile && sidebarVisible) {
-      // Auto-hide sidebar when switching to mobile to save space
-      setSidebarVisible(false);
-    }
-  }, [isMobile]);
+  // Sidebar auto-hide logic removed - desktop now uses drawer
 
   // Fetch image info when image changes
   useEffect(() => {
@@ -1193,9 +1171,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         position: absolute;
         top: 20px;
         ${isRTL ? 'right: auto; left: 57px;' : 'left: auto; right: 59px;'}
-        z-index: 2000;
+        z-index: 100002;
         width: 21px;
         height: 21px;
+        pointer-events: auto;
       `;
       
       infoBtn.innerHTML = `
@@ -1243,16 +1222,84 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           e.stopPropagation();
           e.stopImmediatePropagation();
           e.preventDefault();
-          // On mobile, open drawer; on desktop, toggle sidebar
-          if (isMobileRef.current) {
-            setDrawerOpen(true);
-          } else {
-            setSidebarVisible(v => !v);
-          }
+          // Toggle drawer on both mobile and desktop
+          setDrawerOpen(v => !v);
         };
       }
       
       pswpRoot.appendChild(infoBtn);
+      
+      // Drawer toggle handle - positioned on the edge, moves with PhotoSwipe
+      if (!isMobile) {
+        const toggleHandle = document.createElement('div');
+        toggleHandle.className = 'pswp__custom-button pswp__custom-button--drawer-toggle';
+        toggleHandle.style.cssText = `
+          position: absolute;
+          top: 96px;
+          ${isRTL ? 'right: 0;' : 'left: 0;'}
+          z-index: 100002;
+          width: 32px;
+          height: 64px;
+          pointer-events: auto;
+          transition: ${isRTL ? 'right' : 'left'} 0.3s cubic-bezier(0.4,0,0.2,1);
+        `;
+        
+        toggleHandle.innerHTML = `
+          <button 
+            type="button"
+            style="
+              width: 100%;
+              height: 100%;
+              background: white;
+              border: none;
+              ${isRTL ? 'border-left' : 'border-right'}: 1px solid #e5e7eb;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 0;
+              border-radius: ${isRTL ? '8px 0 0 8px' : '0 8px 8px 0'};
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+              transition: background-color 0.2s;
+            "
+            aria-label="${t('imageViewer.photoDetails')}"
+            title="${t('imageViewer.photoDetails')}"
+          >
+            <div style="
+              width: 4px;
+              height: 32px;
+              background-color: #9ca3af;
+              border-radius: 2px;
+              transition: background-color 0.2s;
+            "></div>
+          </button>
+        `;
+        
+        const toggleButton = toggleHandle.querySelector('button');
+        if (toggleButton) {
+          toggleButton.onmouseenter = () => { 
+            toggleButton.style.backgroundColor = '#f9fafb';
+            const indicator = toggleButton.querySelector('div');
+            if (indicator) indicator.style.backgroundColor = '#4b5563';
+          };
+          toggleButton.onmouseleave = () => { 
+            toggleButton.style.backgroundColor = 'white';
+            const indicator = toggleButton.querySelector('div');
+            if (indicator) indicator.style.backgroundColor = '#9ca3af';
+          };
+          toggleButton.onclick = (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            setDrawerOpen(v => !v);
+          };
+        }
+        
+        pswpRoot.appendChild(toggleHandle);
+        
+        // Store reference to toggle handle (no position updates needed - it moves with PhotoSwipe)
+        pswp._drawerToggleHandle = toggleHandle;
+      }
       
       // Adjust PhotoSwipe zoom button position and size
       // Add CSS to move zoom button further from info button and increase size
@@ -1309,9 +1356,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           position: absolute;
           bottom: 20px;
           ${isRTL ? 'left: 20px; right: auto;' : 'right: 20px; left: auto;'}
-          z-index: 2000;
+          z-index: 100002;
           width: 44px;
           height: 44px;
+          pointer-events: auto;
         `;
         
         const updateFavoriteButton = () => {
@@ -1380,9 +1428,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           position: absolute;
           bottom: 20px;
           ${isRTL ? 'left: 72px; right: auto;' : 'right: 72px; left: auto;'}
-          z-index: 2000;
+          z-index: 100002;
           width: 44px;
           height: 44px;
+          pointer-events: auto;
         `;
         
         const updateArchiveButton = () => {
@@ -1468,6 +1517,50 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     
     pswpInstanceRef.current = pswp;
 
+    const drawerStyleId = 'pswp-drawer-resize';
+    const drawerWidth = '320px';
+    
+    if (!document.getElementById(drawerStyleId)) {
+      const drawerStyle = document.createElement('style');
+      drawerStyle.id = drawerStyleId;
+      drawerStyle.textContent = `
+      /* 1. כיווץ הקונטיינר הראשי בלבד */
+      body.drawer-open .pswp {
+        width: calc(100% - ${drawerWidth}) !important;
+        /* שימוש ב-margin מזיז את כל הקונטיינר */
+        ${isRTL 
+           ? `margin-right: ${drawerWidth} !important;` 
+           : `margin-left: ${drawerWidth} !important;`}
+        transition: width 0.3s cubic-bezier(0.4,0,0.2,1),
+                    margin 0.3s cubic-bezier(0.4,0,0.2,1);
+      }
+    
+      /* 2. רקע מלא - מנותק מהקונטיינר */
+      /* זה מבטיח שהרקע השחור יישאר על כל המסך ולא יזוז עם המגירה */
+      body.drawer-open .pswp__bg {
+        position: fixed !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        top: 0 !important;
+        left: 0 !important;
+        transform: none !important;
+        margin: 0 !important;
+        pointer-events: auto !important;
+      }
+      
+      /* Ensure PhotoSwipe remains interactive when drawer is open */
+      body.drawer-open .pswp {
+        pointer-events: auto !important;
+      }
+      
+      body.drawer-open .pswp__zoom-wrap {
+        pointer-events: auto !important;
+      }
+      
+      /* זהו! לא לגעת ב-viewport או container */
+    `;
+      document.head.appendChild(drawerStyle);
+    }
     return () => {
       if (pswpInstanceRef.current) {
         // Prevent triggering onClose when we're destroying PhotoSwipe during cleanup
@@ -1475,6 +1568,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         // Clean up RTL counter observer if it exists
         if (pswpInstanceRef.current._rtlCounterObserver) {
           pswpInstanceRef.current._rtlCounterObserver.disconnect();
+        }
+        // Clean up drawer toggle handle reference
+        if (pswpInstanceRef.current._drawerToggleHandle) {
+          pswpInstanceRef.current._drawerToggleHandle = null;
         }
         pswpInstanceRef.current.destroy();
         pswpInstanceRef.current = null;
@@ -2096,21 +2193,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   };
 
 
-  useEffect(() => {
-    // Initial auto-hide schedule for controls (desktop only)
-    if (!isMobile) {
-      try {
-        if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-        hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-      } catch {}
-    } else {
-      // Keep controls visible on mobile
-      setControlsVisible(true);
-    }
-    return () => {
-      try { if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current); } catch {}
-    };
-  }, [isMobile]);
+  // Desktop overlay controls auto-hide logic removed
 
   // PhotoSwipe handles cleanup automatically
 
@@ -2216,7 +2299,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           } : { 
             maxHeight: 'calc(100vh - 3rem)',
             height: 'calc(min(100vw - 2rem, 1024px) * 0.67)',
-            maxWidth: sidebarVisible ? '1344px' : '1024px'
+            maxWidth: '1024px'
           }}
           initial={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -2235,16 +2318,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 height: '100%',
                 position: 'relative',
                 order: isRTL ? 2 : 2
-              }}
-              onMouseMove={() => {
-                // Show overlay controls on any mouse movement (desktop only)
-                if (!isMobile) {
-                  try {
-                    if (!controlsVisible) setControlsVisible(true);
-                    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-                  } catch {}
-                }
               }}
             >
               {/* PhotoSwipe root element */}
@@ -2314,234 +2387,85 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 </>
               )}
 
-              {/* On-image overlay controls - Desktop only (mobile uses PhotoSwipe UI and Vaul drawer) */}
-              {!loading && !isMobile && (
-                <div 
-                  className={`absolute inset-0 z-30 transition-opacity duration-200 ${
-                    controlsVisible ? 'opacity-100' : 'opacity-0'
-                  } pointer-events-none`}
-                  onMouseMove={() => {
-                    try {
-                      setControlsVisible(true);
-                      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                      hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-                    } catch {}
-                  }}
-                  onMouseLeave={() => {
-                    try {
-                      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
-                    } catch {}
-                    setControlsVisible(false);
-                  }}
-                >
-                  {/* Close button - top-right in LTR, top-left in RTL */}
-                  <button
-                    onClick={onClose}
-                    className={`absolute top-4 pointer-events-auto bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow ${endClass('4')}`}
-                    title={t('imageViewer.close')}
-                    aria-label={t('imageViewer.close')}
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-
-                  {/* Favorites / Archive controls - bottom-right in LTR, bottom-left in RTL */}
-                  <div className={`absolute bottom-5 pointer-events-auto flex items-center gap-4 ${endClass('4')}`}>
-                    {(() => {
-                      const favoriteTooltip = imageActions.isFavorite
-                        ? (permissions.canEdit ? t('imageViewer.removeFromFavorites') : t('imageViewer.inFavorites'))
-                        : (permissions.canEdit ? t('imageViewer.addToFavorites') : t('imageViewer.favorites'));
-                      const archiveTooltip = imageActions.isArchived
-                        ? (permissions.canEdit ? t('imageViewer.removeFromArchive') : t('imageViewer.inArchive'))
-                        : (permissions.canEdit ? t('imageViewer.moveToArchive') : t('imageViewer.archive'));
-                      
-                      return (
-                        <>
-                        <PermissionGate requires="hasFavoritesAlbum">
-                          {(permissions.canEdit || imageActions.isFavorite) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!permissions.canEdit) return;
-                                imageActions.toggleFavorite();
-                              }}
-                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
-                              }`}
-                              title={favoriteTooltip}
-                              aria-label={favoriteTooltip}
-                              aria-pressed={imageActions.isFavorite}
-                              disabled={!permissions.canEdit}
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                className={`w-6 h-6 ${imageActions.isFavorite ? 'text-red-500' : 'text-white'}`}
-                                fill={imageActions.isFavorite ? 'currentColor' : 'none'}
-                                stroke={imageActions.isFavorite ? 'currentColor' : 'white'}
-                                strokeWidth="2"
-                                role="img"
-                                focusable="false"
-                                style={{ color: imageActions.isFavorite ? '#ef4444' : '#ffffff' }}
-                              >
-                                <title>{favoriteTooltip}</title>
-                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                              </svg>
-                            </button>
-                          )}
-                        </PermissionGate>
-
-                        <PermissionGate requires="hasArchiveAlbum">
-                          {(permissions.canEdit || imageActions.isArchived) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!permissions.canEdit) return;
-                                imageActions.toggleArchive();
-                              }}
-                              className={`transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
-                                permissions.canEdit ? 'opacity-100 hover:opacity-100' : 'opacity-80 cursor-default'
-                              }`}
-                              title={archiveTooltip}
-                              aria-label={archiveTooltip}
-                              aria-pressed={imageActions.isArchived}
-                              disabled={!permissions.canEdit}
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                className={`w-6 h-6 ${imageActions.isArchived ? 'text-white' : 'text-gray-500'}`}
-                                fill="none"
-                                stroke={imageActions.isArchived ? 'white' : '#6b7280'}
-                                strokeWidth="2"
-                                role="img"
-                                focusable="false"
-                              >
-                                <title>{archiveTooltip}</title>
-                                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
-                              </svg>
-                            </button>
-                          )}
-                        </PermissionGate>
-                        </>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Navigation - top-center */}
-                  {filteredImages.length > 1 && (
-                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto`}>
-                      <button
-                        onClick={() => handleNavigate('prev')}
-                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow`}
-                        title={t('imageViewer.previous')}
-                        aria-label={t('imageViewer.previous')}
-                      >
-                        {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-                      </button>
-                      <div dir="ltr" className={`bg-white/80 text-gray-800 rounded-md px-2 h-8 shadow flex items-center`}>
-                        {isEditingIndex ? (
-                          <input
-                            type="text"
-                            id="image-viewer-index"
-                            name="image-viewer-index"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={editIndexValue !== undefined ? editIndexValue : effectiveIndex + 1}
-                            onChange={e => setEditIndexValue(e.target.value.replace(/[^0-9]/g, ''))}
-                            onBlur={e => {
-                              let val = parseInt(e.target.value, 10);
-                              if (isNaN(val)) val = effectiveIndex + 1;
-                              val = Math.max(1, Math.min(filteredImages.length, val));
-                              handleNavigate('jump', val - 1);
-                              setIsEditingIndex(false);
-                              setEditIndexValue(undefined);
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                e.target.blur();
-                              } else if (e.key === 'Escape') {
-                                setIsEditingIndex(false);
-                                setEditIndexValue(undefined);
-                              }
-                            }}
-                            className="w-8 text-center bg-transparent focus:outline-none"
-                            style={{width: '2rem'}}
-                            autoFocus
-                          />
-                        ) : (
-                          <span
-                            className="w-8 inline-block text-center cursor-text"
-                            style={{width: '2rem'}}
-                            title={t('imageViewer.clickToEdit')}
-                            onClick={() => setIsEditingIndex(true)}
-                          >
-                            {effectiveIndex + 1}
-                          </span>
-                        )}
-                        <span className="mx-1">/</span>
-                        <span>{filteredImages.length}</span>
-                      </div>
-                      <button
-                        onClick={() => handleNavigate('next')}
-                        className={`bg-white/80 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow`}
-                        title={t('imageViewer.next')}
-                        aria-label={t('imageViewer.next')}
-                      >
-                        {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* PhotoSwipe handles zoom natively - no custom controls needed */}
-
-
-                  {/* Sidebar toggle - top-left in LTR (when sidebar on left), top-right in RTL (when sidebar on right) */}
-                  <button
-                    onClick={() => setSidebarVisible(v => !v)}
-                    className={`absolute top-4 pointer-events-auto bg-white/90 hover:bg-white text-gray-800 rounded-md w-8 h-8 flex items-center justify-center shadow-lg z-40 ${startClass('4')}`}
-                    title={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
-                    aria-label={sidebarVisible ? t('imageViewer.hideSidebar') : t('imageViewer.showSidebar')}
-                  >
-                    {sidebarVisible ? (
-                      // When visible, point in direction to close (left in RTL, right in LTR)
-                      isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
-                    ) : (
-                      // When hidden, point in direction to open (right in RTL, left in LTR)
-                      isRTL ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              )}
               
             </div>
 
-                    {/* Mobile Vaul Drawer */}
-        {isMobile && (
-          <Drawer.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <Drawer.Portal>
-              <Drawer.Overlay 
-            className="fixed inset-0 bg-black/50"
-                style={{ zIndex: 100001 }}
-              />
-              <Drawer.Content 
-                ref={(node) => {
-                  drawerContentRef.current = node;
-                  setDrawerContentElement(node);
-                }}
-                className="fixed bottom-0 left-0 right-0 flex flex-col bg-white rounded-t-[10px] max-h-[85vh]"
-                style={{ zIndex: 100001, position: 'fixed' }}
-                dir={isRTL ? 'rtl' : 'ltr'}
-                onTouchStart={handleDrawerTouchStart}
-                onTouchEnd={handleDrawerTouchEnd}
-              >
+                    {/* Vaul Drawer - Mobile and Desktop */}
+        <Drawer.Root 
+          open={drawerOpen} 
+          direction={isMobile ? 'bottom' : (isRTL ? 'right' : 'left')}
+          onOpenChange={(open) => {
+            // Check if any modal is open - prevent closing drawer if modal is open
+            const anyModalOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal;
+            
+            // On desktop, only allow closing via info toggle (prevent auto-close)
+            // On mobile, allow normal drawer behavior but prevent closing if modal is open
+            if (isMobile) {
+              // Don't close drawer if a modal is open
+              if (!open && anyModalOpen) {
+                return; // Prevent closing
+              }
+              setDrawerOpen(open);
+            } else if (open) {
+              // Allow opening on desktop
+              setDrawerOpen(true);
+            }
+            // Prevent closing on desktop via onOpenChange (only via info toggle)
+          }} 
+          modal={isMobile}
+        >
+          <Drawer.Portal>
+            <Drawer.Overlay 
+              className={`fixed inset-0 ${isMobile ? 'bg-black/50' : 'bg-transparent pointer-events-none'}`}
+              style={{ zIndex: 100001 }}
+            />
+            <Drawer.Content 
+              ref={(node) => {
+                drawerContentRef.current = node;
+                setDrawerContentElement(node);
+              }}
+              className={isMobile 
+                ? "fixed bottom-0 left-0 right-0 flex flex-col bg-white rounded-t-[10px] max-h-[85vh]"
+                : `fixed top-0 ${isRTL ? 'right-0' : 'left-0'} bottom-0 flex flex-col bg-white w-80 max-w-[90vw] shadow-lg`
+              }
+              style={{ 
+                zIndex: 100001, 
+                position: 'fixed',
+                ...(isMobile ? {} : {
+                  [isRTL ? 'borderLeft' : 'borderRight']: '1px solid #e5e7eb',
+                  borderRadius: 0,
+                  pointerEvents: 'auto'
+                })
+              }}
+              dir={isRTL ? 'rtl' : 'ltr'}
+              onTouchStart={isMobile ? handleDrawerTouchStart : undefined}
+              onTouchEnd={isMobile ? handleDrawerTouchEnd : undefined}
+              {...(isMobile ? { dismissible: true } : {})}
+              onPointerDownOutside={(e) => {
+                // Prevent closing on desktop via outside click - only via info toggle
+                // On mobile, prevent closing if a modal is open
+                const anyModalOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal;
+                if (!isMobile || anyModalOpen) {
+                  e.preventDefault();
+                }
+              }}
+              onInteractOutside={(e) => {
+                // Prevent closing on desktop via outside interaction - only via info toggle
+                // On mobile, prevent closing if a modal is open
+                const anyModalOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal;
+                if (!isMobile || anyModalOpen) {
+                  e.preventDefault();
+                }
+              }}
+            >
                 <Drawer.Title className="sr-only">
                   {t('imageViewer.photoDetails')}
                 </Drawer.Title>
                 <Drawer.Description className="sr-only">
                   {t('imageViewer.photoDetails')}
                 </Drawer.Description>
-                <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />
-                <div className="flex flex-col h-full min-h-0 overflow-y-auto px-4 pb-8">
+                {isMobile && <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />}
+                <div className={`flex flex-col h-full min-h-0 overflow-y-auto ${isMobile ? 'px-4 pb-8' : 'p-4'}`}>
                   {/* Controls */}
                   <div className="border-b border-gray-200 pb-3">
                     <ImageViewerActions
@@ -2558,6 +2482,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       isUnassociatedGroup={isUnassociatedGroup}
                       isMobile={isMobile}
                       portalContainer={isMobile ? drawerContentElement : null}
+                      onOpenManageAccess={() => setShowManageAccessModal(true)}
                     />
                   </div>
                   
@@ -2852,339 +2777,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       </motion.div>
                     </AnimatePresence>
                   </div>
-                  
-                  {/* Mobile Modals: Render inside Drawer content to ensure correct context and focus handling */}
-                  {/* Move to Moment Modal */}
-                  {showMoveToMomentModal && (
-                    <MoveToMomentModal
-                      key="move-to-moment-modal-mobile"
-                      isOpen={showMoveToMomentModal}
-                      eventUrl={eventUrl}
-                      urlHelpers={urlHelpers}
-                      onClose={() => setShowMoveToMomentModal(false)}
-                      selectedImages={imageId ? new Set([imageId]) : new Set()}
-                      onMoveComplete={handleMoveToMomentComplete}
-                    />
-                  )}
                 </div>
               </Drawer.Content>
             </Drawer.Portal>
           </Drawer.Root>
-        )}
-        
-        {/* Desktop Sidebar */}
-        {!isMobile && sidebarVisible && (
-        <div className={`w-80 bg-white flex flex-col h-full min-h-0 image-viewer-sidebar ${
-          isRTL ? 'border-l border-gray-200' : 'border-r border-gray-200'
-        }`} style={{ order: isRTL ? 1 : 1 }}>
-          {/* Controls */}
-          <div className="p-3 border-b border-gray-200 image-viewer-controls flex-none relative">
-                <ImageViewerActions
-                  imageId={imageId}
-                  imageInfo={storeImageInfo}
-                  eventUrl={eventUrl}
-                  showToast={showToast}
-                  urlHelpers={urlHelpers}
-                  onImageUpdated={handleImageUpdated}
-                  entity={entity}
-                  entityId={parent}
-                  eventId={eventId}
-                  imageActions={imageActions}
-                  isUnassociatedGroup={isUnassociatedGroup}
-                  isMobile={false}
-                  portalContainer={null}
-                />
-
-                    {/* Details Section */}
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <h4 className="text-xs font-medium text-gray-700 mb-1">{t('imageViewer.photoDetails')}</h4>
-                  <div className="text-xs text-gray-500 space-y-0.5">
-                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.name')}</span> {storeImageInfo?.label || imageMeta.label}</div>
-                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.date')}</span> <span dir="ltr">{formatDateTime(storeImageInfo?.date_taken)}</span></div>
-                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalSize')}</span> <span dir="ltr">{(() => {
-                      const size = storeImageInfo?.file_size;
-                      if (!size) return t('imageViewer.unknown');
-                      if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-                      if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
-                      return (size / 1024).toFixed(1) + ' KB';
-                    })()}</span></div>
-                    <div><span className={`font-semibold ${me('2')}`}>{t('imageViewer.originalResolution')}</span> <span dir="ltr">{storeImageInfo?.width && storeImageInfo?.height ? `${storeImageInfo.width} x ${storeImageInfo.height}` : t('imageViewer.unknown')}</span></div>
-                    <div className={`mt-2 transition-all duration-200 ${isEditingDescription ? 'p-2 bg-gray-50 rounded-lg border border-gray-200' : ''}`}>
-                      <div className="flex items-start">
-                        <span className={`font-semibold flex-shrink-0 ${me('2')}`}>{t('imageViewer.description')}</span>
-                        {isEditingDescription && permissions.canEdit ? (
-                          <div className="flex-1 min-w-0">
-                            <textarea
-                              value={descriptionValue}
-                              onChange={(e) => setDescriptionValue(e.target.value)}
-                              onBlur={handleDescriptionSave}
-                              onKeyDown={handleDescriptionKeyDown}
-                              className="w-full text-sm text-gray-700 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-sm"
-                              rows={4}
-                              autoFocus
-                              disabled={isSavingDescription}
-                              style={{ minHeight: '4rem' }}
-                            />
-                            <div className="flex items-center justify-end gap-2 mt-2">
-                              <button
-                                onClick={handleDescriptionCancel}
-                                className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                                disabled={isSavingDescription}
-                              >
-                                {t('imageViewer.cancel')}
-                              </button>
-                              <button
-                                onClick={handleDescriptionSave}
-                                className="text-xs text-primary-600 hover:text-primary-800 px-2 py-1 rounded hover:bg-primary-50 transition-colors"
-                                disabled={isSavingDescription}
-                              >
-                                {isSavingDescription ? t('imageViewer.saving') : t('imageViewer.save')}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            onClick={handleDescriptionClick}
-                            className={`flex-1 min-w-0 text-gray-500 ${permissions.canEdit ? 'cursor-text hover:text-gray-700' : ''} transition-colors`}
-                            title={permissions.canEdit ? t('imageViewer.clickToEditDescription') : ''}
-                          >
-                            {storeImageInfo?.description ? (
-                              <span className="whitespace-pre-wrap break-words">{storeImageInfo.description}</span>
-                            ) : (
-                              <span className="text-gray-400 italic">{permissions.canEdit ? t('imageViewer.clickToAddDescription') : t('imageViewer.noDescription')}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Moment Information */}
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-gray-500 flex-1 min-w-0">
-                        <span className={`font-semibold ${me('2')}`}>{t('imageViewer.moment')}</span>
-                        {momentInfo ? (
-                          <a
-                            href={`/${eventUrl}/timeline?moment=${encodeURIComponent(momentInfo.label)}`}
-                            onClick={handleMomentLinkClick}
-                            className={`${ms('1')} text-primary-600 hover:text-primary-700 hover:underline cursor-pointer`}
-                            title={t('imageViewer.jumpToMoment')}
-                          >
-                            {momentInfo.label}
-                          </a>
-                        ) : (
-                          <span className={ms('1')}>{t('imageViewer.none')}</span>
-                        )}
-                      </div>
-                      <PermissionGate requires="canEdit">
-                        <button
-                          onClick={() => setShowMoveToMomentModal(true)}
-                          className={`w-6 h-6 rounded-md hover:bg-gray-100 flex items-center justify-center flex-shrink-0 ${ms('2')}`}
-                          title={t('imageViewer.editMoment')}
-                          aria-label={t('imageViewer.editMoment')}
-                        >
-                          <Edit2 className="w-3 h-3 text-gray-600" />
-                        </button>
-                      </PermissionGate>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Albums and Faces Info with resizable split */}
-              <div ref={sectionsRef} className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
-                {/* Albums Panel */}
-                {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
-                  <div className="flex flex-col min-h-0">
-                    <div
-                      className="flex items-center justify-between px-4 pt-4 cursor-pointer select-none"
-                      onClick={handleToggleAlbumsOpen}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleToggleAlbumsOpen();
-                        }
-                      }}
-                    >
-                      <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleAlbumsOpen();
-                        }}
-                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
-                        title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
-                        aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
-                      >
-                        {albumsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    {albumsOpen && (
-                      <div
-                        className={`albums-list-container overflow-y-auto ${facesOpen ? '' : 'flex-1 min-h-0'}`}
-                        style={facesOpen ? { height: albumsHeight } : {}}
-                      >
-                        <div className="px-4">
-                          {albumsList.map((album, index) => (
-                            <div
-                              key={album.id || `${album.label || 'album'}-${index}`}
-                              className={`flex items-center p-2 rounded-lg bg-gray-50 ${album.isPlaceholder ? '' : 'hover:bg-gray-100'} transition-colors mb-1 last:mb-0`}
-                            >
-                              {album.isPlaceholder ? (
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  {ImageComponent(null, {
-                                    width: 40,
-                                    height: 40,
-                                    className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
-                                    alt: ''
-                                  })}
-                                  <span className="font-medium text-gray-900 truncate">\u00A0</span>
-                                </div>
-                              ) : (
-                                <>
-                                  <a
-                                    href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
-                                    onClick={(e) => handleAlbumLinkClick(e, album)}
-                                    className="flex items-center gap-3 flex-1 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    title={album.label}
-                                  >
-                                    {ImageComponent(
-                                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` : null,
-                                      {
-                                        width: 40,
-                                        height: 40,
-                                        className: 'w-10 h-10 object-cover rounded-lg flex-shrink-0',
-                                        alt: ''
-                                      }
-                                    )}
-                                    <span className="font-medium text-gray-900 truncate">{album.label}</span>
-                                  </a>
-                                  <PermissionGate requires="canEdit">
-                                    <button
-                                      onClick={() => handleRemoveFromAlbum(album)}
-                                      className={`${ms('3')} p-1.5 hover:bg-red-100 rounded-lg transition-colors`}
-                                      title={t('imageViewer.removeFromAlbum', { album: album.label })}
-                                      aria-label={t('imageViewer.removeFromAlbum', { album: album.label })}
-                                    >
-                                      <Minus className="w-4 h-4 text-red-600" />
-                                    </button>
-                                  </PermissionGate>
-                                </>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Resizer */}
-                {(permissions.has_albums || permissions.canEdit) && permissions.has_groups && albumsList && albumsList.length > 0 && albumsOpen && facesOpen && (
-                  <div
-                    className="h-2 bg-gray-100 hover:bg-gray-200 rounded cursor-row-resize mx-4 flex-shrink-0"
-                    onMouseDown={startResize}
-                    title="Drag to resize"
-                  />
-                )}
-
-                {/* Faces Panel */}
-                {permissions.has_groups && (
-                  <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
-                    <div
-                      className="flex items-center justify-between px-4 pt-4 pb-2 cursor-pointer select-none"
-                      onClick={handleToggleFacesOpen}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleToggleFacesOpen();
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (showRectangles) {
-                              setSelectedFaceIndex(null);
-                            }
-                            setShowRectangles(!showRectangles);
-                          }}
-                          className={`w-7 h-7 border border-transparent rounded-md transition-colors flex items-center justify-center ${showRectangles ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-700'}`}
-                          title={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
-                          aria-label={showRectangles ? t('imageViewer.hideFaceTags') : t('imageViewer.showFaceTags')}
-                        >
-                          {showRectangles ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleFacesOpen();
-                        }}
-                        className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
-                        title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
-                        aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
-                      >
-                        {facesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    {facesOpen && (
-                      <div className="faces-list-container overflow-y-auto">
-                        <div className="px-4">
-                          {facesList.length === 0 ? (
-                            <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {facesList.map((face, index) => (
-                                <div
-                                  key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
-                                  className={`flex items-center gap-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                                  onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
-                                >
-                                  {ImageComponent(
-                                    face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
-                                    {
-                                      width: 40,
-                                      height: 40,
-                                      className: 'w-10 h-10 object-cover rounded-full',
-                                      alt: getGroupLabel(face),
-                                      iconType: 'person'
-                                    }
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-gray-900 truncate">
-                                      {getGroupLabel(face) || '\u00A0'}
-                                    </p>
-                                  </div>
-                                  {!face.isPlaceholder && (
-                                    <a
-                                      href={`/${eventUrl}/people/${encodeURIComponent(getGroupLabel(face))}`}
-                                      onClick={(e) => handlePersonLinkClick(e, face)}
-                                      className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                      title={t('imageViewer.goToPersonPage')}
-                                    >
-                                      <User className="w-4 h-4 text-gray-600" />
-                                    </a>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-        )}
           </div>
         </motion.div>
       </div>
@@ -3212,8 +2808,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         />
       )}
 
-      {/* Move to Moment Modal - Desktop Only (rendered inside Drawer on mobile) */}
-      {!isMobile && showMoveToMomentModal && (
+      {/* Move to Moment Modal */}
+      {showMoveToMomentModal && (
         <MoveToMomentModal
           key="move-to-moment-modal"
           isOpen={showMoveToMomentModal}
@@ -3222,6 +2818,31 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           onClose={() => setShowMoveToMomentModal(false)}
           selectedImages={imageId ? new Set([imageId]) : new Set()}
           onMoveComplete={handleMoveToMomentComplete}
+        />
+      )}
+
+      {/* Manage Access Modal */}
+      <ManageAccessModal
+        isOpen={showManageAccessModal}
+        onClose={() => setShowManageAccessModal(false)}
+        entityType="image"
+        entityIds={[imageId]}
+        eventUrl={eventUrl}
+      />
+
+      {/* Delete confirmation modal */}
+      {imageActions.showDeleteConfirmModal && (
+        <ConfirmDelete
+          isOpen={imageActions.showDeleteConfirmModal}
+          onClose={imageActions.onCancelDelete}
+          onConfirm={imageActions.onConfirmDelete}
+          title={t('imageViewer.deletePhoto')}
+          message={t('imageViewer.areYouSureYouWantToDeleteThisPhoto')}
+          simpleMessage={true}
+          images={imageActions.deleteImagesList}
+          confirmText={t('imageViewer.delete')}
+          cancelText={t('imageViewer.cancel')}
+          caption={t('imageViewer.thisActionCannotBeUndone')}
         />
       )}
     </AnimatePresence>

@@ -415,7 +415,8 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
     <AnimatePresence>
       <div 
         key="manage-access-modal-overlay"
-        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+        style={{ zIndex: 100010, pointerEvents: 'auto' }}
         onClick={onClose}
       >
         <motion.div
@@ -429,6 +430,7 @@ export default function ManageAccessModal({ isOpen, onClose, entityType, entityI
           onClick={(e) => e.stopPropagation()}
           tabIndex={-1}
           dir={isRTL ? 'rtl' : 'ltr'}
+          style={{ pointerEvents: 'auto' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">

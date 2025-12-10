@@ -347,8 +347,8 @@ export default function TransferFacesModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 100002 }}>
-      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[94vh] overflow-y-auto" tabIndex={-1} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 100010, pointerEvents: 'auto' }}>
+      <div ref={modalRef} className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[94vh] overflow-y-auto" tabIndex={-1} dir={isRTL ? 'rtl' : 'ltr'} style={{ pointerEvents: 'auto' }}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">

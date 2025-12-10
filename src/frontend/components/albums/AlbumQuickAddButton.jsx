@@ -296,7 +296,8 @@ export default function AlbumQuickAddButton({
               : { left: `${relativeLeft}px` }
             ),
             bottom: `${containerRect.height - relativeTop + 8}px`,
-            zIndex: 100002,
+            zIndex: 100010,
+            pointerEvents: 'auto',
           };
         }
         return {
@@ -306,7 +307,8 @@ export default function AlbumQuickAddButton({
             : { left: `${relativeLeft}px` }
           ),
           top: `${relativeBottom + 8}px`,
-          zIndex: 100002,
+          zIndex: 100010,
+          pointerEvents: 'auto',
         };
       }
       
@@ -319,7 +321,8 @@ export default function AlbumQuickAddButton({
             : { left: `${left}px` }
           ),
           bottom: `${window.innerHeight - top + 8}px`,
-          zIndex: 100002,
+          zIndex: 100010,
+          pointerEvents: 'auto',
         };
       }
       return {
@@ -329,7 +332,8 @@ export default function AlbumQuickAddButton({
           : { left: `${left}px` }
         ),
         top: `${bottom + 8}px`,
-        zIndex: 100002,
+        zIndex: 100010,
+        pointerEvents: 'auto',
       };
     }
     
@@ -361,7 +365,8 @@ export default function AlbumQuickAddButton({
             : { left: `${relativeLeft}px` }
           ),
           bottom: `${containerRect.height - relativeTop + 8}px`,
-          zIndex: 100002,
+          zIndex: 100010,
+          pointerEvents: 'auto',
         };
       }
       return {
@@ -371,7 +376,8 @@ export default function AlbumQuickAddButton({
           : { left: `${relativeLeft}px` }
         ),
         top: `${relativeBottom + 8}px`,
-        zIndex: 100002,
+        zIndex: 100010,
+        pointerEvents: 'auto',
       };
     }
 
@@ -384,7 +390,8 @@ export default function AlbumQuickAddButton({
           : { left: `${rect.left}px` }
         ),
         bottom: `${window.innerHeight - rect.top + 8}px`,
-        zIndex: 100002,
+        zIndex: 100010,
+        pointerEvents: 'auto',
       };
     }
     return {
@@ -394,7 +401,8 @@ export default function AlbumQuickAddButton({
         : { left: `${rect.left}px` }
       ),
       top: `${rect.bottom + 8}px`,
-      zIndex: 100002,
+      zIndex: 100010,
+      pointerEvents: 'auto',
     };
   };
 
