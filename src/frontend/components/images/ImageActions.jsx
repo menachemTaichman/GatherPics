@@ -203,17 +203,17 @@ export default function useImageActions({
         const result = await groupsAPI.update(entityId, { representative_face: faceId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
         const entityName = useDataStore.getState().entities?.[eventId]?.groups?.[entityId]?.label || 'person';
-        showToast(`Set as representative for ${entityName}`, 'success');
+        showToast(t('imageActions.setAsRepresentativeFor', { entityName }), 'success');
       } else if (entity === 'moment') {
         const result = await momentsAPI.update(entityId, { representative_image: targetImageId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
         const entityName = useDataStore.getState().entities?.[eventId]?.moments?.[entityId]?.label || 'moment';
-        showToast(`Set as representative for ${entityName}`, 'success');
+        showToast(t('imageActions.setAsRepresentativeFor', { entityName }), 'success');
       } else if (entity === 'album') {
         const result = await albumsAPI.update(entityId, { representative_image: targetImageId }, eventUrl);
         // Changes are automatically applied by apiService interceptor
         const entityName = useDataStore.getState().entities?.[eventId]?.albums?.[entityId]?.label || 'album';
-        showToast(`Set as representative for ${entityName}`, 'success');
+        showToast(t('imageActions.setAsRepresentativeFor', { entityName }), 'success');
       }
     } catch (error) {
       console.error('Error setting representative:', error);
@@ -319,21 +319,15 @@ export default function useImageActions({
   const representativeTooltip = (() => {
     const label = getEntityLabel();
     if (isRepresentative) {
-      return entity === 'group' 
-        ? `Current representative for ${label}`
-        : entity === 'moment'
-        ? `Current representative for ${label}`
-        : entity === 'album'
-        ? `Current representative for ${label}`
-        : 'Current representative';
+      if (label) {
+        return t('imageActions.currentRepresentativeFor', { label });
+      }
+      return t('imageActions.currentRepresentative');
     }
-    return entity === 'group' 
-      ? `Set as representative for ${label}`
-      : entity === 'moment'
-      ? `Set as representative for ${label}`
-      : entity === 'album'
-      ? `Set as representative for ${label}`
-      : 'Set as representative';
+    if (label) {
+      return t('imageActions.setAsRepresentativeForLabel', { label });
+    }
+    return t('imageActions.setAsRepresentative');
   })();
 
   // Prepare images for delete confirmation modal

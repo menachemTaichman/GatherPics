@@ -1054,7 +1054,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     urlHelpers,
     placeholderDataUrl: null, // Use universal placeholder components
     onImageUpdated: () => {}, // No need to update local state, store handles it
-    onAlbumAdded: () => {} // No special handling needed
+    onAlbumAdded: () => {}, // No special handling needed
+    entity: 'group', // Context for representative setting
+    entityId: group?.id // ID of the group
+  });
+
+  // Create ImageActions instance for group context (for representative operations)
+  const groupImageActions = useImageActions({
+    imageIds: [], // Not needed for representative operations
+    eventUrl,
+    urlHelpers,
+    placeholderDataUrl: null,
+    onImageUpdated: () => {},
+    onAlbumAdded: () => {},
+    entity: 'group',
+    entityId: group?.id
   });
 
   useEffect(() => {
@@ -1893,12 +1907,8 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       contextType="Person"
                       contextLabel={group?.label}
                       onSetRepresentative={isFacesMode ? (async () => {
-                        try {
-                          await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
-                          showToast(t('groupDetail.representativeUpdated'), 'success');
-                        } catch (error) {
-                          showToast(formatErrorMessage(t('groupDetail.setRepresentative'), error), 'error');
-                        }
+                        // Use ImageActions hook for setting representative
+                        await groupImageActions.setRepresentative(imageId, faceId);
                       }) : undefined}
                     />
                     {/* Group label overlay for faces mode when filtering with at least one group */}
@@ -1939,12 +1949,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         onClearSelection={clearSelection}
         onTransferFaces={handleTransferFaces}
         onSetRepresentative={showCrops ? async (faceId) => {
-          try {
-            await groupsAPI.update(group.id, { representative_face: faceId }, eventUrl);
-            showToast(t('groupDetail.representativeUpdated'), 'success');
+          // Find the image ID for this face
+          const store = useDataStore.getState();
+          const face = store.entities?.[eventId]?.faces?.[faceId];
+          if (face && face.image_id) {
+            // Use ImageActions hook for setting representative
+            await groupImageActions.setRepresentative(face.image_id, faceId);
             clearSelection();
-          } catch (error) {
-            showToast(formatErrorMessage(t('groupDetail.setRepresentative'), error), 'error');
           }
         } : undefined}
         eventUrl={eventUrl}

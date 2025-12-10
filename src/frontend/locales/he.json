@@ -1546,7 +1546,12 @@
     "representativeUpdated": "נציג עודכן",
     "failedToUpdateRepresentative": "נכשל בעדכון נציג",
     "failedToUpdateFavorites": "נכשל בעדכון מועדפים",
-    "failedToUpdateArchive": "נכשל בעדכון ארכיון"
+    "failedToUpdateArchive": "נכשל בעדכון ארכיון",
+    "setAsRepresentativeFor": "הוגדר כנציג עבור {{entityName}}",
+    "currentRepresentativeFor": "נציג נוכחי עבור {{label}}",
+    "setAsRepresentativeForLabel": "הגדר כנציג עבור {{label}}",
+    "currentRepresentative": "נציג נוכחי",
+    "setAsRepresentative": "הגדר כנציג"
   },
   "selectFaceForRep": {
     "selectFaceFor": "בחר פנים עבור",

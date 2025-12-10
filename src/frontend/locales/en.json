@@ -1545,7 +1545,12 @@
     "representativeUpdated": "Representative updated",
     "failedToUpdateRepresentative": "Failed to update representative",
     "failedToUpdateFavorites": "Failed to update favorites",
-    "failedToUpdateArchive": "Failed to update archive"
+    "failedToUpdateArchive": "Failed to update archive",
+    "setAsRepresentativeFor": "Set as representative for {{entityName}}",
+    "currentRepresentativeFor": "Current representative for {{label}}",
+    "setAsRepresentativeForLabel": "Set as representative for {{label}}",
+    "currentRepresentative": "Current representative",
+    "setAsRepresentative": "Set as representative"
   },
   "selectFaceForRep": {
     "selectFaceFor": "Select Face for",
