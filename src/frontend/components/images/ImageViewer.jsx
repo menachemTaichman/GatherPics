@@ -1517,16 +1517,29 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       return;
     }
     
-    // Remove existing overlay
-    const existingOverlay = currentSlide.content.element?.querySelector('.pswp-face-overlay');
-    if (existingOverlay) {
-      // Clean up ResizeObserver before removing
-      if (existingOverlay._resizeObserver) {
-        existingOverlay._resizeObserver.disconnect();
-        delete existingOverlay._resizeObserver;
-      }
-      existingOverlay.remove();
-    }
+    // Remove existing overlay (handle overlays appended to parent containers on mobile)
+    const removeFaceOverlays = () => {
+      const roots = [
+        currentSlide.content?.element,
+        currentSlide.holderElement,
+        pswp.element
+      ].filter(Boolean);
+
+      const seen = new Set();
+      roots.forEach(root => {
+        root.querySelectorAll('.pswp-face-overlay').forEach(overlay => {
+          if (seen.has(overlay)) return;
+          seen.add(overlay);
+          if (overlay._resizeObserver) {
+            overlay._resizeObserver.disconnect();
+            delete overlay._resizeObserver;
+          }
+          overlay.remove();
+        });
+      });
+    };
+
+    removeFaceOverlays();
     
     // Re-inject if showRectangles is true
     if (showRectangles && facesList.length > 0) {
