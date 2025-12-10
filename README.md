@@ -1,44 +1,45 @@
-# Face Gallery - AI-Powered Face Recognition Website
+# Gather Pics - Professional Photo Gallery Platform
 
-A beautiful, modern web application for managing and viewing face recognition results. Built with React, Flask, and powered by AI face recognition technology.
+A modern, AI-powered photo gallery platform designed for professional photographers and photography businesses. Built with React, Flask, PostgreSQL, and AWS Rekognition to automatically organize event photos through intelligent face recognition.
 
 ## ✨ Features
 
-### 🖼️ Gallery View
-- **Beautiful Grid Layout**: Responsive gallery showing all detected face groups
-- **Search & Filter**: Find specific faces by name or ID
-- **Sort Options**: Sort by name, photo count, or date
-- **Hover Effects**: Smooth animations and interactive elements
+### 🤖 Smart Face Recognition
+- **AWS Rekognition Integration**: Automatically detects and identifies faces in uploaded photos
+- **Person Grouping**: Organizes photos by individual, making specific guests easy to find
+- **Smart Discovery**: Helps clients and guests find themselves and their loved ones effortlessly
 
-### 👤 Face Group Management
-- **Edit Names**: Change the name of any face group
-- **Representative Photos**: Choose the best photo to represent each group
-- **Delete Groups**: Remove unwanted face groups
-- **Photo Count**: See how many photos are in each group
+### 🔒 Advanced Permission System
+- **Granular Access Control**: Customize permissions at photo, album, and person levels
+- **Identity Privacy**: Manage identity visibility independently of photo access
+- **Database-Level Enforcement**: All permissions enforced strictly at the database level
+- **Access Requests**: Allow guests to request access to specific people or content
 
-### 📸 Individual Face Views
-- **Detailed View**: Click any face to see all photos in that group
-- **Grid & List Views**: Toggle between different viewing modes
-- **Photo Selection**: Select individual photos for bulk actions
-- **Search Photos**: Find specific photos within a group
+### 📸 Event Management
+- **Multiple Events**: Handle unlimited events and clients from a single dashboard
+- **Flexible Organization**: Organize by Albums, Time-based Moments, or Face Groups
+- **Timeline View**: Browse photos chronologically with moment-based organization
+- **People View**: Browse and manage all detected faces across events
 
-### 💾 Download Features
-- **Download All**: Get all photos from the entire gallery
-- **Group Downloads**: Download all photos from a specific face group
-- **Selective Downloads**: Choose specific photos to download
-- **ZIP Files**: All downloads come as organized ZIP files
+### 👥 Client Collaboration
+- **Photo Selection**: Let event owners review and select their top picks
+- **Custom Albums**: Give clients the freedom to create their own collections
+- **Easy Downloads**: Simple, high-quality download options
+- **Feedback System**: Built-in feedback and bug reporting system
 
 ### 🎨 Modern UI/UX
-- **Responsive Design**: Works perfectly on desktop, tablet, and mobile
-- **Smooth Animations**: Beautiful transitions and hover effects
-- **Dark/Light Theme**: Clean, modern interface
-- **Loading States**: Professional loading indicators
+- **Responsive Design**: Works beautifully on desktop, tablet, and mobile
+- **Internationalization**: Multi-language support (English, Hebrew)
+- **Smooth Animations**: Beautiful transitions powered by Framer Motion
+- **Accessibility**: WCAG 2.1 Level AA compliant with keyboard navigation and screen reader support
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- Python (v3.8 or higher)
+- Node.js (v18 or higher)
+- Python (v3.11 or higher)
+- PostgreSQL (v15 or higher)
+- AWS Account with Rekognition access (for face recognition features)
 - npm or yarn
 
 ### Installation
@@ -49,40 +50,70 @@ A beautiful, modern web application for managing and viewing face recognition re
    cd face-recognition-website
    ```
 
-2. **Install frontend dependencies**
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration:
+   # - Database credentials
+   # - AWS credentials
+   # - JWT secret key
+   # - Other environment-specific settings
+   ```
+
+3. **Install frontend dependencies**
    ```bash
    npm install
    ```
 
-3. **Install backend dependencies**
+4. **Install backend dependencies**
    ```bash
-   pip install flask flask-cors
+   pip install -r requirements.txt
+   ```
+
+5. **Set up the database**
+   ```bash
+   # Using Docker Compose (recommended)
+   docker-compose up -d db
+   
+   # Or use your own PostgreSQL instance
+   # Then run migrations
+   yoyo apply --database postgresql://user:pass@localhost/dbname ./migrations
    ```
 
 ### Running the Application
 
-#### Option 1: Use the provided script (Windows)
+#### Option 1: Docker Compose (Recommended)
 ```bash
-start-dev.bat
+docker-compose up
 ```
 
-#### Option 2: Manual start
+#### Option 2: Development Mode
 
-1. **Start the backend server**
+1. **Start the database** (if using Docker Compose)
    ```bash
-   cd src/backend
-   python app.py
+   docker-compose up -d db
+   ```
+
+2. **Start the backend server**
+   ```bash
+   python -m src.backend.app
    ```
    The backend will run on http://localhost:5000
 
-2. **Start the frontend server** (in a new terminal)
+3. **Start the frontend server** (in a new terminal)
    ```bash
    npm run dev
    ```
    The frontend will run on http://localhost:5173
 
-3. **Open your browser**
+4. **Open your browser**
    Navigate to http://localhost:5173 to see the application
+
+#### Option 3: Production Build with Docker
+```bash
+docker build -t gather-pics .
+docker run -p 5000:5000 gather-pics
+```
 
 ## 📁 Project Structure
 
@@ -90,99 +121,273 @@ start-dev.bat
 face-recognition-website/
 ├── src/
 │   ├── backend/
-│   │   └── app.py              # Flask API server
+│   │   ├── app.py                 # Flask application entry point
+│   │   ├── routes/                # API route modules
+│   │   │   ├── auth_routes.py     # Authentication endpoints
+│   │   │   ├── event_routes.py   # Event management
+│   │   │   ├── image_routes.py   # Image operations
+│   │   │   ├── group_routes.py   # Face group management
+│   │   │   ├── album_routes.py   # Album operations
+│   │   │   ├── moment_routes.py  # Moment/timeline operations
+│   │   │   ├── profile_routes.py # User profiles
+│   │   │   ├── upload_routes.py  # File uploads
+│   │   │   ├── request_routes.py # Access requests
+│   │   │   ├── notification_routes.py
+│   │   │   ├── feedback_routes.py
+│   │   │   └── settings_routes.py
+│   │   ├── middleware/            # Custom middleware
+│   │   ├── helpers.py             # Utility functions
+│   │   ├── validators.py          # Input validation
+│   │   └── error_handlers.py      # Error handling
 │   ├── frontend/
-│   │   ├── components/
-│   │   │   ├── App.jsx         # Main application component
-│   │   │   ├── Gallery.jsx     # Gallery view component
-│   │   │   ├── GroupDetail.jsx  # Individual group view
-│   │   │   ├── Header.jsx      # Navigation header
-│   │   │   ├── FaceCard.jsx    # Individual face card
-│   │   │   ├── LoadingSpinner.jsx
-│   │   │   ├── EditGroupModal.jsx
-│   │   │   └── DeleteConfirmModal.jsx
-│   │   ├── index.css           # Global styles
-│   │   └── main.jsx            # Application entry point
-│   └── data/
-│       ├── events_managers.json
-│       ├── events.json
-├── package.json
-├── requirements.txt
-├── tailwind.config.js
-├── vite.config.js
+│   │   ├── components/            # React components
+│   │   ├── pages/                 # Page components
+│   │   │   ├── HomePage.jsx
+│   │   │   ├── EventHomePage.jsx
+│   │   │   ├── albums/
+│   │   │   ├── groups/
+│   │   │   ├── moments/
+│   │   │   ├── dashboard/
+│   │   │   └── ...
+│   │   ├── config/                # App configuration
+│   │   │   └── appConfig.js       # App name and settings
+│   │   ├── contexts/              # React contexts
+│   │   ├── hooks/                 # Custom React hooks
+│   │   ├── utils/                 # Utility functions
+│   │   ├── locales/               # i18n translations
+│   │   ├── styles/                # Additional styles
+│   │   ├── main.jsx               # Application entry point
+│   │   ├── index.css              # Global styles
+│   │   └── i18n.js                # i18n configuration
+│   └── core/                      # Shared core modules
+├── migrations/                    # Database migrations
+├── public/                        # Static assets
+│   └── content/                   # Markdown content (about, terms, etc.)
+├── tests/                         # Test files
+├── data/                          # Data files
+├── docker-compose.yml             # Docker Compose configuration
+├── Dockerfile                     # Production Docker image
+├── package.json                   # Frontend dependencies
+├── requirements.txt               # Backend dependencies
+├── vite.config.js                 # Vite configuration
+├── tailwind.config.js             # Tailwind CSS configuration
 └── README.md
 ```
 
-## 🔧 API Endpoints
+## 🔧 Technology Stack
 
-### Groups
-- `GET /api/groups` - Get all face groups
-- `GET /api/groups/<id>` - Get specific face group
-- `PUT /api/groups/<id>` - Update face group
-- `DELETE /api/groups/<id>` - Delete face group
+### Frontend
+- **React 18** - UI framework
+- **Vite** - Build tool and dev server
+- **React Router** - Client-side routing
+- **Zustand** - State management
+- **Tailwind CSS** - Styling
+- **Framer Motion** - Animations
+- **i18next** - Internationalization
+- **Axios** - HTTP client
+- **PhotoSwipe** - Image viewer
+- **Lucide React** - Icons
 
-### Downloads
-- `GET /api/download-all` - Download all photos
-- `GET /api/groups/<id>/download` - Download group photos
-- `POST /api/groups/<id>/download-selected` - Download selected photos
+### Backend
+- **Flask** - Web framework
+- **PostgreSQL** - Database
+- **AWS Rekognition** - Face recognition
+- **AWS S3** - File storage (via boto3)
+- **JWT** - Authentication (flask-jwt-extended)
+- **Yoyo Migrations** - Database migrations
+- **Pillow/Pillow-SIMD** - Image processing
+- **Pydantic** - Data validation
+
+### Infrastructure
+- **Docker** - Containerization
+- **Docker Compose** - Multi-container orchestration
+
+## 🔌 API Endpoints
+
+### Authentication
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `POST /api/auth/refresh` - Refresh JWT token
+
+### Events
+- `GET /api/events` - List all events
+- `GET /api/events/<id>` - Get event details
+- `POST /api/events` - Create new event
+- `PUT /api/events/<id>` - Update event
+- `DELETE /api/events/<id>` - Delete event
 
 ### Images
-- `GET /api/images.json` - Get images metadata (backend endpoint for frontend compatibility)
+- `GET /api/images` - List images (with filters)
+- `GET /api/images/<id>` - Get image details
+- `POST /api/images` - Upload images
+- `PUT /api/images/<id>` - Update image
+- `DELETE /api/images/<id>` - Delete image
+
+### Groups (Face Groups)
+- `GET /api/groups` - List face groups
+- `GET /api/groups/<id>` - Get group details
+- `PUT /api/groups/<id>` - Update group (name, permissions)
+- `DELETE /api/groups/<id>` - Delete group
+
+### Albums
+- `GET /api/albums` - List albums
+- `GET /api/albums/<id>` - Get album details
+- `POST /api/albums` - Create album
+- `PUT /api/albums/<id>` - Update album
+- `DELETE /api/albums/<id>` - Delete album
+
+### Moments
+- `GET /api/moments` - List moments
+- `GET /api/moments/<id>` - Get moment details
+- `POST /api/moments` - Create moment
+- `PUT /api/moments/<id>` - Update moment
+
+### Profiles
+- `GET /api/profiles` - List profiles
+- `GET /api/profiles/me` - Get current user profile
+- `PUT /api/profiles/me` - Update profile
+
+### Uploads
+- `GET /api/uploads` - List uploads
+- `GET /api/uploads/<id>` - Get upload status
+- `POST /api/uploads` - Create upload session
+
+### Access Requests
+- `GET /api/requests` - List access requests
+- `POST /api/requests` - Create access request
+- `PUT /api/requests/<id>` - Update request (approve/reject)
+- `DELETE /api/requests/<id>` - Delete request
+
+### Files & Downloads
+- `GET /api/files/<path>` - Serve files
+- `GET /api/download/<type>` - Download files (ZIP)
 
 ## 🎯 Usage Guide
 
-### Viewing the Gallery
-1. Open the application in your browser
-2. Browse through the face groups in the main gallery
-3. Use the search bar to find specific faces
-4. Sort the gallery by name, count, or date
+### For Photographers
 
-### Managing Face Groups
-1. **Edit a Group**: Click the three dots menu on any face card and select "Edit"
-2. **Change Name**: Enter a new name for the face group
-3. **Change Representative Photo**: Select a different photo from the group
-4. **Delete Group**: Use the delete option (this cannot be undone)
+1. **Create an Event**
+   - Navigate to Dashboard
+   - Create a new event
+   - Configure event settings and permissions
 
-### Viewing Individual Faces
-1. Click on any face card to see all photos in that group
-2. Switch between grid and list view using the toggle buttons
-3. Search for specific photos within the group
-4. Select photos using the checkboxes for bulk actions
+2. **Upload Photos**
+   - Use the upload interface to add photos
+   - Photos are automatically processed for face recognition
+   - Wait for processing to complete
 
-### Downloading Photos
-1. **Download All**: Use the "Download All" button in the header
-2. **Download Group**: Use the download button on any face card or in the detail view
-3. **Download Selected**: Select specific photos and use the "Download Selected" button
+3. **Organize Content**
+   - Review automatically detected faces in People view
+   - Create custom albums for specific collections
+   - Organize by moments for timeline-based viewing
+
+4. **Manage Permissions**
+   - Set permissions at event, album, or person level
+   - Review and approve access requests from clients
+   - Control identity visibility independently
+
+5. **Share with Clients**
+   - Share event URLs with clients
+   - Clients can browse, create albums, and request access
+   - Enable downloads for selected content
+
+### For Clients/Guests
+
+1. **Browse Events**
+   - Access shared event URLs
+   - Browse photos in Timeline, Albums, or People views
+
+2. **Find Yourself**
+   - Use People view to find your face group
+   - Request access if needed
+   - View all photos you appear in
+
+3. **Create Collections**
+   - Create custom albums
+   - Select favorite photos
+   - Download your photos
 
 ## 🛠️ Development
 
 ### Frontend Development
-- Built with React 18 and Vite
-- Styled with Tailwind CSS
-- Uses Framer Motion for animations
-- Lucide React for icons
+```bash
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run preview      # Preview production build
+npm run lint         # Run ESLint
+```
 
 ### Backend Development
-- Flask REST API
-- CORS enabled for frontend communication
-- File serving for images
-- ZIP file generation for downloads
+```bash
+# Run Flask in development mode
+python -m src.backend.app
 
-### Adding New Features
-The application is designed to be modular and extensible:
-- New components can be added to `src/frontend/components/`
-- API endpoints can be added to `src/backend/app.py`
-- Styles can be customized in `src/frontend/index.css`
+# Run with auto-reload (using Flask's debug mode)
+export FLASK_ENV=development
+python -m src.backend.app
+```
 
-## 🌟 Future Enhancements
+### Database Migrations
+```bash
+# Apply migrations
+yoyo apply --database <connection-string> ./migrations
 
-- [ ] User authentication and accounts
-- [ ] Cloud storage integration (AWS S3, Google Cloud)
-- [ ] Advanced face recognition features
-- [ ] Photo upload functionality
-- [ ] Face tagging and labeling
-- [ ] Export to various formats
-- [ ] Mobile app version
+# Rollback last migration
+yoyo rollback --database <connection-string> ./migrations
+```
+
+### Testing
+```bash
+# Run backend tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test.py
+```
+
+## 🔐 Environment Variables
+
+Create a `.env` file in the root directory with:
+
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=gather_pics
+DB_USER=postgres
+DB_PASSWORD=your_password
+
+# AWS
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=your-bucket-name
+
+# JWT
+JWT_SECRET_KEY=your-secret-key-change-in-production
+
+# Flask
+ENVIRONMENT=DEVELOPMENT  # or PRODUCTION
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5000
+
+# Frontend
+VITE_API_URL=http://localhost:5000
+```
+
+## 🐳 Docker
+
+### Development
+```bash
+docker-compose up -d db    # Start only database
+docker-compose up          # Start all services
+```
+
+### Production
+```bash
+docker build -t gather-pics .
+docker run -p 5000:5000 --env-file .env gather-pics
+```
 
 ## 📝 License
 
@@ -192,6 +397,10 @@ This project is licensed under the MIT License.
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 📧 Contact
+
+For questions or support, contact: [meTaichman@gmail.com](mailto:meTaichman@gmail.com)
+
 ---
 
-**Enjoy exploring your face gallery! 🎉** 
+**Built with ❤️ for professional photographers**
