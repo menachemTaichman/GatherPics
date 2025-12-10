@@ -341,6 +341,14 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
       
     switch (e.key) {
+      case 'Escape':
+        // If drawer is open, close it only (don't close modal)
+        if (drawerOpenRef.current) {
+          setDrawerOpen(false);
+          return true; // Mark as handled
+        }
+        // If drawer is closed, let useModalFocus handle closing the modal
+        return false;
       case 'ArrowLeft':
         if (filteredImages.length > 1) {
           handleNavigate(isRTL ? 'next' : 'prev');
@@ -373,20 +381,38 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     drawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
 
-  // Wrapped close handler that prevents closing while drawer is open
+  // Wrapped close handler - only closes modal if drawer is not open
+  // ESC key is handled separately in handleImageViewerKeys
   const handleModalClose = useCallback(() => {
-    if (drawerOpenRef.current) return; // Don't close ImageViewer while drawer is open
+    // Don't close modal if drawer is open - let ESC handler close drawer first
+    if (drawerOpenRef.current) {
+      return;
+    }
+    onClose();
+  }, [onClose]);
+
+  // Separate handler for PhotoSwipe close - always closes both drawer and modal
+  const handlePhotoSwipeClose = useCallback(() => {
+    // When PhotoSwipe closes, close drawer if open, then close modal
+    if (drawerOpenRef.current) {
+      setDrawerOpen(false);
+    }
     onClose();
   }, [onClose]);
 
   // Use modal focus hook
+  // Back button handling is automatically included, but only when imageId is set
   const { modalRef } = useModalFocus(true, handleModalClose, {
     customKeyHandler: handleImageViewerKeys,
     allowOutsideScroll: true,
     modalType: 'popup',
     modalId: imageViewerModalId,
     // Disable focus trapping when drawer is open to prevent conflict with Vaul
-    enableFocusTrapping: !drawerOpen
+    enableFocusTrapping: !drawerOpen,
+    // Use custom state key for ImageViewer
+    backButtonStateKey: 'imageViewerOpen',
+    // Only enable back button when imageId is set (viewer is actually ready)
+    enableBackButton: !!imageId
   });
   const [imageInfo, setImageInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -532,6 +558,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return () => { try { unregisterModal(imageViewerModalId); } catch {} };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Scroll lock and focus trapping handled by useModalFocus (popup)
 
@@ -947,9 +974,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Handle close event from PhotoSwipe
     pswp.on('close', () => {
-      // Close the ImageViewer when PhotoSwipe's own close button is used on mobile
+      // Close the ImageViewer when PhotoSwipe's own close button is used
+      // Use handlePhotoSwipeClose to ensure both drawer and modal close
       if (!skipPswpCloseRef.current) {
-        handleModalClose();
+        handlePhotoSwipeClose();
       }
     });
 
@@ -2135,7 +2163,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               dir={isRTL ? 'rtl' : 'ltr'}
               onTouchStart={isMobile ? handleDrawerTouchStart : undefined}
               onTouchEnd={isMobile ? handleDrawerTouchEnd : undefined}
-              {...(isMobile ? { dismissible: true } : {})}
               onPointerDownOutside={(e) => {
                 // Prevent closing on desktop via outside click - only via info toggle
                 // On mobile, prevent closing if a modal is open
@@ -2185,7 +2212,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   <div className="flex-1 min-h-0 relative overflow-hidden">
                     <AnimatePresence initial={false} mode="popLayout" custom={drawerDirection}>
                       <motion.div
-                        key={imageId}
+                        key={imageId || 'no-image'}
                         custom={drawerDirection}
                         initial={{ 
                           x: (isRTL 
@@ -2518,6 +2545,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
       {/* Manage Access Modal */}
       <ManageAccessModal
+        key="manage-access-modal"
         isOpen={showManageAccessModal}
         onClose={() => setShowManageAccessModal(false)}
         entityType="image"
@@ -2528,6 +2556,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       {/* Delete confirmation modal */}
       {imageActions.showDeleteConfirmModal && (
         <ConfirmDelete
+          key="delete-confirm-modal"
           isOpen={imageActions.showDeleteConfirmModal}
           onClose={imageActions.onCancelDelete}
           onConfirm={imageActions.onConfirmDelete}

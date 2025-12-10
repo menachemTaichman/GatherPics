@@ -9,6 +9,7 @@ import { useModalManager, useModalStore } from '../utils/modalManager';
  * - Click outside to close
  * - Escape key to close
  * - Preventing background scroll
+ * - Browser back button to close (mobile UX improvement)
  */
 export function useModalFocus(isOpen, onClose, options = {}) {
   const modalRef = useRef(null);
@@ -38,7 +39,9 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     enableFocusTrapping = true,
     preventBackgroundScroll = true,
     allowOutsideScroll = true,
-    customKeyHandler = null
+    customKeyHandler = null,
+    enableBackButton = true, // Enable browser back button handling by default
+    backButtonStateKey = null // Custom state key for history (defaults to modalId-based)
   } = options;
 
   // Store the last active element when modal opens
@@ -302,6 +305,124 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       document.removeEventListener('wheel', handleWheel, false);
     };
   }, [isOpen, handleKeyDown, handleWheel, handleClick, updateMousePosition]);
+
+  // Handle browser back button to close modal on mobile
+  // Only handle for topmost modal to prevent conflicts
+  const historyStatePushedRef = useRef(false);
+  const wasClosedByBackButtonRef = useRef(false);
+  const originalUrlRef = useRef(window.location.href);
+  const isCleaningUpRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const isTopmostModalRef = useRef(isTopmostModal);
+
+  // Keep refs updated
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    isTopmostModalRef.current = isTopmostModal;
+  }, [onClose, isTopmostModal]);
+
+  useEffect(() => {
+    // Only handle if modal is open and enabled
+    if (!isOpen || !enableBackButton) {
+      return;
+    }
+
+    // Only handle if this is the topmost modal
+    if (!isTopmostModalRef.current()) {
+      return;
+    }
+
+    // Store the original URL when modal opens
+    originalUrlRef.current = window.location.href;
+    
+    // Use modalId-based state key or custom one
+    const stateKey = backButtonStateKey || `${modalId}Open`;
+    
+    // Push or update history state when modal opens to enable back button handling
+    if (!historyStatePushedRef.current) {
+      try {
+        window.history.pushState({ [stateKey]: true }, '', window.location.href);
+        historyStatePushedRef.current = true;
+        wasClosedByBackButtonRef.current = false;
+      } catch (e) {
+        console.warn('Failed to push history state for modal:', e);
+      }
+    } else {
+      // History state already exists (modal state changed but still open)
+      // Just update the state without pushing a new entry
+      try {
+        window.history.replaceState({ [stateKey]: true }, '', window.location.href);
+      } catch (e) {
+        console.warn('Failed to update history state for modal:', e);
+      }
+    }
+
+    const handlePopState = (event) => {
+      // Don't handle popstate if we're in the middle of cleanup
+      if (isCleaningUpRef.current) {
+        return;
+      }
+      
+      // Only handle if this is still the topmost modal
+      if (!isTopmostModalRef.current()) {
+        return;
+      }
+      
+      // If we pushed a state and back button is pressed, close the modal
+      if (historyStatePushedRef.current) {
+        wasClosedByBackButtonRef.current = true;
+        // Close the modal instead of navigating
+        onCloseRef.current();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      // Don't run cleanup if we never actually pushed a state
+      if (!historyStatePushedRef.current) {
+        return;
+      }
+      
+      // Mark that we're cleaning up to prevent popstate handler from running
+      isCleaningUpRef.current = true;
+      
+      window.removeEventListener('popstate', handlePopState);
+      
+      // Clean up: if modal closes normally (not via back button), remove our history entry
+      if (!wasClosedByBackButtonRef.current) {
+        try {
+          const currentUrl = window.location.href;
+          const stateKey = backButtonStateKey || `${modalId}Open`;
+          const hasModalState = window.history.state?.[stateKey];
+          
+          if (currentUrl === originalUrlRef.current && hasModalState) {
+            // Remove our history entry by going back
+            setTimeout(() => {
+              // Only go back if we're still cleaning up (component unmounted)
+              if (!isCleaningUpRef.current) {
+                return;
+              }
+              
+              const stillOnSameUrl = window.location.href === originalUrlRef.current;
+              const stillHasState = window.history.state?.[stateKey];
+              
+              if (stillOnSameUrl && stillHasState && isCleaningUpRef.current) {
+                window.history.back();
+              }
+            }, 150);
+          }
+        } catch (e) {
+          console.error('Error during modal history cleanup:', e);
+        }
+      }
+      
+      // Reset flags for next time modal opens
+      historyStatePushedRef.current = false;
+      wasClosedByBackButtonRef.current = false;
+      isCleaningUpRef.current = false;
+    };
+  }, [isOpen, enableBackButton, modalId, backButtonStateKey]);
 
   return {
     modalRef,

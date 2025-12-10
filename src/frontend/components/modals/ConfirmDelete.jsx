@@ -63,6 +63,7 @@ function ConfirmDelete({
   };
   
   // Use modal focus hook with background scroll allowed
+  // Back button handling is automatically included
   const { modalRef } = useModalFocus(isOpen, onClose, {
     customKeyHandler: handleConfirmDeleteKeys,
     allowOutsideScroll: true,

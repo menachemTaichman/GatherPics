@@ -72,7 +72,8 @@ export default function BucketDrawer() {
     modalId: modalId,
     modalType: 'panel',
     allowOutsideScroll: true,
-    enableFocusTrapping: true
+    enableFocusTrapping: true,
+    enableBackButton: true // Explicitly enable browser back button to close drawer
   });
 
   const alreadyList = mode === 'download' ? downloaded : uploaded;
