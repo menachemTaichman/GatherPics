@@ -30,7 +30,7 @@ import { Drawer } from 'vaul';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
-// ImageViewerActions component - inline component for ImageViewer sidebar
+// ImageViewerActions component - inline component for ImageViewer drawer
 function ImageViewerActions({
   imageId,
   imageInfo,
@@ -390,7 +390,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   });
   const [imageInfo, setImageInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const containerRef = useRef(null);
   const pswpRef = useRef(null);
   const pswpInstanceRef = useRef(null);
   const skipPswpCloseRef = useRef(false);
@@ -402,13 +401,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const facesListRef = useRef(EMPTY_ARRAY);
   const handleFaceClickRef = useRef(null);
   const handleTransferFaceRef = useRef(null);
-  const [editIndexValue, setEditIndexValue] = useState();
-  const [isEditingIndex, setIsEditingIndex] = useState(false);
-  const imageRef = useRef(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
-  const [rectangleKey, setRectangleKey] = useState(0);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
@@ -417,14 +409,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState('');
   const [isSavingDescription, setIsSavingDescription] = useState(false);
-  const [splitHeights, setSplitHeights] = useState({ albums: 150, faces: 0 });
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
   const [albumsHeight, setAlbumsHeight] = useState(() => getPreference('ImageViewer.albumsHeight', 200));
-  const [isResizing, setIsResizing] = useState(false);
-  const sectionsRef = useRef(null);
-  const startResizeYRef = useRef(0);
-  const startAlbumsHeightRef = useRef(0);
   
   // Drawer swipe logic
   const drawerTouchStartRef = useRef({ x: 0, y: 0 });
@@ -455,7 +442,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   };
 
-  // Detect mobile - hide sidebar by default on mobile
+  // Detect mobile
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 768; // md breakpoint
@@ -469,8 +456,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Sidebar state removed - desktop now uses drawer
-  const [sidebarVisible, setSidebarVisible] = useState(false);
   const isMobileRef = useRef(isMobile);
   
   useEffect(() => {
@@ -530,62 +515,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     };
   }, [drawerOpen, isMobile]);
 
-  // Desktop overlay controls removed - now using PhotoSwipe UI and Vaul drawer
   // Track initial values to avoid persisting unchanged preferences
   const initialValuesRef = useRef({
     albumsOpen: getPreference('ImageViewer.albumsOpen', false),
     facesOpen: getPreference('ImageViewer.facesOpen', false),
-    albumsHeight: getPreference('ImageViewer.albumsHeight', 200),
-    sidebarVisible: getPreference('ImageViewer.sidebarOpen', false)
+    albumsHeight: getPreference('ImageViewer.albumsHeight', 200)
   });
-  // Modal registration for scope lifecycle tied to actual modal open/close (no subscription to modal store)
-
-  // Calculate modal dimensions for mobile to maintain landscape aspect ratio
-  const [mobileModalStyle, setMobileModalStyle] = useState({});
-  
-  useEffect(() => {
-    if (!isMobile) {
-      setMobileModalStyle({});
-      return;
-    }
-    
-    const calculateMobileDimensions = () => {
-      if (!modalRef.current) return;
-      
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      
-      // Leave space for buttons (top and bottom controls)
-      const availableHeight = viewportHeight - 5 * 16; // 5rem for buttons/margins
-      const availableWidth = viewportWidth; // Full width, no margins
-      
-      // Calculate height based on 3:2 aspect ratio (width * 0.67 = height)
-      const aspectRatioHeight = availableWidth * 0.67;
-      
-      // Use the smaller of: aspect ratio height or available viewport height
-      const finalHeight = Math.min(aspectRatioHeight, availableHeight);
-      const finalWidth = finalHeight / 0.67; // Reverse calculate width from height
-      
-      setMobileModalStyle({
-        width: `${Math.min(finalWidth, availableWidth)}px`,
-        height: `${finalHeight}px`,
-        maxWidth: `${availableWidth}px`,
-        maxHeight: `${availableHeight}px`
-      });
-    };
-    
-    calculateMobileDimensions();
-    const resizeHandler = () => calculateMobileDimensions();
-    window.addEventListener('resize', resizeHandler);
-    const timerId = setTimeout(calculateMobileDimensions, 50);
-    
-    return () => {
-      clearTimeout(timerId);
-      window.removeEventListener('resize', resizeHandler);
-    };
-  }, [isMobile, sidebarVisible]);
-  
-  // Desktop sidebar width calculation removed - desktop now uses drawer
 
   // Register modal on mount and keep scopes in sync with current image id
   useEffect(() => {
@@ -600,12 +535,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Scroll lock and focus trapping handled by useModalFocus (popup)
 
-  // Force re-render of face rectangles when image changes
-  useEffect(() => {
-    if (imageLoaded && showRectangles) {
-      setRectangleKey(prev => prev + 1);
-    }
-  }, [imageLoaded, showRectangles, imageId]);
 
   // Respect user choice; do not auto-open on image change
 
@@ -628,45 +557,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       setPreference('ImageViewer.albumsHeight', albumsHeight);
     }
   }, [albumsHeight]);
-  // Sidebar preference persistence removed - desktop now uses drawer
 
-  // Global mouse handlers for resizer
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (!isResizing || !sectionsRef.current) return;
-      const rect = sectionsRef.current.getBoundingClientRect();
-      const delta = e.clientY - startResizeYRef.current;
-      const minAlbum = 16;
-      const minFaces = 100;
-      const maxAlbum = Math.max(minAlbum, rect.height - minFaces);
-      const proposed = startAlbumsHeightRef.current + delta;
-      const next = Math.max(minAlbum, Math.min(proposed, maxAlbum));
-      setAlbumsHeight(next);
-    };
-    const handleMouseUp = () => {
-      if (isResizing) {
-        setIsResizing(false);
-        try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
-      }
-    };
-    if (isResizing) {
-      try { document.body.style.cursor = 'row-resize'; document.body.style.userSelect = 'none'; } catch {}
-    }
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      try { document.body.style.cursor = ''; document.body.style.userSelect = ''; } catch {}
-    };
-  }, [isResizing]);
-
-
-  const startResize = (e) => {
-    startResizeYRef.current = e.clientY;
-    startAlbumsHeightRef.current = albumsHeight;
-    setIsResizing(true);
-  };
 
   const handleRemoveFromAlbum = async (album) => {
     if (!storeImageInfo) return;
@@ -882,13 +773,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     }
   }, [storeImageInfo?.description, imageId]);
   
-  // Sidebar auto-hide logic removed - desktop now uses drawer
 
   // Fetch image info when image changes
   useEffect(() => {
     if (!imageId) return;
-    setImageError(false); // Reset error state on image change
-    setImageLoaded(false);
     fetchImageInfo();
     
     // Listen for logout to clear image data
@@ -923,40 +811,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         
         if (info) {
           setImageInfo(info);
-          // faces, albums, moment are derived from entities
-          try {
-            const store = useDataStore.getState();
-            const seen = new Set();
-            const items = [];
-            
-            // Get face IDs from the Set and look up face data
-            if (info.faces instanceof Set) {
-              const faceIds = Array.from(info.faces);
-              const faceEntities = store.entities?.[eventId]?.faces || {};
-              
-              faceIds.forEach((faceId) => {
-                const face = faceEntities[faceId];
-                if (!face) return;
-                
-                const gid = face.groupId || face.group_id;
-                if (!gid || seen.has(gid)) return;
-                seen.add(gid);
-                
-                const groups = store.entities?.[eventId]?.groups || {};
-                const label = face.group_label || (groups[gid] && groups[gid].label) || undefined;
-                items.push(label ? { id: gid, label } : { id: gid });
-              });
-            }
-            
-          } catch {}
         } else {
           setImageInfo(null);
-          // derived lists will be empty
         }
       } else {
         setImageInfo(null);
-        setFaces([]);
-        // derived lists will be empty
       }
     } catch (error) {
       console.error('Error fetching image info:', error);
@@ -2089,95 +1948,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
 
-  // Handle swipe navigation (simplified - PhotoSwipe handles zoom/pan)
-  const handleSwipeNavigation = useCallback((direction) => {
-    if (filteredImages.length > 1) {
-      handleNavigate(direction);
-    }
-  }, [filteredImages.length, handleNavigate]);
-
-
-
-  // Face rectangle calculation accounting for object-contain and portrait/landscape
-  // This works the same on mobile and desktop because it uses actual rendered dimensions
-  const getFaceRectangleStyle = (face) => {
-    if (imageRef.current && imageLoaded) {
-      const img = imageRef.current;
-      // Get the actual rendered container (the div with relative positioning)
-      const container = img.parentElement; // relative positioning context
-      if (!container) {
-        // Fallback if container not found
-        return {
-          left: `${face.face_left * 100}%`,
-          top: `${face.face_top * 100}%`,
-          width: `${face.face_width * 100}%`,
-          height: `${face.face_height * 100}%`,
-        };
-      }
-      
-      const containerRect = container.getBoundingClientRect();
-      const containerW = containerRect.width;
-      const containerH = containerRect.height;
-      const naturalW = img.naturalWidth || (storeImageInfo?.width || 1);
-      const naturalH = img.naturalHeight || (storeImageInfo?.height || 1);
-
-      // object-contain sizing math (independent of transforms and screen size)
-      // This ensures face rectangles match exactly on mobile and desktop
-      const scale = Math.min(containerW / naturalW, containerH / naturalH);
-      const displayedW = naturalW * scale;
-      const displayedH = naturalH * scale;
-      const offsetXpx = (containerW - displayedW) / 2; // letterbox left
-      const offsetYpx = (containerH - displayedH) / 2; // letterbox top
-
-      // Faces may be normalized (0..1) or absolute in original pixels. Detect heuristically.
-      const isNormalized = face.face_left <= 1 && face.face_top <= 1 && face.face_width <= 1 && face.face_height <= 1;
-      const toPx = (value, axis) => {
-        if (isNormalized) {
-          return value * (axis === 'x' ? displayedW : displayedH);
-        }
-        const base = axis === 'x' ? (storeImageInfo?.width || naturalW) : (storeImageInfo?.height || naturalH);
-        return (value / base) * (axis === 'x' ? displayedW : displayedH);
-      };
-
-      const leftPx = offsetXpx + toPx(face.face_left, 'x');
-      const topPx = offsetYpx + toPx(face.face_top, 'y');
-      const widthPx = toPx(face.face_width, 'x');
-      const heightPx = toPx(face.face_height, 'y');
-      
-      // Return as percentages relative to container for consistent positioning
-      return {
-        left: `${(leftPx / containerW) * 100}%`,
-        top: `${(topPx / containerH) * 100}%`,
-        width: `${(widthPx / containerW) * 100}%`,
-        height: `${(heightPx / containerH) * 100}%`,
-      };
-    }
-
-    // Fallback when not loaded: assume normalized coords
-    return {
-      left: `${face.face_left * 100}%`,
-      top: `${face.face_top * 100}%`,
-      width: `${face.face_width * 100}%`,
-      height: `${face.face_height * 100}%`,
-    };
-  };
-
-  const getImageSrc = () => {
-    if (!isAuthenticated) return null; // Show placeholder when not authenticated
-    const id = storeImageInfo?.id;
-    if (!id) return null;
-    if (!urlHelpers) return null;
-    return urlHelpers.getDisplayImageUrl(id);
-  };
-
-  // Render main image directly with stable element type to avoid remount loops
-  const mainImageSrc = getImageSrc();
-
-  const getFaceImageSrc = (face) => {
-    const fid = face?.id || face?.face_id;
-    if (!fid || !urlHelpers) return null;
-    return urlHelpers.getFaceCropUrl(fid);
-  };
 
   const getGroupLabel = (face) => {
     if (face?.isPlaceholder) return ''; // Placeholder faces have no label
@@ -2193,7 +1963,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   };
 
 
-  // Desktop overlay controls auto-hide logic removed
 
   // PhotoSwipe handles cleanup automatically
 
@@ -2290,16 +2059,15 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       >
         <motion.div
           ref={modalRef}
-          className={`${isMobile ? 'bg-transparent border-0 shadow-none' : 'bg-transparent border-2 border-white/30 rounded-lg shadow-xl'} min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-0 rounded-none w-full h-full' : 'mx-4 my-4 w-full'}`}
+          className={`bg-transparent min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-0 w-full h-full' : 'w-full h-full'}`}
           style={isMobile ? {
             width: '100vw',
             height: '100vh',
             maxWidth: '100vw',
             maxHeight: '100vh'
           } : { 
-            maxHeight: 'calc(100vh - 3rem)',
-            height: 'calc(min(100vw - 2rem, 1024px) * 0.67)',
-            maxWidth: '1024px'
+            width: '100vw',
+            height: '100vh'
           }}
           initial={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -2309,86 +2077,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
           {/* Content */}
           <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full min-h-0 overflow-hidden">
-            {/* Image Viewer - PhotoSwipe container */}
-            <div 
-              ref={containerRef}
-              className={`flex items-center justify-center relative overflow-hidden ${isMobile ? 'bg-transparent' : 'bg-gray-900'}`}
-              style={{ 
-                width: isMobile ? '100%' : 'calc(min(100vw - 2rem, 1024px))',
-                height: '100%',
-                position: 'relative',
-                order: isRTL ? 2 : 2
-              }}
-            >
-              {/* PhotoSwipe root element */}
-              <div ref={pswpRef} className="pswp" />
-              {loading ? (
-                <div className="text-white">{t('imageViewer.loading')}</div>
-              ) : (
-                <>
-                  {/* Face rectangles are now injected into PhotoSwipe's transformed container
-                      See useEffect that watches showRectangles, facesList, etc.
-                      Old rectangles below are hidden when PhotoSwipe is active */}
-                  {false && showRectangles && imageLoaded && pswpInstanceRef.current && facesList.map((face, index) => {
-                      let borderColor, bgColor, labelBgColor;
-                      if (selectedFaceIndex === index) {
-                        borderColor = 'border-red-500';
-                        bgColor = 'bg-red-500';
-                        labelBgColor = 'bg-red-500';
-                      } else if ((face.groupId || face.group_id) === currentGroupId) {
-                        borderColor = 'border-green-500';
-                        bgColor = 'bg-green-500';
-                        labelBgColor = 'bg-green-500';
-                      } else {
-                        borderColor = 'border-blue-500';
-                        bgColor = 'bg-blue-500';
-                        labelBgColor = 'bg-blue-500';
-                      }
-                      return (
-                        <div
-                          key={`face-rect-${(face.id || face.face_id || `index-${index}`)}-${rectangleKey}-${index}-${imageId}`}
-                          data-face-rectangle="true" // Marker to prevent dragging conflicts
-                          className={`absolute border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-30 transition-colors`}
-                          style={{
-                            ...getFaceRectangleStyle(face),
-                            pointerEvents: 'auto',
-                          }}
-                          title={`${getGroupLabel(face)}`}
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent triggering drag
-                            handleFaceClick(index);
-                          }}
-                        >
-                          <div className={`absolute -top-6 ${isRTL ? 'right-0' : 'left-0'} ${labelBgColor} text-white text-xs px-2 py-1 rounded whitespace-nowrap`}>
-                            {getGroupLabel(face)}
-                          </div>
-                          <PermissionGate requires="canEdit">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTransferFace(face);
-                              }}
-                              className={`absolute ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
-                              style={{
-                                bottom: 0,
-                                ...(isRTL
-                                  ? { left: 0, transform: 'translate(-100%, 100%)' }
-                                  : { right: 0, transform: 'translate(100%, 100%)' }),
-                              }}
-                              title={t('imageViewer.transferFaceToAnotherGroup')}
-                              aria-label={t('imageViewer.transferFaceToAnotherGroup')}
-                            >
-                              <Edit className="w-2.5 h-2.5" />
-                            </button>
-                          </PermissionGate>
-                        </div>
-                      );
-                    })}
-                </>
-              )}
-
-              
-            </div>
+            {/* PhotoSwipe root element */}
+            <div ref={pswpRef} className="pswp" />
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center text-white z-50">
+                {t('imageViewer.loading')}
+              </div>
+            )}
 
                     {/* Vaul Drawer - Mobile and Desktop */}
         <Drawer.Root 

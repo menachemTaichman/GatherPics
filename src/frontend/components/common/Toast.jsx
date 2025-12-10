@@ -11,7 +11,7 @@ export default function Toast({ toast }) {
         exit={{ opacity: 0, y: -50, scale: 0.9, x: '-50%' }}
         style={{ 
           // on top of photo swipe (100000), vaul drawer (100001), and modals within drawer (100002)
-          zIndex: 100003,
+          zIndex: 100020,
           position: 'fixed',
           top: '1rem',
           left: '50%',
