@@ -453,6 +453,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     drawerTouchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
 
+  // Toggle helpers for collapsible sections
+  const handleToggleAlbumsOpen = useCallback(() => setAlbumsOpen(v => !v), []);
+  const handleToggleFacesOpen = useCallback(() => setFacesOpen(v => !v), []);
+
   const handleDrawerTouchEnd = (e) => {
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;
@@ -2676,10 +2680,24 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {/* Albums Section */}
                   {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
+                    <div
+                      className="flex items-center justify-between mb-2 cursor-pointer select-none"
+                      onClick={handleToggleAlbumsOpen}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleToggleAlbumsOpen();
+                        }
+                      }}
+                    >
                         <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
                         <button
-                          onClick={() => setAlbumsOpen(v => !v)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleAlbumsOpen();
+                        }}
                           className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
                           title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
                           aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
@@ -2688,7 +2706,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         </button>
                       </div>
                       {albumsOpen && (
-                        <div className="space-y-1">
+                        <div className="space-y-1 max-h-44 overflow-y-auto pr-1 -mr-1 min-h-0">
                           {albumsList.map((album, index) => (
                             <div
                               key={album.id || `${album.label || 'album'}-${index}`}
@@ -2745,11 +2763,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {/* Faces Section */}
                   {permissions.has_groups && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
+                      <div
+                        className="flex items-center justify-between mb-2 cursor-pointer select-none"
+                        onClick={handleToggleFacesOpen}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleToggleFacesOpen();
+                          }
+                        }}
+                      >
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (showRectangles) {
                                 setSelectedFaceIndex(null);
                               }
@@ -2763,7 +2793,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           </button>
                         </div>
                         <button
-                          onClick={() => setFacesOpen(v => !v)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleFacesOpen();
+                          }}
                           className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
                           title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
                           aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
@@ -2772,7 +2805,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         </button>
                       </div>
                       {facesOpen && (
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1 -mr-1 min-h-0">
                           {facesList.length === 0 ? (
                             <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
                           ) : (
@@ -2962,10 +2995,24 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 {/* Albums Panel */}
                 {(permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0 && (
                   <div className="flex flex-col min-h-0">
-                    <div className="flex items-center justify-between px-4 pt-4">
+                    <div
+                      className="flex items-center justify-between px-4 pt-4 cursor-pointer select-none"
+                      onClick={handleToggleAlbumsOpen}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleToggleAlbumsOpen();
+                        }
+                      }}
+                    >
                       <h3 className="font-semibold text-gray-900">{t('imageViewer.albums')} ({albumsList.length})</h3>
                       <button
-                        onClick={() => setAlbumsOpen(v => !v)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleAlbumsOpen();
+                        }}
                         className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
                         title={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
                         aria-label={albumsOpen ? t('imageViewer.hideAlbums') : t('imageViewer.showAlbums')}
@@ -3045,11 +3092,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                 {/* Faces Panel */}
                 {permissions.has_groups && (
                   <div className="flex flex-col flex-1 min-h-0 image-viewer-faces">
-                    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                    <div
+                      className="flex items-center justify-between px-4 pt-4 pb-2 cursor-pointer select-none"
+                      onClick={handleToggleFacesOpen}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleToggleFacesOpen();
+                        }
+                      }}
+                    >
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-gray-900">{t('imageViewer.faces')} ({facesList.length})</h3>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (showRectangles) {
                               setSelectedFaceIndex(null);
                             }
@@ -3063,7 +3122,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         </button>
                       </div>
                       <button
-                        onClick={() => setFacesOpen(v => !v)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleFacesOpen();
+                        }}
                         className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center"
                         title={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
                         aria-label={facesOpen ? t('imageViewer.hideFaces') : t('imageViewer.showFaces')}
