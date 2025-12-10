@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { X, ShoppingBag, Edit, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2, Key, Info } from 'lucide-react';
+import { X, ShoppingBag, User, ArrowLeft, ArrowRight, Minus, Plus, Archive, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, RotateCcw, Eye, EyeOff, Image as ImageIcon, Star, Edit2, Trash2, Key, Info } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TransferFacesModal, SelectFaceForRepModal } from '../groups';
 import { MoveToMomentModal } from '../moments';
@@ -416,6 +416,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const containerRef = useRef(null);
   const pswpRef = useRef(null);
   const pswpInstanceRef = useRef(null);
+  const skipPswpCloseRef = useRef(false);
   // Use universal placeholder components instead of hardcoded data URI
   const [showRectangles, setShowRectangles] = useState(false);
   const showRectanglesRef = useRef(showRectangles);
@@ -1029,6 +1030,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   useEffect(() => {
     if (!pswpRef.current || !imageId || pswpItems.length === 0) return;
     
+    // Ensure we handle PhotoSwipe-triggered close events only when initiated by the UI
+    skipPswpCloseRef.current = false;
+    
     const currentIndex = effectiveIndex;
     if (currentIndex < 0 || currentIndex >= pswpItems.length) return;
 
@@ -1106,8 +1110,10 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Handle close event from PhotoSwipe
     pswp.on('close', () => {
-      // Don't close the modal when PhotoSwipe closes - we handle that ourselves
-      // onClose();
+      // Close the ImageViewer when PhotoSwipe's own close button is used on mobile
+      if (!skipPswpCloseRef.current) {
+        handleModalClose();
+      }
     });
 
     // Handle navigation
@@ -1464,15 +1470,18 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     return () => {
       if (pswpInstanceRef.current) {
+        // Prevent triggering onClose when we're destroying PhotoSwipe during cleanup
+        skipPswpCloseRef.current = true;
         // Clean up RTL counter observer if it exists
         if (pswpInstanceRef.current._rtlCounterObserver) {
           pswpInstanceRef.current._rtlCounterObserver.disconnect();
         }
         pswpInstanceRef.current.destroy();
         pswpInstanceRef.current = null;
+        skipPswpCloseRef.current = false;
       }
     };
-  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL, toRTLIndex, fromRTLIndex]);
+  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL, toRTLIndex, fromRTLIndex, handleModalClose]);
 
   // Sync PhotoSwipe when index changes externally
   useEffect(() => {
@@ -1736,45 +1745,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           `;
           label.textContent = groupLabel || '';
           rect.appendChild(label);
-          
-          if (permissions.canEdit) {
-            const editBtn = document.createElement('button');
-            editBtn.style.cssText = `
-              position: absolute;
-              ${isRTL ? 'left: -24px;' : 'right: -24px;'}
-              top: 0;
-              width: 20px;
-              height: 20px;
-              background-color: ${borderColor};
-              color: white;
-              border: none;
-              border-radius: 3px;
-              cursor: pointer;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 0;
-              pointer-events: auto;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            `;
-            editBtn.innerHTML = `
-              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            `;
-            editBtn.title = t('imageViewer.transferFaceToAnotherGroup') || 'Transfer face';
-            editBtn.onclick = (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              // Use ref to avoid dependency issues
-              if (handleTransferFaceRef.current) {
-                handleTransferFaceRef.current(face);
-              }
-            };
-            rect.appendChild(editBtn);
-          }
-          
           overlay.appendChild(rect);
         });
         
@@ -1810,17 +1780,23 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
 
 
-  const handleFaceClick = (index) => {
-    if (selectedFaceIndex === index) {
-      setSelectedFaceIndex(null);
-    } else {
-      setSelectedFaceIndex(index);
+  const handleFaceListClick = (index) => {
+    // Only highlight from the list; no modal open
+    setSelectedFaceIndex((prev) => (prev === index ? null : index));
+  };
+
+  const handleFaceRectClick = (index) => {
+    // Highlight and open transfer modal when clicking the overlay box
+    setSelectedFaceIndex(index);
+    const face = facesList[index];
+    if (face) {
+      handleTransferFace(face);
     }
   };
   
   // Update refs for useEffect
   useEffect(() => {
-    handleFaceClickRef.current = handleFaceClick;
+    handleFaceClickRef.current = handleFaceRectClick;
   });
 
   const handleFaceNavigation = (face) => {
@@ -1915,6 +1891,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   useEffect(() => {
     handleTransferFaceRef.current = handleTransferFace;
   });
+
+  // Reset face selection/modal when image changes to avoid stale highlights
+  useEffect(() => {
+    setSelectedFaceIndex(null);
+    setSelectedFaceForTransfer(null);
+    setShowTransferModal(false);
+  }, [imageId]);
 
   const handleTransferComplete = async (result) => {
     // Modal already showed the toast, we just handle UI state
@@ -2312,7 +2295,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                                 e.stopPropagation();
                                 handleTransferFace(face);
                               }}
-                              className={`absolute -bottom-4 ${isRTL ? '-right-1' : '-left-1'} ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                              className={`absolute ${bgColor} text-white p-0.5 rounded hover:bg-opacity-80 transition-colors`}
+                              style={{
+                                bottom: 0,
+                                ...(isRTL
+                                  ? { left: 0, transform: 'translate(-100%, 100%)' }
+                                  : { right: 0, transform: 'translate(100%, 100%)' }),
+                              }}
                               title={t('imageViewer.transferFaceToAnotherGroup')}
                               aria-label={t('imageViewer.transferFaceToAnotherGroup')}
                             >
@@ -2826,7 +2815,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                               <div
                                 key={`face-list-${(face.id || face.face_id || `index-${index}`)}-${(face.groupId || face.group_id || 'unknown')}-${index}-${imageId}`}
                                 className={`flex items-center gap-3 p-2 rounded-lg ${face.isPlaceholder ? '' : 'cursor-pointer'} transition-colors ${selectedFaceIndex === index ? 'bg-red-100' : 'bg-gray-50 hover:bg-blue-100'}`}
-                                onClick={face.isPlaceholder ? undefined : () => handleFaceClick(index)}
+                                onClick={face.isPlaceholder ? undefined : () => handleFaceListClick(index)}
                               >
                                 {ImageComponent(
                                   face.isPlaceholder ? null : (urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('groups', face.groupId || face.group_id)}?v=${getGroupRepresentativeFace(face)}` : null),
@@ -3219,6 +3208,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
           sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
+          showCrops={true}
         />
       )}
 
