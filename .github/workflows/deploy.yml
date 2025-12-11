@@ -26,6 +26,8 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/photo-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       
       - name: Copy config files to Lightsail
         uses: appleboy/scp-action@v0.1.7
