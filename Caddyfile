@@ -1,0 +1,3 @@
+gatherpics.duckdns.org {
+    reverse_proxy web:5000
+}

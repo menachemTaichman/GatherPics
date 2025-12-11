@@ -14,28 +14,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Build Docker image
-        run: |
-          docker build -t metaich/photo-app:latest .
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/photo-app:latest
       
-      - name: Save Docker image
-        run: |
-          docker save metaich/photo-app:latest | gzip > app-image.tar.gz
-      
-      - name: Copy files to Lightsail instance
+      - name: Copy config files to Lightsail
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
+          username: ${{ secrets.LIGHTSAIL_USER }} 
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
-          source: "app-image.tar.gz,docker-compose.yml"
-          target: "/tmp/"
+          source: "docker-compose.yml,Caddyfile"
+          target: "/home/ubuntu/"
       
-      - name: Deploy to Lightsail
+      - name: Deploy on Lightsail
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -43,32 +45,19 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
           script: |
-            # Load the Docker image
-            docker load < /tmp/app-image.tar.gz
-            rm /tmp/app-image.tar.gz
+            cd /home/ubuntu
             
-            # Copy docker-compose.yml to deployment directory
-            DEPLOY_DIR="$HOME/app"
-            mkdir -p "$DEPLOY_DIR"
-            cp /tmp/docker-compose.yml "$DEPLOY_DIR/"
-            cd "$DEPLOY_DIR"
+            echo "Pulling latest image..."
+            docker compose pull web
             
-            # Stop existing services
-            docker-compose down || true
+            echo "Updating containers..."
+            docker compose up -d --remove-orphans
             
-            # Start database first (for migrations)
-            docker-compose up -d db
-            
-            # Wait for database to be ready
-            echo "Waiting for database to be ready..."
             sleep 5
             
-            # Run database migrations
-            docker-compose run --rm web ./migrate.sh || true
+            echo "Running migrations..."
+            docker compose exec web ./migrate.sh apply || echo "Migration failed or script not found"
             
-            # Start all services
-            docker-compose up -d
-            
-            # Clean up old images
             docker image prune -f
-
+            
+            echo "Deployment successful!"
