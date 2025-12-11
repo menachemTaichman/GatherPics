@@ -5,6 +5,7 @@ boto3>=1.26.0
 Flask>=2.3.0
 flask-cors>=4.0.0
 flask-jwt-extended>=4.7.0
+gunicorn>=21.0.0
 
 # Image Processing
 # Use pillow-simd on Linux for better performance, Pillow on Windows

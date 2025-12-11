@@ -29,11 +29,14 @@ from src.backend.routes import (
 
 app = Flask(__name__)
 # Set debug mode from environment variable (defaults to True for development)
-app.config['DEBUG'] = os.getenv('ENVIRONMENT', 'DEVELOPMENT') != 'PRODUCTION'
+is_production = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
+app.config['DEBUG'] = not is_production
 CORS(app, origins="*", supports_credentials=True)
 
 # JWT Configuration
-app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-in-production'
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+if app.config['JWT_SECRET_KEY'] == 'your-secret-key-change-in-production' and is_production:
+    raise ValueError('JWT_SECRET_KEY must be set in production environment')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
@@ -42,7 +45,7 @@ app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
 is_production = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
 if is_production:
     app.config['JWT_COOKIE_SAMESITE'] = 'Lax'
-app.config['JWT_COOKIE_SECURE'] = is_production  # True in production over HTTPS
+app.config['JWT_COOKIE_SECURE'] = is_production and os.getenv('JWT_COOKIE_SECURE', 'True') == 'True'   # True in production over HTTPS
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Simplify for now
 jwt = JWTManager(app)
 

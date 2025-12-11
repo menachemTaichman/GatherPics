@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy to AWS Lightsail
 
 on:
   push:
@@ -14,49 +14,61 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        run: |
+          docker build -t metaich/photo-app:latest .
+      
+      - name: Save Docker image
+        run: |
+          docker save metaich/photo-app:latest | gzip > app-image.tar.gz
+      
+      - name: Copy files to Lightsail instance
+        uses: appleboy/scp-action@v0.1.7
         with:
-          python-version: '3.11'
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
+          source: "app-image.tar.gz,docker-compose.yml"
+          target: "/tmp/"
       
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: Run database migrations
-        run: |
-          python -c "
-          import os
-          from dotenv import load_dotenv
-          from yoyo import read_migrations, get_backend
-          
-          load_dotenv()
-          
-          db_url = f\"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}\"
-          backend = get_backend(db_url)
-          migrations = read_migrations('migrations')
-          pending = backend.to_apply(migrations)
-          
-          if not pending:
-              print('No pending migrations. Database is up-to-date.')
-          else:
-              print(f'Found {len(pending)} pending migration(s):')
-              for migration in pending:
-                  print(f'  - {migration}')
-              print('Applying migrations...')
-              backend.apply_migrations(pending)
-              print('✓ Migrations applied successfully!')
-          "
-      
-      - name: Deploy application
-        # Add your deployment steps here
-        # Examples:
-        # - Deploy to server via SSH
-        # - Deploy to cloud platform (AWS, GCP, Azure)
-        # - Build and push Docker image
-        # - Update Kubernetes deployment
-        run: |
-          echo "Add your deployment commands here"
-          # Example: ssh user@server 'cd /app && git pull && systemctl restart app'
+      - name: Deploy to Lightsail
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
+          script: |
+            # Load the Docker image
+            docker load < /tmp/app-image.tar.gz
+            rm /tmp/app-image.tar.gz
+            
+            # Copy docker-compose.yml to deployment directory
+            DEPLOY_DIR="$HOME/app"
+            mkdir -p "$DEPLOY_DIR"
+            cp /tmp/docker-compose.yml "$DEPLOY_DIR/"
+            cd "$DEPLOY_DIR"
+            
+            # Stop existing services
+            docker-compose down || true
+            
+            # Start database first (for migrations)
+            docker-compose up -d db
+            
+            # Wait for database to be ready
+            echo "Waiting for database to be ready..."
+            sleep 5
+            
+            # Run database migrations
+            docker-compose run --rm web ./migrate.sh || true
+            
+            # Start all services
+            docker-compose up -d
+            
+            # Clean up old images
+            docker image prune -f
 

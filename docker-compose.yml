@@ -1,9 +1,43 @@
-version: '3.8'
 services:
+  caddy:
+    image: caddy:latest
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: metaich/photo-app:latest
+    restart: always
+    command: gunicorn -w 4 -b 0.0.0.0:5000 --access-logfile - --error-logfile - --timeout 120 src.backend.app:app
+    environment:
+      TZ: Asia/Jerusalem
+    env_file: .env
+    depends_on:
+      - db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
     image: postgres:15
     restart: always
+    env_file: .env
     environment:
+      TZ: Asia/Jerusalem
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
@@ -11,6 +45,13 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   pg_data:
+  caddy_data:
+  caddy_config:

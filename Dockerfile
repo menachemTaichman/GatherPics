@@ -30,6 +30,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    zlib1g-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
@@ -44,6 +51,12 @@ COPY migrations ./migrations
 COPY --from=frontend-builder /app/dist ./dist
 
 # Set environment variables for production
+# Note: The following environment variables must be provided at runtime:
+# - JWT_SECRET_KEY (required)
+# - DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME (required for database)
+# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (if using AWS services)
+# - AWS_REGION, S3_BUCKET_NAME (if using S3)
+ENV S3_BUCKET=gather-pics-bucket
 ENV ENVIRONMENT=PRODUCTION
 ENV DIST_DIR=/app/dist
 ENV FLASK_HOST=0.0.0.0
@@ -57,6 +70,10 @@ EXPOSE 5000
 # HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 #     CMD curl -f http://localhost:5000/ || exit 1
 
-# Run the application
-CMD ["python", "-m", "src.backend.app"]
+# Copy migration script
+COPY migrate.sh ./migrate.sh
+RUN chmod +x ./migrate.sh
 
+# Run the application
+# Increased timeout to handle long-running operations like image processing and ZIP downloads
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "--timeout", "120", "src.backend.app:app"]
