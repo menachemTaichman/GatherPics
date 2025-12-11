@@ -7,17 +7,18 @@ import re
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe
 from src.backend.validators import get_multiple_inputs, validate_path_param
+from src.core.storage import get_file_helper
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 
 def cleanup_files(file_names, to_process_dir):
     """Delete files from to_process directory, ignoring if already deleted."""
     if file_names:
+        file_helper = get_file_helper()
         for filename in file_names:
             try:
-                filepath = os.path.join(to_process_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
+                filepath = f"{to_process_dir}/{filename}"
+                file_helper.delete(filepath)
             except Exception:
                 pass
 
@@ -79,6 +80,7 @@ def upload_images(event_id):
     
     saved_files = []
     processing_succeeded = False
+    file_helper = get_file_helper()
     try:
         # Save files to to_process directory
         for file in files:
@@ -87,16 +89,17 @@ def upload_images(event_id):
                     continue
                 
                 filename = sanitize_filename(file.filename)
-                filepath = os.path.join(event.to_process_dir, filename)
+                filepath = f"{event.to_process_dir}/{filename}"
                 
                 base, ext = os.path.splitext(filename)
                 counter = 1
-                while os.path.exists(filepath):
+                while file_helper.exists(filepath):
                     filename = f"{base}_{counter}{ext}"
-                    filepath = os.path.join(event.to_process_dir, filename)
+                    filepath = f"{event.to_process_dir}/{filename}"
                     counter += 1
                 
-                file.save(filepath)
+                file_bytes = file.read()
+                file_helper.write(filepath, file_bytes, content_type='image/jpeg')
                 saved_files.append(filename)
         
         if not saved_files:
@@ -196,6 +199,7 @@ def upload_files_only(event_id):
         return jsonify({"error": "No files provided"}), 400
     
     saved_files = []
+    file_helper = get_file_helper()
     try:
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
@@ -206,16 +210,17 @@ def upload_files_only(event_id):
                     continue
                 
                 filename = sanitize_filename(file.filename)
-                filepath = os.path.join(event.to_process_dir, filename)
+                filepath = f"{event.to_process_dir}/{filename}"
                 
                 base, ext = os.path.splitext(filename)
                 counter = 1
-                while os.path.exists(filepath):
+                while file_helper.exists(filepath):
                     filename = f"{base}_{counter}{ext}"
-                    filepath = os.path.join(event.to_process_dir, filename)
+                    filepath = f"{event.to_process_dir}/{filename}"
                     counter += 1
                 
-                file.save(filepath)
+                file_bytes = file.read()
+                file_helper.write(filepath, file_bytes, content_type='image/jpeg')
                 saved_files.append(filename)
         
         if not saved_files:

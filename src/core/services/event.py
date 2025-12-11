@@ -7,41 +7,58 @@ from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core import DATA_ROOT
 from src.core.audit_log import AuditAction, log_audit
+from src.core.storage import get_file_helper
 
 class Event():
     """Event model for managing event data and operations."""
 
     @staticmethod
     def create_event(event_id: str):
-        event_dir = os.path.join(DATA_ROOT, event_id)
-        os.makedirs(event_dir, exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'display'), exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'original'), exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'thumb'), exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'to_process'), exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'faces'), exist_ok=True)
-        os.makedirs(os.path.join(event_dir, 'high_quality'), exist_ok=True)
+        """Create event directories (local) or ensure S3 paths exist (S3)."""
+        file_helper = get_file_helper()
+        if file_helper.is_local:
+            # Local storage - create directories
+            event_dir = os.path.join(DATA_ROOT, event_id)
+            os.makedirs(event_dir, exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'display'), exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'original'), exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'thumb'), exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'to_process'), exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'faces'), exist_ok=True)
+            os.makedirs(os.path.join(event_dir, 'high_quality'), exist_ok=True)
+        # For S3, directories are virtual - no need to create
                 
     @staticmethod
     def delete_event(event_id: str):
-        face_utils = FaceUtils(event_id)
+        file_helper = get_file_helper()
+        face_utils = FaceUtils(event_id, storage_backend=file_helper.storage)
         face_utils.rek_helper.delete_collection()
-        event_dir = os.path.join(DATA_ROOT, event_id)
-        if os.path.exists(event_dir):
-            shutil.rmtree(event_dir)
+        
+        if file_helper.is_local:
+            # Local storage - delete directory
+            event_dir = os.path.join(DATA_ROOT, event_id)
+            if os.path.exists(event_dir):
+                shutil.rmtree(event_dir)
+        else:
+            # S3 storage - delete all files with event_id prefix
+            # Note: This is a simplified approach - in production you might want
+            # to list and delete all objects with the prefix
+            pass  # S3 cleanup can be handled by lifecycle policies or separate cleanup job
    
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
-        event_dir = os.path.join(DATA_ROOT, str(event_id))
-        
         self.event_id = event_id
+        self.file_helper = get_file_helper()
+        
+        # Use relative paths for both local and S3 (FileHelper handles the difference)
+        self.display_dir = f"{event_id}/display"
+        self.original_dir = f"{event_id}/original"
+        self.thumb_dir = f"{event_id}/thumb"
+        self.to_process_dir = f"{event_id}/to_process"
+        self.faces_dir = f"{event_id}/faces"
+        self.high_quality_dir = f"{event_id}/high_quality"
+        
         self.models = EventModels(event_id, profile_id, public_code)
-        self.face_utils = FaceUtils(event_id)
-        self.display_dir = os.path.join(event_dir, 'display')
-        self.original_dir = os.path.join(event_dir, 'original')
-        self.thumb_dir = os.path.join(event_dir, 'thumb')
-        self.to_process_dir = os.path.join(event_dir, 'to_process')
-        self.faces_dir = os.path.join(event_dir, 'faces')
-        self.high_quality_dir = os.path.join(event_dir, 'high_quality')
+        self.face_utils = FaceUtils(event_id, storage_backend=self.file_helper.storage)
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
@@ -70,18 +87,14 @@ class Event():
             self.models.delete('images', image_id)
             self.face_utils.rek_helper.delete_faces(face_ids)
             for face_id in face_ids:
-                try:
-                    os.remove(os.path.join(self.faces_dir, f"{face_id}.webp"))
-                except FileNotFoundError:
-                    pass
+                face_path = f"{self.faces_dir}/{face_id}.webp"
+                self.file_helper.delete(face_path)
 
-            try:
-                os.remove(os.path.join(self.original_dir, f"{image_id}.jpg"))
-                os.remove(os.path.join(self.high_quality_dir, f"{image_id}.jpg"))
-                os.remove(os.path.join(self.display_dir, f"{image_id}.webp"))
-                os.remove(os.path.join(self.thumb_dir, f"{image_id}.webp"))
-            except FileNotFoundError:
-                pass
+            # Delete image files
+            self.file_helper.delete(f"{self.original_dir}/{image_id}.jpg")
+            self.file_helper.delete(f"{self.high_quality_dir}/{image_id}.jpg")
+            self.file_helper.delete(f"{self.display_dir}/{image_id}.webp")
+            self.file_helper.delete(f"{self.thumb_dir}/{image_id}.webp")
             
             for group_id in image_parents.get('groups', set()):
                 if self.models.is_empty('groups', group_id):
@@ -159,8 +172,8 @@ class Event():
         """
         from ..utils.image_utils import resize_image, crop_image, extract_all_metadata, save_image
         import os
-        import shutil
         from PIL import Image as PILImage
+        from io import BytesIO
 
         def _log(message: str):
             if verbose:
@@ -182,22 +195,30 @@ class Event():
                 valid_files = []
                 for f in file_names:
                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff")):
-                        file_path = os.path.join(self.to_process_dir, f)
-                        if os.path.exists(file_path):
+                        file_path = f"{self.to_process_dir}/{f}"
+                        if self.file_helper.exists(file_path):
                             valid_files.append(f)
                 return valid_files
             else:
-                # Process all image files in the directory
-                return [f for f in os.listdir(self.to_process_dir) 
-                        if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+                # Process all image files
+                if self.file_helper.is_local:
+                    # Local storage - list directory
+                    full_path = self.file_helper.get_file_path(self.to_process_dir)
+                    return [f for f in os.listdir(full_path) 
+                            if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+                else:
+                    # S3 storage - would need to list objects (simplified for now)
+                    # In production, you'd use boto3 list_objects_v2
+                    # For now, return empty - files should be specified by name
+                    return []
 
         def _process_face(display_img, bbox, face_id, image_id, unassociated_group_id):
             crop_img = crop_image(display_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
-            crop_path = os.path.join(self.faces_dir, f"{face_id}.webp")
+            crop_path = f"{self.faces_dir}/{face_id}.webp"
             save_image(
-                crop_img, crop_path, format='WEBP', quality=90, optimize=True
+                crop_img, crop_path, format='WEBP', quality=90, optimize=True, storage_backend=self.file_helper.storage
             )
-            face_file_size = os.path.getsize(crop_path)
+            face_file_size = self.file_helper.get_file_size(crop_path)
             return {
                 "image_id": image_id,
                 "face_width": bbox['width'],
@@ -238,13 +259,21 @@ class Event():
             return groups_created
 
         def _process_image(image_file, unassociated_group_id: str, upload_id: str):
-            image_path = os.path.join(self.to_process_dir, image_file)
+            # Read image from storage
+            image_path = f"{self.to_process_dir}/{image_file}"
+            image_bytes = self.file_helper.read(image_path)
+            original_img = PILImage.open(BytesIO(image_bytes))
+            file_size = len(image_bytes)
+            
+            # Extract metadata - need temp file for exifread
+            temp_path = f"/tmp/{image_file}"
+            with open(temp_path, 'wb') as f:
+                f.write(image_bytes)
+            metadata = extract_all_metadata(temp_path)
+            os.remove(temp_path)
+            
             try:
-                original_img = PILImage.open(image_path)
                 width, height = original_img.size
-                file_size = os.path.getsize(image_path)
-                # Extract all metadata (including EXIF and date_taken)
-                metadata = extract_all_metadata(image_path)
                 date_taken = metadata.get('date_taken')
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
                 image_name, image_ext = os.path.splitext(image_file)
@@ -263,25 +292,27 @@ class Event():
                 )
                 # Save high quality (4096px, jpg, quality=95, with EXIF)
                 high_quality_img = resize_image(original_img, 4096)
-                high_quality_path = os.path.join(self.high_quality_dir, f"{image_id}.jpg")
+                high_quality_path = f"{self.high_quality_dir}/{image_id}.jpg"
                 save_image(
-                    high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True
+                    high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True, storage_backend=self.file_helper.storage
                 )
-                high_quality_file_size = os.path.getsize(high_quality_path)
+                high_quality_file_size = self.file_helper.get_file_size(high_quality_path)
+                
                 # Save display (2048px, webp, quality=90)
                 display_img = resize_image(original_img, display_size)
-                display_path = os.path.join(self.display_dir, f"{image_id}.webp")
+                display_path = f"{self.display_dir}/{image_id}.webp"
                 save_image(
-                    display_img, display_path, format='WEBP', quality=90, optimize=True
+                    display_img, display_path, format='WEBP', quality=90, optimize=True, storage_backend=self.file_helper.storage
                 )
-                display_file_size = os.path.getsize(display_path)
+                display_file_size = self.file_helper.get_file_size(display_path)
+                
                 # Save thumb (512px, webp, quality=80)
                 thumb_img = resize_image(original_img, thumb_size)
-                thumb_path = os.path.join(self.thumb_dir, f"{image_id}.webp")
+                thumb_path = f"{self.thumb_dir}/{image_id}.webp"
                 save_image(
-                    thumb_img, thumb_path, format='WEBP', quality=80, optimize=True
+                    thumb_img, thumb_path, format='WEBP', quality=80, optimize=True, storage_backend=self.file_helper.storage
                 )
-                thumb_file_size = os.path.getsize(thumb_path)
+                thumb_file_size = self.file_helper.get_file_size(thumb_path)
                 
                 # Update image record with file sizes
                 self.models.edit('images', image_id, {
@@ -289,17 +320,23 @@ class Event():
                     'display_file_size': display_file_size,
                     'thumb_file_size': thumb_file_size
                 })
+                
                 # Save original (copy)
-                original_save_path = os.path.join(self.original_dir, image_id + '.jpg')
-                shutil.copy2(image_path, original_save_path)
-                # Process faces for this image (use display image for AWS, crop from display)
+                original_save_path = f"{self.original_dir}/{image_id}.jpg"
+                # Read original bytes and save
+                original_bytes = self.file_helper.read(image_path)
+                self.file_helper.write(original_save_path, original_bytes, content_type='image/jpeg')
+                
                 detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
                 image_faces = []
                 for face_id, bbox in detected_faces:
                     face_data = _process_face(original_img, bbox, face_id, image_id, unassociated_group_id)
                     image_faces.append(face_data)
                 original_img.close()
-                os.remove(image_path)
+                
+                # Delete processed file
+                self.file_helper.delete(image_path)
+                
                 return display_img, image_id, image_faces, None
             except Exception as e:
                 return None, None, [], e
@@ -340,8 +377,8 @@ class Event():
         total_size = 0
         files_exceeding_limit = []
         for image_file in image_files:
-            file_path = os.path.join(self.to_process_dir, image_file)
-            file_size = os.path.getsize(file_path)
+            file_path = f"{self.to_process_dir}/{image_file}"
+            file_size = self.file_helper.get_file_size(file_path)
             if image_size_limit_bytes > 0 and file_size > image_size_limit_bytes:
                 files_exceeding_limit.append((image_file, file_size))
             total_size += file_size

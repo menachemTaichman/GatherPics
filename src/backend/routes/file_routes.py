@@ -1,4 +1,4 @@
-from flask import Blueprint, send_file, abort, make_response
+from flask import Blueprint, abort, make_response, send_file
 import os
 import io
 import zipfile
@@ -6,6 +6,7 @@ import zipfile
 from src.backend.middleware.auth import require_auth, optional_auth
 from src.backend.helpers import get_event, get_general_models
 from src.backend.validators import get_input, validate_path_param
+from src.core.storage import get_file_helper
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
 
@@ -41,11 +42,13 @@ def get_file_webp(event_id, file_type, file_id):
     if not event.models.is_accessible(table_to_check, file_id):
         abort(403)
     
-    file_path = os.path.join(dir_map[file_type], f'{file_id}.webp')
-    if not os.path.exists(file_path):
+    file_helper = get_file_helper()
+    file_path = f"{dir_map[file_type]}/{file_id}.webp"
+    
+    if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
@@ -96,11 +99,13 @@ def get_event_display_representative_webp(event_id):
     representative_image = event['representative_image']
     if not representative_image:
         return '', 204
-    file_path = os.path.join(event_instance.display_dir, f'{representative_image}.webp')
-    if not os.path.exists(file_path):
+    
+    file_helper = get_file_helper()
+    file_path = f"{event_instance.display_dir}/{representative_image}.webp"
+    if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
@@ -117,11 +122,12 @@ def get_event_thumb_representative_webp(event_id):
     if not representative_image:
         return '', 204
 
-    file_path = os.path.join(event_instance.thumb_dir, f'{representative_image}.webp')
-    if not os.path.exists(file_path):
+    file_helper = get_file_helper()
+    file_path = f"{event_instance.thumb_dir}/{representative_image}.webp"
+    if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
@@ -148,11 +154,12 @@ def get_representative_webp(event_id, entity, parent_id):
     if not file_id:
         return '', 204
     
-    file_path = os.path.join(dir_map[entity], f'{file_id}.webp')
-    if not os.path.exists(file_path):
+    file_helper = get_file_helper()
+    file_path = f"{dir_map[entity]}/{file_id}.webp"
+    if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(send_file(file_path, mimetype='image/webp'))
+    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
@@ -172,19 +179,22 @@ def download_images(event_id):
     accessible_image_ids = set(images.keys())
     failed_images.extend(image_id for image_id in image_ids if image_id not in accessible_image_ids)
     
+    file_helper = get_file_helper()
     with zipfile.ZipFile(memory_file, 'w') as zf:
         for image_id, image_data in images.items():
             label = image_data.get('label') or image_id
             
             src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
-            file_path = os.path.join(src_dir, f"{image_id}.jpg")
-            if os.path.exists(file_path):
+            file_path = f"{src_dir}/{image_id}.jpg"
+            if file_helper.exists(file_path):
                 if not os.path.splitext(label)[1]:
                     label = f"{label}.jpg"
-                zf.write(file_path, label)
+                file_data = file_helper.read(file_path)
+                zf.writestr(label, file_data)
             else:
                 failed_images.append(image_id)
     
+    # Serve ZIP file from memory (not from storage, so use send_file directly)
     memory_file.seek(0)
     return send_file(
         memory_file,

@@ -5,12 +5,19 @@ from io import BytesIO
 from collections import defaultdict
 
 class AWSRekognitionHelper:
-    def __init__(self, event_id: str):
+    def __init__(self, event_id: str, storage_backend=None):
         # Load environment variables from .env file if it exists (development only)
         # In production (AWS), environment variables are already set
         if os.path.exists('.env'):
             from dotenv import load_dotenv
             load_dotenv()
+        
+        # Import storage backend if not provided
+        if storage_backend is None:
+            from src.core.storage import get_storage_backend
+            storage_backend = get_storage_backend()
+        
+        self.storage = storage_backend
         
         try:
             # Use custom mock client in development (moto doesn't support Rekognition collections)
@@ -59,8 +66,17 @@ class AWSRekognitionHelper:
             print(f"Error getting face ids: {e}")
             return []
 
-    def index_faces(self, image_bytes, external_image_id = '') -> list[dict]:
-        """Index a face into the collection"""
+    def index_faces(self, image_bytes: bytes, external_image_id: str = '') -> list[dict]:
+        """
+        Index a face into the collection.
+        
+        Args:
+            image_bytes: Image bytes (image already in memory)
+            external_image_id: External image identifier
+        
+        Returns:
+            List of face records
+        """
         try:
             response = self.client.index_faces(
                 CollectionId=self.collection_id,
@@ -117,23 +133,37 @@ class FaceUtils:
             'height': bbox['Height']
         }
     
-    def __init__(self, event_id: str):
+    def __init__(self, event_id: str, storage_backend=None):
         self.event_id = event_id
         self._rek_helper = None
+        self.storage_backend = storage_backend
 
     @property
     def rek_helper(self) -> AWSRekognitionHelper:
         if self._rek_helper is None:
-            self._rek_helper = AWSRekognitionHelper(self.event_id)
+            self._rek_helper = AWSRekognitionHelper(self.event_id, storage_backend=self.storage_backend)
         return self._rek_helper
 
-    def detect_faces(self, image: Image.Image, external_image_id = '') -> list[tuple[str, dict]]:
-        """Detects faces in the given PIL image and returns a list of tuples of AWSfaceId and face bounding box dicts."""
+    def detect_faces(self, image: Image.Image, external_image_id: str = '') -> list[tuple[str, dict]]:
+        """
+        Detects faces in the given PIL image and returns a list of tuples of AWSfaceId and face bounding box dicts.
+        
+        Args:
+            image: PIL Image object (already in memory)
+            external_image_id: External image identifier
+        
+        Returns:
+            List of tuples: (face_id, bounding_box_dict)
+        """
+        # Convert PIL Image to JPEG bytes (in memory, no disk I/O)
         buffer = BytesIO()
         image.save(buffer, format='JPEG', quality=90)
         buffer.seek(0)
         image_bytes = buffer.read()
-        face_details = self.rek_helper.index_faces(image_bytes, external_image_id)
+        
+        # Use bytes method - image is already in memory
+        face_details = self.rek_helper.index_faces(image_bytes=image_bytes, external_image_id=external_image_id)
+        
         faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
         return faces
 
