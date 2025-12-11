@@ -5,10 +5,10 @@ FROM node:18-alpine AS frontend-builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Verify files exist and npm version, then install dependencies
+RUN ls -la package*.json && npm --version && npm ci
 
 # Copy frontend source
 COPY vite.config.js ./
