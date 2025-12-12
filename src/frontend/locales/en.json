@@ -570,6 +570,8 @@
     "timeElapsed": "Time elapsed",
     "estTimeLeft": "Est. time left",
     "youCanLeaveProcessingWillContinue": "You can safely close this window. Processing will continue in the background, but you won't see progress updates.",
+    "pleaseWaitUntilFilesAreUploaded": "Please wait until all files are uploaded before closing.",
+    "pleaseWait": "Please wait...",
     "closeProcessingWillContinue": "Close (Esc) - Processing will continue in background"
   },
   "dashboard": {

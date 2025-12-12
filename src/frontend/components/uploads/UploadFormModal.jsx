@@ -61,8 +61,13 @@ export default function UploadFormModal({
       handleStartUpload();
       return true; // Mark as handled
     }
-    // Allow ESC to close even during upload (processing continues in background)
+    // Prevent ESC during file upload, allow after files are uploaded (during processing)
     if (e.key === 'Escape') {
+      if (uploadProgress?.step === 'uploading') {
+        e.preventDefault();
+        return true; // Prevent closing during upload
+      }
+      // Allow ESC after files are uploaded (processing continues in background)
       e.preventDefault();
       onClose();
       return true; // Mark as handled
@@ -444,9 +449,22 @@ export default function UploadFormModal({
               </div>
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                title={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
-                aria-label={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
+                disabled={uploadProgress?.step === 'uploading'}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  uploadProgress?.step === 'uploading' 
+                    ? t('upload.pleaseWaitUntilFilesAreUploaded')
+                    : uploading 
+                      ? t('upload.closeProcessingWillContinue') 
+                      : t('account.cancelEsc')
+                }
+                aria-label={
+                  uploadProgress?.step === 'uploading' 
+                    ? t('upload.pleaseWaitUntilFilesAreUploaded')
+                    : uploading 
+                      ? t('upload.closeProcessingWillContinue') 
+                      : t('account.cancelEsc')
+                }
               >
                 <X className="w-5 h-5" />
               </button>
@@ -516,7 +534,11 @@ export default function UploadFormModal({
                         {/* Info message about leaving */}
                         {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
                           <div className="mt-2 text-xs text-gray-500 italic">
-                            {t('upload.youCanLeaveProcessingWillContinue')}
+                            {uploadProgress.step === 'uploading' ? (
+                              t('upload.pleaseWaitUntilFilesAreUploaded')
+                            ) : (
+                              t('upload.youCanLeaveProcessingWillContinue')
+                            )}
                           </div>
                         )}
                       </div>
@@ -669,11 +691,28 @@ export default function UploadFormModal({
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                title={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
-                aria-label={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
+                disabled={uploadProgress?.step === 'uploading'}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  uploadProgress?.step === 'uploading' 
+                    ? t('upload.pleaseWaitUntilFilesAreUploaded')
+                    : uploading 
+                      ? t('upload.closeProcessingWillContinue') 
+                      : t('account.cancelEsc')
+                }
+                aria-label={
+                  uploadProgress?.step === 'uploading' 
+                    ? t('upload.pleaseWaitUntilFilesAreUploaded')
+                    : uploading 
+                      ? t('upload.closeProcessingWillContinue') 
+                      : t('account.cancelEsc')
+                }
               >
-                {uploading ? t('account.close') : t('account.cancel')}
+                {uploadProgress?.step === 'uploading' 
+                  ? t('upload.pleaseWait')
+                  : uploading 
+                    ? t('account.close') 
+                    : t('account.cancel')}
               </button>
               <button
                 onClick={handleStartUpload}

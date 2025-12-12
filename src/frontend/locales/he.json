@@ -571,6 +571,8 @@
     "timeElapsed": "זמן שחלף",
     "estTimeLeft": "זמן משוער נותר",
     "youCanLeaveProcessingWillContinue": "אתה יכול לסגור את החלון בבטחה. העיבוד ימשיך ברקע, אך לא תראה עדכוני התקדמות.",
+    "pleaseWaitUntilFilesAreUploaded": "אנא המתן עד שכל הקבצים יועלו לפני סגירה.",
+    "pleaseWait": "אנא המתן...",
     "closeProcessingWillContinue": "סגור (Esc) - העיבוד ימשיך ברקע"
   },
   "dashboard": {
