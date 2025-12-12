@@ -1,5 +1,6 @@
 import os
 import shutil
+import gc
 from datetime import datetime
 
 from src.core.errors import Forbidden, PolicyError
@@ -219,6 +220,7 @@ class Event():
                 crop_img, crop_path, format='WEBP', quality=90, optimize=True, storage_backend=self.file_helper.storage
             )
             face_file_size = self.file_helper.get_file_size(crop_path)
+            del crop_img
             return {
                 "image_id": image_id,
                 "face_width": bbox['width'],
@@ -271,6 +273,7 @@ class Event():
                 f.write(image_bytes)
             metadata = extract_all_metadata(temp_path)
             os.remove(temp_path)
+            del image_bytes  # No longer needed after metadata extraction
             
             try:
                 width, height = original_img.size
@@ -297,6 +300,7 @@ class Event():
                     high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True, storage_backend=self.file_helper.storage
                 )
                 high_quality_file_size = self.file_helper.get_file_size(high_quality_path)
+                del high_quality_img
                 
                 # Save display (2048px, webp, quality=90)
                 display_img = resize_image(original_img, display_size)
@@ -313,6 +317,7 @@ class Event():
                     thumb_img, thumb_path, format='WEBP', quality=80, optimize=True, storage_backend=self.file_helper.storage
                 )
                 thumb_file_size = self.file_helper.get_file_size(thumb_path)
+                del thumb_img
                 
                 # Update image record with file sizes
                 self.models.edit('images', image_id, {
@@ -326,6 +331,7 @@ class Event():
                 # Read original bytes and save
                 original_bytes = self.file_helper.read(image_path)
                 self.file_helper.write(original_save_path, original_bytes, content_type='image/jpeg')
+                del original_bytes
                 
                 detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
                 image_faces = []
@@ -333,6 +339,8 @@ class Event():
                     face_data = _process_face(original_img, bbox, face_id, image_id, unassociated_group_id)
                     image_faces.append(face_data)
                 original_img.close()
+                del original_img
+                gc.collect()
                 
                 # Delete processed file
                 self.file_helper.delete(image_path)
@@ -429,6 +437,8 @@ class Event():
                 _log(f"  Detected {len(image_faces)} faces")
                 all_faces.extend(image_faces)
                 processed_images.append(image_id)
+                del display_img  # No longer needed after face detection
+                gc.collect()  # Free memory between image processing iterations
 
             _log(f"Completed image processing. Detected {len(all_faces)} total faces")
             
