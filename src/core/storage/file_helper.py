@@ -8,7 +8,7 @@ Routes and core services should use this instead of accessing storage directly.
 import os
 from typing import Optional, BinaryIO
 from io import BytesIO
-from flask import send_file, redirect
+from flask import send_file
 
 from .storage_backend import get_storage_backend, StorageBackend
 
@@ -91,8 +91,8 @@ class FileHelper:
         """
         Serve file via Flask response.
         
-        In production with S3, redirects to presigned URL.
-        In development, serves file directly.
+        Proxies files through the API to avoid exposing S3 URLs.
+        In development with local storage, serves file directly.
         
         Args:
             path: File path
@@ -101,15 +101,9 @@ class FileHelper:
             download_name: Download filename
             
         Returns:
-            Flask response (redirect or send_file)
+            Flask response (send_file)
         """
-        # In production with S3, redirect to presigned URL
-        if os.getenv('ENVIRONMENT') == 'PRODUCTION' and not self.is_local:
-            url = self.get_url(path)
-            if url:
-                return redirect(url, code=302)
-        
-        # Local storage or fallback - serve file directly
+        # Local storage - serve file directly
         if self.is_local:
             full_path = self.get_file_path(path)
             return send_file(
@@ -119,7 +113,8 @@ class FileHelper:
                 download_name=download_name
             )
         else:
-            # Fallback: read from storage and serve
+            # S3 storage - proxy through API (read from S3 and serve)
+            # This avoids exposing S3 URLs and prevents 403 errors from expired presigned URLs
             file_data = self.read(path)
             return send_file(
                 BytesIO(file_data),
