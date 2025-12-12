@@ -374,7 +374,6 @@ class Event():
             }
         
         # Check count limit
-        print(int(current_count) + len(image_files) > int(images_count_limit))
         if int(current_count) + len(image_files) > int(images_count_limit):
             error_msg = f"Upload would exceed image count limit. Current: {current_count}, Limit: {images_count_limit}, Attempting to add: {len(image_files)}"
             _log(error_msg)
@@ -419,6 +418,7 @@ class Event():
 
         all_faces = []
         processed_images = []
+        processed_file_names = []  # Track which files were successfully processed
         errors = []
         
         try:
@@ -437,6 +437,7 @@ class Event():
                 _log(f"  Detected {len(image_faces)} faces")
                 all_faces.extend(image_faces)
                 processed_images.append(image_id)
+                processed_file_names.append(image_file)  # Track successfully processed file
                 del display_img  # No longer needed after face detection
                 gc.collect()  # Free memory between image processing iterations
 
@@ -512,6 +513,27 @@ class Event():
             # Update upload record with failure status
             error_msg = f"Upload failed: {str(e)}"
             errors.append(error_msg)
+            
+            # Cleanup unprocessed files only (files that weren't successfully processed)
+            cleanup_errors = []
+            if file_names is not None:
+                unprocessed_files = [f for f in file_names if f not in processed_file_names]
+                if unprocessed_files:
+                    _log(f"Cleaning up {len(unprocessed_files)} unprocessed files")
+                    for unprocessed_file in unprocessed_files:
+                        try:
+                            file_path = f"{self.to_process_dir}/{unprocessed_file}"
+                            if self.file_helper.exists(file_path):
+                                self.file_helper.delete(file_path)
+                        except Exception as cleanup_error:
+                            cleanup_error_msg = f"Failed to cleanup {unprocessed_file}: {str(cleanup_error)}"
+                            _log(f"  {cleanup_error_msg}")
+                            cleanup_errors.append(cleanup_error_msg)
+            
+            # Add cleanup errors to the errors list
+            errors.extend(cleanup_errors)
+            
+            # Update upload record with all errors (including cleanup errors)
             self.models.edit('uploads', upload_id, {
                 'completed_at': datetime.now().isoformat(),
                 'status': 'failed',
@@ -519,4 +541,5 @@ class Event():
             })
             _log(f"Processing failed: {error_msg}")
             _send_progress('error', 0, 0, error_msg)
+            
             raise

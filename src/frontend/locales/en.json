@@ -568,7 +568,9 @@
     "groupsPlural": "groups",
     "imageFailedToProcess": "image(s) failed to process",
     "timeElapsed": "Time elapsed",
-    "estTimeLeft": "Est. time left"
+    "estTimeLeft": "Est. time left",
+    "youCanLeaveProcessingWillContinue": "You can safely close this window. Processing will continue in the background, but you won't see progress updates.",
+    "closeProcessingWillContinue": "Close (Esc) - Processing will continue in background"
   },
   "dashboard": {
     "dashboard": "Dashboard",

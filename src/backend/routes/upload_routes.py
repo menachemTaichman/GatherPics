@@ -279,7 +279,8 @@ def process_images_stream(event_id):
                 progress_queue.put({'_step': '_done_', 'result': result})
             except Exception as e:
                 error_container['error'] = str(e)
-                cleanup_files(file_names, event.to_process_dir)
+                # Don't cleanup files here - let event.py error handler do it
+                # It will only cleanup unprocessed files
                 progress_queue.put({'_step': '_error_', 'message': str(e)})
         
         thread = threading.Thread(target=process_task, daemon=True)
@@ -373,15 +374,16 @@ def process_images_stream(event_id):
                     yield ": keepalive\n\n"
                     
         except GeneratorExit:
-            if not processing_completed:
-                cleanup_files(files_to_track, event.to_process_dir)
+            # User disconnected - let processing continue in background
+            # Don't cleanup files, processing will continue
+            pass
         except Exception:
-            if not processing_completed:
-                cleanup_files(files_to_track, event.to_process_dir)
+            # Only cleanup on actual errors, not on disconnect
+            # The background thread will handle cleanup if needed
             raise
         finally:
-            if not processing_completed:
-                cleanup_files(files_to_track, event.to_process_dir)
+            # Don't cleanup on disconnect - processing continues in background
+            # The thread is daemon=True so it will continue even if connection closes
             thread.join(timeout=1)
     
     return Response(

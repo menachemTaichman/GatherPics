@@ -569,7 +569,9 @@
     "groupsPlural": "קבוצות",
     "imageFailedToProcess": "תמונה/ות נכשלו בעיבוד",
     "timeElapsed": "זמן שחלף",
-    "estTimeLeft": "זמן משוער נותר"
+    "estTimeLeft": "זמן משוער נותר",
+    "youCanLeaveProcessingWillContinue": "אתה יכול לסגור את החלון בבטחה. העיבוד ימשיך ברקע, אך לא תראה עדכוני התקדמות.",
+    "closeProcessingWillContinue": "סגור (Esc) - העיבוד ימשיך ברקע"
   },
   "dashboard": {
     "dashboard": "לוח בקרה",

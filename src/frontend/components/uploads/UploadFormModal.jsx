@@ -54,11 +54,17 @@ export default function UploadFormModal({
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'upload-form-modal';
 
-  // Custom keyboard handler for Enter key
+  // Custom keyboard handler for Enter and Esc keys
   const handleUploadFormKeys = (e) => {
     if (e.key === 'Enter' && !uploading && selectedFiles.length > 0) {
       e.preventDefault();
       handleStartUpload();
+      return true; // Mark as handled
+    }
+    // Allow ESC to close even during upload (processing continues in background)
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
       return true; // Mark as handled
     }
     return false; // Not handled
@@ -438,10 +444,9 @@ export default function UploadFormModal({
               </div>
               <button
                 onClick={onClose}
-                disabled={uploading}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
-                title={t('account.cancelEsc')}
-                aria-label={t('account.cancelEsc')}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                title={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
+                aria-label={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -506,6 +511,12 @@ export default function UploadFormModal({
                             {uploadProgress.estimatedTimeRemaining !== undefined && uploadProgress.estimatedTimeRemaining > 0 && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
                               <span className="whitespace-nowrap">{t('upload.estTimeLeft')}: {formatDuration(uploadProgress.estimatedTimeRemaining)}</span>
                             )}
+                          </div>
+                        )}
+                        {/* Info message about leaving */}
+                        {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
+                          <div className="mt-2 text-xs text-gray-500 italic">
+                            {t('upload.youCanLeaveProcessingWillContinue')}
                           </div>
                         )}
                       </div>
@@ -658,12 +669,11 @@ export default function UploadFormModal({
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
               <button
                 onClick={onClose}
-                disabled={uploading}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                title={uploading ? t('upload.uploading') : t('account.cancelEsc')}
-                aria-label={uploading ? t('upload.uploading') : t('account.cancelEsc')}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                title={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
+                aria-label={uploading ? t('upload.closeProcessingWillContinue') : t('account.cancelEsc')}
               >
-                {uploading ? t('upload.uploading') : t('account.cancel')}
+                {uploading ? t('account.close') : t('account.cancel')}
               </button>
               <button
                 onClick={handleStartUpload}
