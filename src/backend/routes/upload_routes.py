@@ -61,19 +61,31 @@ def sanitize_filename(filename):
     
     return filename
 
+# TODO: remove
+"""
 @upload_bp.route("/images", methods=["POST"])
 @require_auth
 def upload_images(event_id):
-    """Upload and process images."""
+    import traceback
+    from src.core.errors import log_error
+    
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
     
-    if 'files' not in request.files:
-        return jsonify({"error": "No files provided"}), 400
-    
-    files = request.files.getlist('files')
-    assign_moments = request.form.get('assign_moments', 'false').lower() == 'true'
+    # Wrap request.files access in try-except to catch parsing errors
+    try:
+        if 'files' not in request.files:
+            return jsonify({"error": "No files provided"}), 400
+        
+        files = request.files.getlist('files')
+        assign_moments = request.form.get('assign_moments', 'false').lower() == 'true'
+    except Exception as e:
+        # Catch errors during request parsing (e.g., timeout, disconnect)
+        error_msg = f"Error reading uploaded files: {str(e)}"
+        traceback_str = traceback.format_exc()
+        log_error(error_msg, "RequestParsingError", traceback_str)
+        return jsonify({"error": "Failed to read uploaded files. The upload may have timed out or been interrupted."}), 500
     
     if not files:
         return jsonify({"error": "No files provided"}), 400
@@ -181,26 +193,38 @@ def upload_images(event_id):
         # If processing succeeded, files are already moved/processed by process_new_images
         if not processing_succeeded and saved_files:
             cleanup_files(saved_files, event.to_process_dir)
+"""
 
 @upload_bp.route("/images/upload", methods=["POST"])
 @require_auth
 def upload_files_only(event_id):
     """Upload files to to_process directory without processing."""
-    event_id = validate_path_param('event_id', event_id)
-    event = get_event(event_id)
-    general_models = get_general_models()
-    
-    if 'files' not in request.files:
-        return jsonify({"error": "No files provided"}), 400
-    
-    files = request.files.getlist('files')
-    
-    if not files:
-        return jsonify({"error": "No files provided"}), 400
+    import traceback
+    from src.core.errors import log_error
     
     saved_files = []
-    file_helper = get_file_helper()
     try:
+        event_id = validate_path_param('event_id', event_id)
+        event = get_event(event_id)
+        general_models = get_general_models()
+        
+        # Wrap request.files access in try-except to catch parsing errors
+        try:
+            if 'files' not in request.files:
+                return jsonify({"error": "No files provided"}), 400
+            
+            files = request.files.getlist('files')
+        except Exception as e:
+            # Catch errors during request parsing (e.g., timeout, disconnect)
+            error_msg = f"Error reading uploaded files: {str(e)}"
+            traceback_str = traceback.format_exc()
+            log_error(error_msg, "RequestParsingError", traceback_str)
+            return jsonify({"error": "Failed to read uploaded files. The upload may have timed out or been interrupted."}), 500
+        
+        if not files:
+            return jsonify({"error": "No files provided"}), 400
+        
+        file_helper = get_file_helper()
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
@@ -232,9 +256,14 @@ def upload_files_only(event_id):
             "files_saved": len(saved_files),
             "filenames": saved_files
         })
-    except Exception:
+    except Exception as e:
         # Cleanup any files that were saved before the error
-        cleanup_files(saved_files, event.to_process_dir)
+        if saved_files and 'event' in locals():
+            cleanup_files(saved_files, event.to_process_dir)
+        # Log the error if it hasn't been logged yet (request parsing errors are already logged)
+        error_msg = str(e)
+        traceback_str = traceback.format_exc()
+        log_error(error_msg, type(e).__name__, traceback_str)
         raise
 
 @upload_bp.route("/images/process-stream", methods=["GET"])

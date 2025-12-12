@@ -188,4 +188,20 @@ def register_error_handlers(app):
             # Last resort: if even the general exception handler fails, return minimal safe response
             logging.critical(f"Critical: General exception handler failed: {e}", exc_info=True)
             return jsonify({"error": "An unexpected error occurred"}), 500
+    
+    # Teardown handler to catch errors that occur during request processing
+    # This helps catch errors that might occur in middleware or during request parsing
+    @app.teardown_request
+    def teardown_request_handler(exception):
+        """Handle exceptions that occur during request processing."""
+        if exception is not None:
+            try:
+                # Log errors that weren't caught by error handlers
+                # This helps catch errors during request parsing, timeouts, etc.
+                logging.error(f"Exception during request processing: {exception}", exc_info=True)
+                traceback_str = traceback.format_exc()
+                log_error(str(exception), type(exception).__name__, traceback_str)
+            except Exception as e:
+                # If logging fails, at least log to application logs
+                logging.critical(f"Failed to log teardown error: {e}", exc_info=True)
 

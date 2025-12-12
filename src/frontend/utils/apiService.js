@@ -662,18 +662,51 @@ export const imagesAPI = {
   uploadWithProgress: async (files, assignMoments, eventUrl, onProgress) => {
     const eventId = await getEventIdForApi(eventUrl);
     
-    // Step 1: Upload files to server
-    const formData = new FormData();
-    for (const file of files) {
-      formData.append('files', file);
-    }
-    
+    // Step 1: Upload files to server in batches of 10
+    const BATCH_SIZE = 10;
+    const totalFiles = files.length;
+    const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
     let uploadedFilenames = [];
+    
     try {
-      const uploadResponse = await api.post(`/api/events/${eventId}/images/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      uploadedFilenames = uploadResponse.data.filenames || [];
+      // Report initial upload progress
+      if (onProgress) {
+        onProgress({
+          step: 'uploading',
+          current: 0,
+          total: totalFiles,
+          message: `Uploading files (0/${totalFiles})...`
+        });
+      }
+      
+      // Upload files in batches
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * BATCH_SIZE;
+        const endIndex = Math.min(startIndex + BATCH_SIZE, totalFiles);
+        const batch = files.slice(startIndex, endIndex);
+        
+        const formData = new FormData();
+        for (const file of batch) {
+          formData.append('files', file);
+        }
+        
+        const uploadResponse = await api.post(`/api/events/${eventId}/images/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        const batchFilenames = uploadResponse.data.filenames || [];
+        uploadedFilenames = uploadedFilenames.concat(batchFilenames);
+        
+        // Report progress after each batch
+        if (onProgress) {
+          onProgress({
+            step: 'uploading',
+            current: endIndex,
+            total: totalFiles,
+            message: `Uploading files (${endIndex}/${totalFiles})...`
+          });
+        }
+      }
     } catch (error) {
       throw new Error(error.response?.data?.error || 'Failed to upload files');
     }
@@ -688,11 +721,22 @@ export const imagesAPI = {
       // EventSource with credentials for cookie-based auth
       const eventSource = new EventSource(url, { withCredentials: true });
       
-      // Cleanup on timeout (5 minutes max)
-      const timeout = setTimeout(() => {
+      // Timeout for connection inactivity (no messages for 10 minutes)
+      // This is reset on each message (including keepalive), so processing can take hours
+      // Server sends keepalive messages every 30 seconds, so this only triggers if connection is truly dead
+      let timeout = setTimeout(() => {
         eventSource.close();
-        reject(new Error('Processing timeout'));
-      }, 5 * 60 * 1000);
+        reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
+      }, 10 * 60 * 1000);
+      
+      const resetTimeout = () => {
+        // Reset timeout on any message (including keepalive)
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          eventSource.close();
+          reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
+        }, 10 * 60 * 1000);
+      };
       
       const cleanup = () => {
         clearTimeout(timeout);
@@ -701,6 +745,14 @@ export const imagesAPI = {
       
       eventSource.onmessage = (event) => {
         try {
+          // Reset timeout on any message (server is alive)
+          resetTimeout();
+          
+          // Handle keepalive messages (empty data or ": keepalive")
+          if (!event.data || event.data.trim() === '' || event.data.trim() === ': keepalive') {
+            return; // Just a keepalive, continue waiting
+          }
+          
           const data = JSON.parse(event.data);
           
           if (data.step === 'complete') {
@@ -730,6 +782,11 @@ export const imagesAPI = {
             }
           }
         } catch (parseError) {
+          // If it's not JSON, it might be a keepalive - reset timeout and continue
+          if (event.data && (event.data.trim() === '' || event.data.trim() === ': keepalive')) {
+            resetTimeout();
+            return;
+          }
           console.error('Failed to parse SSE data:', parseError, 'Raw event:', event.data);
           cleanup();
           reject(new Error('Failed to parse server response: ' + parseError.message));

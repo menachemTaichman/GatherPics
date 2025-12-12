@@ -3,12 +3,11 @@ from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
 import os
-import time
 
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
-profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
-general_models = GeneralModels(profile_id=profile_id)
-event = Event(event_id, profile_id=profile_id)
+dev_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
+general_models = GeneralModels(profile_id=dev_profile_id)
+event = Event(event_id, profile_id=dev_profile_id)
 db = event.models.db
 general_db = general_models.db
 
@@ -58,17 +57,79 @@ def test_edit_methods():
     print(result)
     print('--------------------------------')
 
-def test_faces_in_aws_and_db():
-    if not event.face_utils:
-        event.face_utils = FaceUtils(event_id)
-    faces_in_aws = event.face_utils.rek_helper.get_face_ids()
-    faces_in_db = event.models.db.execute_query('SELECT face_id FROM faces;', return_format=ReturnFormat.LIST_VALUES)
-    faces_in_aws_but_not_in_db = [face for face in faces_in_aws if face not in faces_in_db]
-    faces_in_db_but_not_in_aws = [face for face in faces_in_db if face not in faces_in_aws]
-    return {
-        'faces_in_aws_but_not_in_db': faces_in_aws_but_not_in_db,
-        'faces_in_db_but_not_in_aws': faces_in_db_but_not_in_aws
-    }
+def test_faces_in_aws_and_db(event_id: str, test_prod: bool = False):
+    """
+    Test faces in AWS Rekognition and database.
+    
+    Args:
+        event_id: The event/collection ID to test (defaults to the global event_id)
+        test_prod: If True, use actual AWS Rekognition and production DB (port 9000)
+    
+    Returns:
+        dict with comparison results
+    """
+    # Save original environment variables
+    original_env = os.environ.get('ENVIRONMENT')
+    original_db_port = os.environ.get('DB_PORT')
+    
+    try:
+        if test_prod:
+            # Set ENVIRONMENT to 'PRODUCTION' to force real Rekognition
+            # (AWSRekognitionHelper checks if ENVIRONMENT == 'DEVELOPMENT' to use mock)
+            os.environ['ENVIRONMENT'] = 'PRODUCTION'
+            # Set DB_PORT to production port (9000)
+            os.environ['DB_PORT'] = '9000'
+            # Reset DB connection pool to use new port
+            DB._connection_pool = None
+        
+        # Create FaceUtils with the event_id
+        face_utils = FaceUtils(event_id)
+        faces_in_aws = face_utils.rek_helper.get_face_ids()
+        
+        # Get faces from DB
+        faces_in_db = None
+        try:
+            db = DB(event_id=event_id, profile_id=dev_profile_id)
+            faces_in_db = db.execute_query('SELECT face_id FROM faces;', return_format=ReturnFormat.LIST_VALUES)
+        except Exception as e:
+            print(f"Warning: Could not query database for event {event_id}: {e}")
+        
+        # Compare results
+        if faces_in_db is not None:
+            faces_in_aws_but_not_in_db = [face for face in faces_in_aws if face not in faces_in_db]
+            faces_in_db_but_not_in_aws = [face for face in faces_in_db if face not in faces_in_aws]
+            return {
+                'faces_in_aws_but_not_in_db': faces_in_aws_but_not_in_db,
+                'faces_in_db_but_not_in_aws': faces_in_db_but_not_in_aws,
+                'faces_in_aws_count': len(faces_in_aws),
+                'faces_in_db_count': len(faces_in_db),
+                'event_id': event_id
+            }
+        else:
+            # No DB comparison, just return AWS faces
+            return {
+                'faces_in_aws': faces_in_aws,
+                'faces_in_aws_count': len(faces_in_aws),
+                'event_id': event_id,
+                'note': 'No database comparison performed (event not in DB or DB query failed)'
+            }
+    finally:
+        # Restore original environment variables
+        if original_env is not None:
+            os.environ['ENVIRONMENT'] = original_env
+        elif 'ENVIRONMENT' in os.environ and test_prod:
+            # If ENVIRONMENT wasn't originally set, remove it after we're done
+            del os.environ['ENVIRONMENT']
+        
+        if original_db_port is not None:
+            os.environ['DB_PORT'] = original_db_port
+        elif 'DB_PORT' in os.environ and test_prod:
+            # If DB_PORT wasn't originally set, remove it after we're done
+            del os.environ['DB_PORT']
+        
+        # Reset DB connection pool to use original settings
+        if test_prod:
+            DB._connection_pool = None
 
 def find_incomplete_images():
     images = event.models.db.execute_query('SELECT image_id FROM images;', return_format=ReturnFormat.LIST_VALUES)
@@ -122,72 +183,6 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-image_ids = ['854ab47a-6514-4f75-919f-169e045f3a70']
-event_data = event.models.get_entities('events', event_id, include_details=True)
-album_id = event_data['archive_album_id']
-
-add = False
-updated_image_ids, _ = event.models.edit_childs('albums', album_id, child='images', child_ids=image_ids, operation=ChildOperation.REMOVE)
-changes = []
-if updated_image_ids:
-    album = event.models.get_entities('albums', [album_id])
-    changes.append({
-        'type': 'UPDATE',
-        'entity': 'album',
-        'items': album
-    })
-    if add:
-        changes.append({
-            'type': 'RELATION_ADD',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'entities': event.models.get_entities('images', updated_image_ids)
-        })
-    else:
-        changes.append({
-            'type': 'RELATION_REMOVE',
-            'relation': 'album.images',
-            'parentId': album_id,
-            'ids': updated_image_ids
-        })
-
-    event_data = event.models.get_entities('events', event_id, include_details=True)
-    is_default_album = album_id in [
-        event_data['favorites_album_id'],
-        event_data['archive_album_id']
-    ]
-    if is_default_album:
-        changes.append({
-            'type': 'UPDATE',
-            'entity': 'image',
-            'items': event.models.get_entities('images', updated_image_ids)
-        })
-        if album_id == event_data['archive_album_id']:
-            all_parents = event.models.get_parents('images', updated_image_ids)
-            for entity, parent_to_images in all_parents.items():
-                parent_ids = list(parent_to_images.keys())
-                changes.append({
-                    'type': 'UPDATE',
-                    'entity': entity,
-                    'items': event.models.get_entities(entity, parent_ids)
-                })
-    else:
-        for image_id in updated_image_ids:
-            if add:
-                changes.append({
-                    'type': 'RELATION_ADD',
-                    'relation': 'image.albums',
-                    'parentId': image_id,
-                    'entities': album
-                })
-            else:
-                changes.append({
-                    'type': 'RELATION_REMOVE',
-                    'relation': 'image.albums',
-                    'parentId': image_id,
-                    'ids': [album_id]
-                })
-
-
-print(changes)
-print('--------------------------------')
+# result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)
+# print(result)
+# print('--------------------------------')
