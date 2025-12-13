@@ -430,6 +430,64 @@ class EventModels(BaseModels):
 
         return result
 
+    # -------- Images processing helpers --------
+    def update_image_status(self, image_id: str, status: str):
+        """Update image status.
+        Args:
+            image_id: image id
+            status: new status (PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED)
+        """
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'true');
+            UPDATE images_ctx SET status = %s WHERE image_id = %s;
+        """
+        self.db.execute_query(query, (status, image_id))
+    
+    def get_upload_face_ids(self, upload_id: int) -> list[str]:
+        """Get all face IDs from images in an upload.
+        Args:
+            upload_id: upload id
+        Returns:
+            list of face ids
+        """
+        query = """
+            SELECT set_transaction_context('include_pending_images', 'true');
+            SELECT f.face_id
+            FROM faces f
+            INNER JOIN images_ctx i ON f.image_id = i.image_id
+            WHERE i.upload_id = %s
+        """
+        return self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_VALUES)
+    
+    def update_upload_status(self, upload_id: int, status: str, **kwargs):
+        """Update upload status and optional fields.
+        Args:
+            upload_id: upload id
+            status: new status (pending, processing, completed, failed)
+            **kwargs: optional fields like completed_at, faces_count, clusters_count, etc.
+        """
+        set_clauses = ["status = %s"]
+        params = [status]
+
+        allow_fields = ['completed_at', 'faces_count', 'clusters_count', 'moments_count']
+
+        for field in kwargs:
+            if field in allow_fields:
+                set_clauses.append(f"{field} = %s")
+                params.append(kwargs[field])
+
+        if status in ('completed', 'failed') and 'completed_at' not in kwargs:
+            set_clauses.append("completed_at = CURRENT_TIMESTAMP")
+            params.append(datetime.now().isoformat())
+
+        params.append(upload_id)
+        query = f"""
+            UPDATE uploads 
+            SET {', '.join(set_clauses)}
+            WHERE upload_id = %s
+        """
+        self.db.execute_query(query, tuple(params))
+
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
         """Edit entities accessibility for a profile.

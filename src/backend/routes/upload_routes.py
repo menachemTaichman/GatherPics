@@ -3,11 +3,15 @@ import os
 import queue
 import threading
 import re
+from datetime import datetime
+from celery import group, chord
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe
 from src.backend.validators import get_input, get_multiple_inputs, validate_path_param
 from src.core.storage import get_file_helper
+from src.core.database.db import ReturnFormat
+from src.backend.tasks import process_image_task, cluster_faces_task
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
 
@@ -241,7 +245,20 @@ def get_upload_urls(event_id):
         return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
     
     file_helper = get_file_helper()
+    
+    # Create upload session
+    upload_id = event.models.add('uploads', {
+        'started_at': datetime.now().isoformat(),
+        'status': 'pending',
+        'images_count': len(files_data),
+        'faces_count': 0,
+        'clusters_count': 0,
+        'moments_count': 0,
+        'errors': [],
+    })
+    
     upload_urls = []
+    image_records = []
     
     for file_info in files_data:
         if not isinstance(file_info, dict) or 'filename' not in file_info:
@@ -269,6 +286,15 @@ def get_upload_urls(event_id):
             filepath = f"{event.to_process_dir}/{filename}"
             counter += 1
         
+        # Create image record with PENDING_UPLOAD status
+        image_name, image_ext = os.path.splitext(filename)
+        label = event.models.get_unique_label('images', image_name, image_ext, brackets=True, event_id=event_id)
+        image_id = event.models.add('images', {
+            'label': label,
+            'upload_id': upload_id,
+            'status': 'PENDING_UPLOAD',
+        })
+        
         # Generate presigned upload URL with conditions (only for S3)
         upload_info = file_helper.get_upload_url(
             filepath, 
@@ -280,6 +306,7 @@ def get_upload_urls(event_id):
         if upload_info:
             # S3 storage - return presigned POST URL with fields
             upload_urls.append({
+                "image_id": image_id,
                 "filename": filename,
                 "upload_url": upload_info['url'],
                 "upload_fields": upload_info['fields'],
@@ -289,17 +316,24 @@ def get_upload_urls(event_id):
             # Local storage - return filepath for direct upload
             # For local storage, client will still upload to server
             upload_urls.append({
+                "image_id": image_id,
                 "filename": filename,
                 "upload_url": None,  # Will use regular upload endpoint
                 "upload_fields": None,
                 "filepath": filepath
             })
+        
+        image_records.append({
+            'image_id': image_id,
+            'filename': filename
+        })
     
     if not upload_urls:
         return jsonify({"error": "No valid JPG files provided"}), 400
     
     return jsonify({
         "success": True,
+        "upload_id": upload_id,
         "upload_urls": upload_urls
     })
 
@@ -307,304 +341,172 @@ def get_upload_urls(event_id):
 @require_auth
 def upload_files_only(event_id):
     """
-    Verify uploaded files exist in storage (for S3 presigned uploads) or upload files directly (for local storage).
+    Trigger processing for uploaded images.
     
-    For S3: Accepts filenames that were uploaded via presigned URLs and verifies they exist.
-    For local: Accepts files via multipart/form-data and uploads them.
+    Accepts upload_id or image_ids. Updates image status to QUEUED and triggers Celery tasks.
     
-    Request body (S3):
+    Request body:
     {
-        "filenames": ["image1.jpg", "image2.jpg"]
+        "upload_id": 123,  # Optional: process all PENDING_UPLOAD images in this upload
+        "image_ids": ["uuid1", "uuid2"]  # Optional: specific image IDs to process
     }
-    
-    Request body (local):
-    multipart/form-data with 'files' field
     """
     import traceback
     from src.core.errors import log_error
-    
-    saved_files = []
-    MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
-    MAX_FILE_COUNT = 30
     
     try:
         event_id = validate_path_param('event_id', event_id)
         event = get_event(event_id)
         general_models = get_general_models()
+        profile_id = general_models.db.profile_context.get('profile_id')
         
-        file_helper = get_file_helper()
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
-        # Check if using S3 (presigned URLs) or local storage
-        if not file_helper.is_local:
-            # S3 storage - verify files exist that were uploaded via presigned URLs
-            filenames = get_input('filenames', required=True)
-            if not isinstance(filenames, list) or not filenames:
-                return jsonify({"error": "No filenames provided"}), 400
-            
-            # Check file count limit
-            if len(filenames) > MAX_FILE_COUNT:
-                return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
-            
-            # Verify each file exists
-            for filename in filenames:
-                if not isinstance(filename, str):
-                    continue
+        # Get upload_id or image_ids from request
+        upload_id = get_input('upload_id', required=False)
+        image_ids = get_input('image_ids', required=False)
+        image_filenames = get_input('image_filenames', required=False)  # Optional mapping: {image_id: filename}
+        
+        if not upload_id and not image_ids:
+            return jsonify({"error": "Either upload_id or image_ids must be provided"}), 400
                 
-                # Validate file extension (JPG only)
-                if not filename.lower().endswith(('.jpg', '.jpeg')):
-                    continue
-                
-                filepath = f"{event.to_process_dir}/{filename}"
-                
-                # Verify file exists in S3
-                if file_helper.exists(filepath):
-                    saved_files.append(filename)
-                else:
-                    # File doesn't exist - might not have been uploaded yet
-                    return jsonify({"error": f"File '{filename}' not found. Please upload it first using the presigned URL."}), 400
-            
-            if not saved_files:
-                return jsonify({"error": "No valid JPG files provided"}), 400
-            
-            return jsonify({
-                "success": True,
-                "files_saved": len(saved_files),
-                "filenames": saved_files
-            })
+        # Get images to process with their filenames
+        image_tasks = []
+        
+        if upload_id:
+            # Get all PENDING_UPLOAD images for this upload with their info
+            query = """
+                SELECT set_transaction_context('include_pending_images', 'true');
+                SELECT image_id, label, upload_id
+                FROM images_ctx
+                WHERE upload_id = %s AND status = 'PENDING_UPLOAD'
+            """
+            images_result = event.models.db.execute_query(query, (upload_id,), return_format=ReturnFormat.DICT_DICTS)
+            if not images_result:
+                return jsonify({"error": f"No pending images found for upload {upload_id}"}), 404
+            # Convert to dict keyed by image_id
+            images = {row['image_id']: row for row in images_result}
         else:
-            # Local storage - upload files directly (backward compatibility)
-            try:
-                if 'files' not in request.files:
-                    return jsonify({"error": "No files provided"}), 400
-                
-                files = request.files.getlist('files')
-            except Exception as e:
-                error_msg = f"Error reading uploaded files: {str(e)}"
-                traceback_str = traceback.format_exc()
-                log_error(error_msg, "RequestParsingError", traceback_str)
-                return jsonify({"error": "Failed to read uploaded files. The upload may have timed out or been interrupted."}), 500
+            # Get specific images
+            if not isinstance(image_ids, list) or not image_ids:
+                return jsonify({"error": "image_ids must be a non-empty list"}), 400
             
-            if not files:
-                return jsonify({"error": "No files provided"}), 400
+            images = event.models.get_entities('images', image_ids)
+            if not images:
+                return jsonify({"error": "No images found"}), 404
             
-            # Check file count limit
-            if len(files) > MAX_FILE_COUNT:
-                return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
+            # Filter to only PENDING_UPLOAD images
+            images = {img_id: img for img_id, img in images.items() if img.get('status') == 'PENDING_UPLOAD'}
+            if not images:
+                return jsonify({"error": "No pending images found"}), 404
+        
+        # Extract upload_id from first image if not provided
+        if not upload_id:
+            first_image = list(images.values())[0]
+            upload_id = first_image.get('upload_id')
+            if not upload_id:
+                return jsonify({"error": "Images must have an upload_id"}), 400
+        
+        # Map image_ids to filenames
+        image_id_list = []
+        for image_id, image_data in images.items():
+            # Use provided mapping if available, otherwise reconstruct from label
+            if image_filenames and isinstance(image_filenames, dict) and image_id in image_filenames:
+                filename = image_filenames[image_id]
+            else:
+                # Reconstruct filename from label: [name.ext] -> name.ext
+                label = image_data.get('label', '')
+                if label.startswith('[') and label.endswith(']'):
+                    filename = label[1:-1]  # Remove brackets
+                else:
+                    # Fallback: use label as-is, add .jpg if no extension
+                    filename = label
+                    if '.' not in filename:
+                        filename += '.jpg'
             
-            for file in files:
-                if file and file.filename:
-                    # Validate file extension (JPG only)
-                    if not file.filename.lower().endswith(('.jpg', '.jpeg')):
-                        continue
-                    
-                    filename = sanitize_filename(file.filename)
-                    filepath = f"{event.to_process_dir}/{filename}"
-                    
-                    base, ext = os.path.splitext(filename)
-                    counter = 1
-                    while file_helper.exists(filepath):
-                        filename = f"{base}_{counter}{ext}"
-                        filepath = f"{event.to_process_dir}/{filename}"
-                        counter += 1
-                    
-                    # Stream file upload with size validation
-                    try:
-                        file_helper.write_stream(filepath, file, content_type='image/jpeg', size_limit=MAX_FILE_SIZE)
-                        saved_files.append(filename)
-                    except ValueError as e:
-                        cleanup_files(saved_files, event.to_process_dir)
-                        return jsonify({"error": f"File '{filename}' exceeds maximum size of 20 MB"}), 400
-                    except Exception as e:
-                        if saved_files:
-                            cleanup_files(saved_files, event.to_process_dir)
-                        raise
-            
-            if not saved_files:
-                cleanup_files(saved_files, event.to_process_dir)
-                return jsonify({"error": "No valid JPG files provided"}), 400
-            
-            return jsonify({
-                "success": True,
-                "files_saved": len(saved_files),
-                "filenames": saved_files
-            })
+            image_id_list.append(image_id)
+            image_tasks.append((image_id, filename))
+        
+        # Update all images to QUEUED status
+        for image_id in image_id_list:
+            event.models.update_image_status(image_id, 'QUEUED')
+        
+        # Update upload status to processing
+        event.models.update_upload_status(upload_id, 'processing')
+        
+        # Create Celery Chord: group of process_image_task -> cluster_faces_task
+        task_group = group([
+            process_image_task.s(
+                event_id,
+                profile_id,
+                upload_id,
+                image_id,
+                filename
+            )
+            for image_id, filename in image_tasks
+        ])
+        
+        # Create chord: group -> cluster_faces_task (runs after all images are processed)
+        chord_result = chord(task_group)(
+            cluster_faces_task.s(event_id, profile_id, upload_id)
+        )
+        
+        return jsonify({
+            "success": True,
+            "upload_id": upload_id,
+            "images_queued": len(image_id_list),
+            "task_id": str(chord_result.id) if chord_result else None
+        })
+        
     except Exception as e:
-        if saved_files and 'event' in locals():
-            cleanup_files(saved_files, event.to_process_dir)
         error_msg = str(e)
         traceback_str = traceback.format_exc()
         log_error(error_msg, type(e).__name__, traceback_str)
         raise
 
-@upload_bp.route("/images/process-stream", methods=["POST"])
+@upload_bp.route("/uploads/<int:upload_id>/progress", methods=["GET"])
 @require_auth
-def process_images_stream(event_id):
-    """Process images with SSE progress streaming."""
+def get_upload_progress(event_id, upload_id):
+    """
+    Get progress of an upload including all images with their statuses.
+    Uses transaction context to include pending images.
+    """
     event_id = validate_path_param('event_id', event_id)
+    upload_id = validate_path_param('upload_id', upload_id)
     event = get_event(event_id)
-    general_models = get_general_models()
     
-    assign_moments = get_input('assign_moments', required=False) or False
-    file_names = get_input('file_names', required=False)
+    if not event.models.is_accessible('uploads', upload_id):
+        return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
     
-    # TODO: This os.listdir approach won't work in production with S3 storage.
-    # Need to implement S3 list_objects_v2 equivalent or require file_names to be provided.
-    # For now, only works in local development. In production, file_names must be provided.
-    if file_names is None:
-        # TODO: Replace with S3-compatible file listing when using S3 storage
-        # For S3: use boto3 list_objects_v2 with prefix=event.to_process_dir
-        # This is a temporary solution that only works with local storage
-        try:
-            files_to_track = [f for f in os.listdir(event.to_process_dir) 
-                             if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
-        except (OSError, FileNotFoundError):
-            # If to_process_dir doesn't exist or can't list (e.g., S3), require file_names
-            files_to_track = []
-    else:
-        files_to_track = file_names
+    # Set transaction context to include pending images
+    event.models.db.execute_query("SELECT set_transaction_context('include_pending_images', 'true')")
     
-    progress_queue = queue.Queue()
+    # Get upload info
+    upload = event.models.get_entities('uploads', [upload_id])
+    if not upload:
+        return jsonify({"error": f"Upload {upload_id} not found"}), 404
     
-    def progress_callback(progress_data):
-        """Callback to push progress updates to queue."""
-        progress_queue.put(progress_data)
+    # Get all images for this upload (including pending)
+    images = event.models.get_childs('uploads', upload_id, 'images')
     
-    def generate():
-        """SSE generator function."""
-        result_container = {}
-        error_container = {}
-        
-        def process_task():
-            """Task to run in background thread."""
-            try:
-                result = general_models.process_new_images(
-                    event_id,
-                    file_names=file_names,
-                    assign_moments=assign_moments,
-                    progress_callback=progress_callback
-                )
-                result_container['data'] = result
-                progress_queue.put({'_step': '_done_', 'result': result})
-            except Exception as e:
-                error_container['error'] = str(e)
-                # Don't cleanup files here - let event.py error handler do it
-                # It will only cleanup unprocessed files
-                progress_queue.put({'_step': '_error_', 'message': str(e)})
-        
-        thread = threading.Thread(target=process_task, daemon=True)
-        thread.start()
-        
-        processing_completed = False
-        try:
-            while True:
-                try:
-                    progress = progress_queue.get(timeout=30)
-                    
-                    if progress.get('_step') == '_done_':
-                        result = progress['result']
-                        changes = []
-                        
-                        processed_image_ids = result.get('processed_image_ids', [])
-                        if processed_image_ids:
-                            images = event.models.get_entities('images', processed_image_ids)
-                            
-                            group_to_images = event.models.get_parents('images', processed_image_ids, 'groups')
-                            all_parent_groups = set(group_to_images.keys())
-                            
-                            changes.append({
-                                'type': 'UPSERT',
-                                'entity': 'image',
-                                'items': images,
-                            })
-                            
-                            for group_id in all_parent_groups:
-                                group_images = event.models.get_childs('groups', group_id, 'images', processed_image_ids)
-                                if group_images:
-                                    changes.append({
-                                        'type': 'RELATION_ADD',
-                                        'relation': 'group.images',
-                                        'parentId': group_id,
-                                        'entities': group_images,
-                                    })
-                            
-                            if all_parent_groups:
-                                changes.append({
-                                    'type': 'UPSERT',
-                                    'entity': 'group',
-                                    'items': event.models.get_entities('groups', list(all_parent_groups)),
-                                })
-                            
-                            assigned_moments = result.get('assigned_moments', {})
-                            if assigned_moments:
-                                for moment_id, image_ids in assigned_moments.items():
-                                    changes.append({
-                                        'type': 'RELATION_ADD',
-                                        'relation': 'moment.images',
-                                        'parentId': moment_id,
-                                        'entities': event.models.get_childs('moments', moment_id, 'images', image_ids)
-                                    })
-                                
-                                changes.append({
-                                    'type': 'UPDATE',
-                                    'entity': 'moment',
-                                    'items': event.models.get_entities('moments', list(assigned_moments.keys()))
-                                })
-                        
-                        if result.get('upload_id'):
-                            upload_entity = event.models.get_entities('uploads', [result['upload_id']])
-                            changes.append({
-                                'type': 'UPSERT',
-                                'entity': 'upload',
-                                'items': upload_entity
-                            })
-                        
-                        final_response = {
-                            'step': 'complete',
-                            'result': result,
-                            'changes': changes
-                        }
-                        yield f"data: {json_dumps_safe(final_response)}\n\n"
-                        processing_completed = True
-                        break
-                        
-                    elif progress.get('_step') == '_error_':
-                        error_response = {
-                            'step': 'error',
-                            'message': progress.get('message', 'Unknown error')
-                        }
-                        yield f"data: {json_dumps_safe(error_response)}\n\n"
-                        break
-                        
-                    else:
-                        yield f"data: {json_dumps_safe(progress)}\n\n"
-                        
-                except queue.Empty:
-                    yield ": keepalive\n\n"
-                    
-        except GeneratorExit:
-            # User disconnected - let processing continue in background
-            # Don't cleanup files, processing will continue
-            pass
-        except Exception:
-            # Only cleanup on actual errors, not on disconnect
-            # The background thread will handle cleanup if needed
-            raise
-        finally:
-            # Don't cleanup on disconnect - processing continues in background
-            # The thread is daemon=True so it will continue even if connection closes
-            thread.join(timeout=1)
+    # Count images by status
+    status_counts = {}
+    for image_id, image_data in images.items():
+        status = image_data.get('status', 'PENDING_UPLOAD')
+        status_counts[status] = status_counts.get(status, 0) + 1
     
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-            'Connection': 'keep-alive',
-        }
-    )
+    # Get upload completion info
+    completion_info = event.models.check_upload_completion(upload_id)
+    
+    return jsonify({
+        "success": True,
+        "upload_id": upload_id,
+        "upload": upload.get(str(upload_id), {}),
+        "images": images,
+        "status_counts": status_counts,
+        "completion": completion_info
+    })
 
 @upload_bp.route("/uploads", methods=["GET"])
 @require_auth

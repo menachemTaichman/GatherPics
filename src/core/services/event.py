@@ -3,6 +3,10 @@ import shutil
 import gc
 from datetime import datetime
 
+from ..utils.image_utils import resize_image, extract_metadata_from_bytes, crop_image
+from PIL import Image as PILImage
+from io import BytesIO
+
 from src.core.errors import Forbidden, PolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
@@ -143,6 +147,242 @@ class Event():
             )
                 
         return list(deleted_groups), parents
+
+    def _process_face_crop(self, source_img, bbox, face_id, image_id, unassociated_group_id):
+        """
+        Process a single face: crop, resize, save.
+        
+        Args:
+            source_img: PIL Image to crop from
+            bbox: Bounding box dict with width, height, left, top
+            face_id: UUID for the face
+            image_id: UUID of the parent image
+            unassociated_group_id: Group ID for unassociated faces
+            
+        Returns:
+            dict with face data
+        """
+        # Crop face with padding
+        crop_img = crop_image(source_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
+        
+        # Resize to max 150x150
+        crop_img.thumbnail((150, 150), PILImage.Resampling.LANCZOS)
+        
+        # Save to buffer then upload via stream
+        crop_path = f"{self.faces_dir}/{face_id}.webp"
+        face_buffer = BytesIO()
+        crop_img.save(face_buffer, format='WEBP', quality=70, optimize=True)
+        face_file_size = face_buffer.tell()
+        face_buffer.seek(0)
+        self.file_helper.write_stream(crop_path, face_buffer, content_type='image/webp')
+        
+        del crop_img
+        
+        return {
+            "image_id": image_id,
+            "face_width": bbox['width'],
+            "face_height": bbox['height'],
+            "face_left": bbox['left'],
+            "face_top": bbox['top'],
+            "face_id": face_id,
+            "group_id": unassociated_group_id,
+            "file_size": face_file_size
+        }
+
+    def _process_single_image(
+        self,
+        image_id: str,
+        filename: str,
+        display_size: int = 2048,
+        thumb_size: int = 512,
+    ) -> dict | None:
+        """
+        Process a single image: resize, detect faces, crop faces, copy original.
+        
+        Args:
+            image_id: UUID of the image (already exists in DB)
+            filename: Original filename in to_process directory
+            display_size: Size for display images
+            thumb_size: Size for thumbnail images
+            
+        Returns:
+            dict with face_ids list, or None on failure
+        """
+        # Read image from storage
+        image_path = f"{self.to_process_dir}/{filename}"
+        image_bytes = self.file_helper.read(image_path)
+        image_stream = BytesIO(image_bytes)
+        file_size = len(image_bytes)
+        
+        # Extract metadata
+        metadata = extract_metadata_from_bytes(image_bytes)
+        
+        try:
+            # Open image with context manager
+            with PILImage.open(image_stream) as original_img:
+                width, height = original_img.size
+                date_taken = metadata.get('date_taken')
+                
+                # Extract EXIF for high quality version
+                exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
+                
+                # Update DB record with dimensions and date
+                self.models.edit('images', image_id, {
+                    'date_taken': date_taken,
+                    'file_size': file_size,
+                    'width': width,
+                    'height': height,
+                })
+                
+                # Get unassociated group ID
+                event_data = self.models.get_entities('events', self.event_id, include_details=True)
+                unassociated_group_id = event_data['unassociated_group_id']
+                
+                # --- STAGE A: High Quality (used for face detection and cropping) ---
+                high_quality_img = resize_image(original_img, 4096)
+                high_quality_path = f"{self.high_quality_dir}/{image_id}.jpg"
+                
+                # Save HQ to buffer then upload via stream
+                hq_buffer = BytesIO()
+                high_quality_img.save(hq_buffer, format='JPEG', quality=95, optimize=True, exif=exif_bytes)
+                high_quality_file_size = hq_buffer.tell()
+                hq_buffer.seek(0)
+                self.file_helper.write_stream(high_quality_path, hq_buffer, content_type='image/jpeg')
+                
+                # --- STAGE B: Face Detection & Cropping ---
+                detected_faces = self.face_utils.detect_faces(
+                    image=high_quality_img, 
+                    image_path=high_quality_path, 
+                    external_image_id=image_id
+                )
+                image_faces = []
+                
+                for face_id, bbox in detected_faces:
+                    face_data = self._process_face_crop(high_quality_img, bbox, face_id, image_id, unassociated_group_id)
+                    image_faces.append(face_data)
+                
+                # Free high quality image from memory
+                del high_quality_img
+                
+                # --- STAGE C: Display & Thumb ---
+                # Display (WebP)
+                display_img = resize_image(original_img, display_size)
+                display_path = f"{self.display_dir}/{image_id}.webp"
+                
+                disp_buffer = BytesIO()
+                display_img.save(disp_buffer, format='WEBP', quality=90, optimize=True)
+                display_file_size = disp_buffer.tell()
+                disp_buffer.seek(0)
+                self.file_helper.write_stream(display_path, disp_buffer, content_type='image/webp')
+                del display_img
+                
+                # Thumb (WebP)
+                thumb_img = resize_image(original_img, thumb_size)
+                thumb_path = f"{self.thumb_dir}/{image_id}.webp"
+                
+                thumb_buffer = BytesIO()
+                thumb_img.save(thumb_buffer, format='WEBP', quality=80, optimize=True)
+                thumb_file_size = thumb_buffer.tell()
+                thumb_buffer.seek(0)
+                self.file_helper.write_stream(thumb_path, thumb_buffer, content_type='image/webp')
+                del thumb_img
+                
+                # --- STAGE D: Original Copy ---
+                original_path = f"{self.original_dir}/{image_id}.jpg"
+                self.file_helper.copy(image_path, original_path, content_type='image/jpeg')
+                
+                # Update DB with file sizes
+                self.models.edit('images', image_id, {
+                    'high_quality_file_size': high_quality_file_size,
+                    'display_file_size': display_file_size,
+                    'thumb_file_size': thumb_file_size
+                })
+                
+                # Add faces to database
+                if image_faces:
+                    all_faces_values = [[
+                        face['face_id'], 
+                        face['image_id'], 
+                        face['face_width'], 
+                        face['face_height'], 
+                        face['face_left'], 
+                        face['face_top'], 
+                        face['group_id'], 
+                        face['file_size']
+                    ] for face in image_faces]
+                    self.models.add_many('faces', [
+                        'face_id', 'image_id', 'face_width', 'face_height', 
+                        'face_left', 'face_top', 'group_id', 'file_size'
+                    ], all_faces_values)
+                
+                # Cleanup
+                del image_bytes
+                self.file_helper.delete(image_path)
+                gc.collect()
+                
+                return {'face_ids': [face['face_id'] for face in image_faces]}
+                
+        except Exception as e:
+            gc.collect()
+            return None
+
+    def _cluster_and_group_faces(
+        self,
+        face_ids: list[str],
+        minimal_group_size: int = 2,
+        cluster_threshold: int = 90,
+        max_matches_faces: int = 100,
+    ) -> int:
+        """
+        Cluster faces and create/update groups.
+        
+        Args:
+            face_ids: List of face IDs to cluster
+            minimal_group_size: Minimum number of faces required to create/join a group
+            cluster_threshold: Similarity threshold for face clustering (0-100)
+            max_matches_faces: Maximum number of faces to match for clustering
+            
+        Returns:
+            Number of groups created
+        """        
+        # Get unassociated group ID
+        event_data = self.models.get_entities('events', self.event_id, include_details=True)
+        unassociated_group_id = event_data['unassociated_group_id']
+        
+        clusters = self.face_utils.cluster_faces(
+            face_ids, 
+            threshold_similarity=cluster_threshold, 
+            max_matches_faces=max_matches_faces
+        )
+        groups_created = 0
+        
+        for new_faces, existing_faces in clusters:
+            if len(new_faces) + len(existing_faces) < minimal_group_size:
+                continue
+
+            partition = {}
+            for existing_face_id in existing_faces:
+                group_id = self.models.get_entities('faces', existing_face_id).get('group_id')
+                partition.setdefault(group_id, []).append(existing_face_id)
+
+            # Find the largest non-unassociated group to assign faces to
+            largest_group_id = max(
+                (group_id for group_id in partition.keys() if group_id != unassociated_group_id), 
+                key=lambda x: len(partition[x]), 
+                default=None
+            )
+            largest_group_faces = partition.get(largest_group_id, [])
+            add_faces = new_faces + largest_group_faces + partition.get(unassociated_group_id, [])
+
+            if len(add_faces) >= minimal_group_size:
+                if largest_group_id is None or largest_group_id == unassociated_group_id:
+                    group_label = self.models.get_unique_label('groups', 'Person', '', brackets=False, event_id=self.event_id)
+                    largest_group_id = self.models.add('groups', {'label': group_label})
+                    groups_created += 1
+                
+                self.models.edit_childs('groups', largest_group_id, 'faces', add_faces, operation=ChildOperation.ADD)
+
+        return groups_created
 
     def process_new_images(
         self,

@@ -315,6 +315,7 @@ class DB:
                     'moment_id',
                     'width',
                     'height',
+                    'status',
                 ],
                 'details_fields': [
                     'label',

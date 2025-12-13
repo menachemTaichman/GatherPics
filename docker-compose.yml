@@ -51,7 +51,37 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    image: metaich/photo-app:latest
+    restart: always
+    command: celery -A src.backend.celery_worker.celery worker --loglevel=info
+    environment:
+      TZ: Asia/Jerusalem
+    env_file: .env
+    depends_on:
+      - redis
+      - db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   pg_data:
   caddy_data:
   caddy_config:
+  redis_data:

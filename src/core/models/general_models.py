@@ -377,8 +377,14 @@ class GeneralModels(BaseModels):
         
         # Delete the event (this will cascade delete restricted profiles)
         Event.delete_event(event_id)
-        self.db.execute_query("SELECT set_transaction_context('temp_event_in_deletion', %s)", (event_id,))
-        self.delete('events', event_id)
+        # Set transaction context and delete event in the same transaction
+        # This is required because triggers check cur_transaction('temp_event_in_deletion')
+        query = """
+            SELECT set_transaction_context('temp_event_in_deletion', %s);
+            DELETE FROM events_ctx WHERE event_id = %s
+            RETURNING event_id;
+        """
+        self.db.execute_query(query, (event_id, event_id), return_format=ReturnFormat.LIST_VALUES)
         self.db.execute_query('ANALYZE;')
         
         # Log audit events - event deletion first
