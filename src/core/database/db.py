@@ -319,6 +319,7 @@ class DB:
                 'details_fields': [
                     'label',
                     'file_size',
+                    'high_quality_file_size',
                 ],
                 'relations': {
                     'albums': {'relation_table': 'albums_images_actual', 'fields_needed': ['label']},

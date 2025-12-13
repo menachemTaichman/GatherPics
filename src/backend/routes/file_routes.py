@@ -218,7 +218,8 @@ def download_images(event_id):
     quality = get_input('quality', required=False) or 'high'
     quality = quality.lower()
     
-    images = event.models.get_entities('images', image_ids)
+    # Get images with details to include file_size and high_quality_file_size from DB
+    images = event.models.get_entities('images', image_ids, include_details=True)
     accessible_image_ids = set(images.keys())
     failed_images = [image_id for image_id in image_ids if image_id not in accessible_image_ids]
     
@@ -237,9 +238,17 @@ def download_images(event_id):
         # Generate presigned URL for download
         presigned_url = file_helper.get_url(file_path, expires_in=3600)
         if presigned_url:
+            # Get file size from database
+            if quality == 'original':
+                size = image_data.get('file_size') or 0
+            else:
+                # Get high_quality_file_size from DB (now included in details_fields)
+                size = image_data.get('high_quality_file_size') or image_data.get('file_size') or 0
+            
             files.append({
                 'url': presigned_url,
-                'filename': label
+                'filename': label,
+                'size': int(size) if size else 0
             })
         else:
             failed_images.append(image_id)
