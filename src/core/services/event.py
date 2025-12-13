@@ -342,11 +342,21 @@ class Event():
                 del original_img
                 gc.collect()
                 
-                # Delete processed file
+                # Delete processed file from to_process after successful processing
+                # TODO: This is the correct behavior - to_process is a temp dir.
+                # Files should be removed after each photo is processed (right?).
+                # For every error: remove the file. Current logic:
+                # - Success: file deleted here (line 346) ✓
+                # - Error in _process_image: file NOT deleted (returns error, file remains) ✗
+                # - Error before _process_image: handled in outer try/except, only unprocessed files cleaned ✗
+                # Consider: Always delete file on error in _process_image to prevent orphaned files
                 self.file_helper.delete(image_path)
                 
                 return display_img, image_id, image_faces, None
             except Exception as e:
+                # TODO: Should we delete the file here on error? Or let outer handler clean up?
+                # Current: File remains in to_process if _process_image fails
+                # Option: Delete here to prevent orphaned files, but might lose file for debugging
                 return None, None, [], e
 
         # Check limitations before starting

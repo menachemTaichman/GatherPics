@@ -27,8 +27,13 @@ class StorageBackend(ABC):
         pass
     
     @abstractmethod
-    def write(self, path: str, data: bytes) -> None:
+    def write(self, path: str, data: bytes, content_type: Optional[str] = None) -> None:
         """Write bytes to file."""
+        pass
+    
+    @abstractmethod
+    def write_stream(self, path: str, fileobj: BinaryIO, content_type: Optional[str] = None, size_limit: Optional[int] = None) -> None:
+        """Write file from stream (file-like object) with optional size limit."""
         pass
     
     @abstractmethod
@@ -72,6 +77,22 @@ class LocalStorageBackend(StorageBackend):
         full_path = self._get_full_path(path)
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
+    
+    def write_stream(self, path: str, fileobj: BinaryIO, content_type: Optional[str] = None, size_limit: Optional[int] = None) -> None:
+        """Write file from stream (file-like object) to local filesystem with optional size limit."""
+        full_path = self._get_full_path(path)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        bytes_read = 0
+        
+        with open(full_path, 'wb') as f:
+            while True:
+                chunk = fileobj.read(8192)  # Read in 8KB chunks
+                if not chunk:
+                    break
+                bytes_read += len(chunk)
+                if size_limit and bytes_read > size_limit:
+                    raise ValueError(f"File exceeds maximum size of {size_limit} bytes")
+                f.write(chunk)
     
     def delete(self, path: str) -> None:
         full_path = self._get_full_path(path)
@@ -137,6 +158,29 @@ class S3StorageBackend(StorageBackend):
             Key=key,
             Body=data,
             **extra_args
+        )
+    
+    def write_stream(self, path: str, fileobj: BinaryIO, content_type: Optional[str] = None, size_limit: Optional[int] = None) -> None:
+        """Write file from stream (file-like object) to S3 with optional size limit."""
+        key = self._get_key(path)
+        extra_args = {}
+        if content_type:
+            extra_args['ContentType'] = content_type
+        
+        bytes_read = 0
+        
+        def limiter(bytes_amount):
+            nonlocal bytes_read
+            bytes_read += bytes_amount
+            if size_limit and bytes_read > size_limit:
+                raise ValueError(f"File exceeds maximum size of {size_limit} bytes")
+        
+        self.s3_client.upload_fileobj(
+            fileobj,
+            self.bucket_name,
+            key,
+            Callback=limiter if size_limit else None,
+            ExtraArgs=extra_args
         )
     
     def delete(self, path: str) -> None:

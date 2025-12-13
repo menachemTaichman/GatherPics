@@ -713,91 +713,147 @@ export const imagesAPI = {
     
     // Step 2: Process with SSE, passing the uploaded filenames
     return new Promise((resolve, reject) => {
-      const fileNamesParam = uploadedFilenames.length > 0 
-        ? `&file_names=${encodeURIComponent(uploadedFilenames.join(','))}` 
-        : '';
-      const url = `${API_BASE}/api/events/${eventId}/images/process-stream?assign_moments=${assignMoments}${fileNamesParam}`;
+      const url = `${API_BASE}/api/events/${eventId}/images/process-stream`;
       
-      // EventSource with credentials for cookie-based auth
-      const eventSource = new EventSource(url, { withCredentials: true });
+      // Get auth token for fetch request
+      const token = jwtService.getTokenSync();
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
-      // Timeout for connection inactivity (no messages for 10 minutes)
-      // This is reset on each message (including keepalive), so processing can take hours
-      // Server sends keepalive messages every 30 seconds, so this only triggers if connection is truly dead
-      let timeout = setTimeout(() => {
-        eventSource.close();
-        reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
-      }, 10 * 60 * 1000);
-      
-      const resetTimeout = () => {
-        // Reset timeout on any message (including keepalive)
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-          eventSource.close();
+      // Use fetch with POST to send file names in body instead of query string
+      fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          assign_moments: assignMoments,
+          file_names: uploadedFilenames.length > 0 ? uploadedFilenames : null,
+        }),
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        // Timeout for connection inactivity (no messages for 10 minutes)
+        // This is reset on each message (including keepalive), so processing can take hours
+        // Server sends keepalive messages every 30 seconds, so this only triggers if connection is truly dead
+        let timeout = setTimeout(() => {
+          reader.cancel();
           reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
         }, 10 * 60 * 1000);
-      };
-      
-      const cleanup = () => {
-        clearTimeout(timeout);
-        eventSource.close();
-      };
-      
-      eventSource.onmessage = (event) => {
-        try {
-          // Reset timeout on any message (server is alive)
-          resetTimeout();
-          
-          // Handle keepalive messages (empty data or ": keepalive")
-          if (!event.data || event.data.trim() === '' || event.data.trim() === ': keepalive') {
-            return; // Just a keepalive, continue waiting
-          }
-          
-          const data = JSON.parse(event.data);
-          
-          if (data.step === 'complete') {
-            cleanup();
-            
-            // Apply changes to store
-            if (data.changes) {
-              const store = useDataStore.getState();
-              store.applyChanges(Array.isArray(data.changes) ? data.changes : []);
-            }
-            
-            // Ensure result exists before resolving
-            if (!data.result) {
-              console.error('Complete event received but no result:', data);
-              reject(new Error('Processing completed but no result data received'));
+        
+        const resetTimeout = () => {
+          // Reset timeout on any message (including keepalive)
+          clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            reader.cancel();
+            reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
+          }, 10 * 60 * 1000);
+        };
+        
+        const cleanup = () => {
+          clearTimeout(timeout);
+          reader.cancel();
+        };
+        
+        const processStream = () => {
+          reader.read().then(({ done, value }) => {
+            if (done) {
+              cleanup();
+              reject(new Error('Stream ended unexpectedly'));
               return;
             }
             
-            resolve(data.result);
-          } else if (data.step === 'error') {
-            cleanup();
-            reject(new Error(data.message || 'Processing failed'));
-          } else {
-            // Progress update
-            if (onProgress) {
-              onProgress(data);
+            // Decode chunk and add to buffer
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete SSE messages (lines ending with \n\n)
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              
+              // Skip empty lines and keepalive messages
+              if (!line.trim() || line.trim() === ': keepalive') {
+                resetTimeout();
+                continue;
+              }
+              
+              // Parse SSE data line (format: "data: {...}")
+              if (line.startsWith('data: ')) {
+                const dataStr = line.substring(6); // Remove "data: " prefix
+                
+                try {
+                  const data = JSON.parse(dataStr);
+                  
+                  // Reset timeout on any message (server is alive)
+                  resetTimeout();
+                  
+                  if (data.step === 'complete') {
+                    cleanup();
+                    
+                    // Apply changes to store
+                    if (data.changes) {
+                      const store = useDataStore.getState();
+                      store.applyChanges(Array.isArray(data.changes) ? data.changes : []);
+                    }
+                    
+                    // Ensure result exists before resolving
+                    if (!data.result) {
+                      console.error('Complete event received but no result:', data);
+                      reject(new Error('Processing completed but no result data received'));
+                      return;
+                    }
+                    
+                    resolve(data.result);
+                    return;
+                  } else if (data.step === 'error') {
+                    cleanup();
+                    reject(new Error(data.message || 'Processing failed'));
+                    return;
+                  } else {
+                    // Progress update
+                    if (onProgress) {
+                      onProgress(data);
+                    }
+                  }
+                } catch (parseError) {
+                  // If it's not JSON, it might be a keepalive - reset timeout and continue
+                  if (dataStr.trim() === '' || dataStr.trim() === ': keepalive') {
+                    resetTimeout();
+                    continue;
+                  }
+                  console.error('Failed to parse SSE data:', parseError, 'Raw data:', dataStr);
+                  // Continue processing - don't reject on parse errors
+                }
+              }
             }
-          }
-        } catch (parseError) {
-          // If it's not JSON, it might be a keepalive - reset timeout and continue
-          if (event.data && (event.data.trim() === '' || event.data.trim() === ': keepalive')) {
-            resetTimeout();
-            return;
-          }
-          console.error('Failed to parse SSE data:', parseError, 'Raw event:', event.data);
-          cleanup();
-          reject(new Error('Failed to parse server response: ' + parseError.message));
-        }
-      };
-      
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        cleanup();
-        reject(new Error('Connection to server lost'));
-      };
+            
+            // Continue reading
+            processStream();
+          }).catch(error => {
+            cleanup();
+            console.error('Stream read error:', error);
+            reject(new Error('Connection to server lost: ' + error.message));
+          });
+        };
+        
+        // Start processing the stream
+        processStream();
+      }).catch(error => {
+        console.error('Fetch error:', error);
+        reject(new Error('Failed to connect to server: ' + error.message));
+      });
     });
   }
 };

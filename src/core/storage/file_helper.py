@@ -44,6 +44,18 @@ class FileHelper:
         """
         self.storage.write(path, data, content_type=content_type)
     
+    def write_stream(self, path: str, fileobj: BinaryIO, content_type: Optional[str] = None, size_limit: Optional[int] = None) -> None:
+        """
+        Write file from stream (file-like object).
+        
+        Args:
+            path: File path (relative to storage root)
+            fileobj: File-like object to read from (must support read())
+            content_type: Optional content type (used for S3)
+            size_limit: Optional maximum file size in bytes
+        """
+        self.storage.write_stream(path, fileobj, content_type=content_type, size_limit=size_limit)
+    
     def delete(self, path: str) -> None:
         """Delete file."""
         self.storage.delete(path)

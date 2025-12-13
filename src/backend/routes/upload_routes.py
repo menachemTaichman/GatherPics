@@ -6,7 +6,7 @@ import re
 
 from src.backend.middleware.auth import require_auth
 from src.backend.helpers import get_event, get_general_models, Forbidden, json_dumps_safe
-from src.backend.validators import get_multiple_inputs, validate_path_param
+from src.backend.validators import get_input, get_multiple_inputs, validate_path_param
 from src.core.storage import get_file_helper
 
 upload_bp = Blueprint('uploads', __name__, url_prefix='/api/events/<event_id>')
@@ -198,11 +198,29 @@ def upload_images(event_id):
 @upload_bp.route("/images/upload", methods=["POST"])
 @require_auth
 def upload_files_only(event_id):
-    """Upload files to to_process directory without processing."""
+    """
+    Upload files to to_process directory without processing.
+    
+    TODO: Cleanup logic gap - If upload succeeds but process-stream fails or is never called,
+    files remain in to_process. Current cleanup only happens:
+    1. On upload errors (in this route)
+    2. On processing errors (in process_new_images)
+    3. After successful processing (in _process_image, line 346)
+    
+    Missing: Cleanup if process-stream is never called or fails before processing starts.
+    Options:
+    - Add client-side cleanup on process-stream failure
+    - Implement a queue system to track upload->process flow
+    - Add background job to clean orphaned files in to_process
+    - Add TTL/expiration to files in to_process
+    """
     import traceback
     from src.core.errors import log_error
     
     saved_files = []
+    MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+    MAX_FILE_COUNT = 30
+    
     try:
         event_id = validate_path_param('event_id', event_id)
         event = get_event(event_id)
@@ -224,12 +242,17 @@ def upload_files_only(event_id):
         if not files:
             return jsonify({"error": "No files provided"}), 400
         
+        # Check file count limit
+        if len(files) > MAX_FILE_COUNT:
+            return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
+        
         file_helper = get_file_helper()
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
         for file in files:
             if file and file.filename:
+                # Validate file extension (JPG only)
                 if not file.filename.lower().endswith(('.jpg', '.jpeg')):
                     continue
                 
@@ -243,9 +266,19 @@ def upload_files_only(event_id):
                     filepath = f"{event.to_process_dir}/{filename}"
                     counter += 1
                 
-                file_bytes = file.read()
-                file_helper.write(filepath, file_bytes, content_type='image/jpeg')
-                saved_files.append(filename)
+                # Stream file upload with size validation (true streaming, no memory accumulation)
+                try:
+                    file_helper.write_stream(filepath, file, content_type='image/jpeg', size_limit=MAX_FILE_SIZE)
+                    saved_files.append(filename)
+                except ValueError as e:
+                    # Size limit exceeded
+                    cleanup_files(saved_files, event.to_process_dir)
+                    return jsonify({"error": f"File '{filename}' exceeds maximum size of 20 MB"}), 400
+                except Exception as e:
+                    # Cleanup on error
+                    if saved_files:
+                        cleanup_files(saved_files, event.to_process_dir)
+                    raise
         
         if not saved_files:
             cleanup_files(saved_files, event.to_process_dir)
@@ -266,21 +299,30 @@ def upload_files_only(event_id):
         log_error(error_msg, type(e).__name__, traceback_str)
         raise
 
-@upload_bp.route("/images/process-stream", methods=["GET"])
+@upload_bp.route("/images/process-stream", methods=["POST"])
 @require_auth
 def process_images_stream(event_id):
     """Process images with SSE progress streaming."""
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     general_models = get_general_models()
-    assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
     
-    file_names_str = request.args.get('file_names', None)
-    file_names = file_names_str.split(',') if file_names_str else None
+    assign_moments = get_input('assign_moments', required=False) or False
+    file_names = get_input('file_names', required=False)
     
+    # TODO: This os.listdir approach won't work in production with S3 storage.
+    # Need to implement S3 list_objects_v2 equivalent or require file_names to be provided.
+    # For now, only works in local development. In production, file_names must be provided.
     if file_names is None:
-        files_to_track = [f for f in os.listdir(event.to_process_dir) 
-                         if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+        # TODO: Replace with S3-compatible file listing when using S3 storage
+        # For S3: use boto3 list_objects_v2 with prefix=event.to_process_dir
+        # This is a temporary solution that only works with local storage
+        try:
+            files_to_track = [f for f in os.listdir(event.to_process_dir) 
+                             if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))]
+        except (OSError, FileNotFoundError):
+            # If to_process_dir doesn't exist or can't list (e.g., S3), require file_names
+            files_to_track = []
     else:
         files_to_track = file_names
     

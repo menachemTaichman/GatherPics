@@ -113,6 +113,7 @@ FIELD_VALIDATORS = {
     'all_albums': TypeAdapter(bool),
     'include_metadata': TypeAdapter(Optional[bool]),
     'filter': TypeAdapter(Optional[bool]),
+    'assign_moments': TypeAdapter(Optional[bool]),
     
     # UUID fields
     'applicant_profile_id': TypeAdapter(Optional[UUIDStr]),
@@ -147,6 +148,7 @@ FIELD_VALIDATORS = {
     'groups_denied': TypeAdapter(Optional[List[UUIDStr]]),
     'selected_groups': TypeAdapter(List[UUIDStr]),
     'ids': TypeAdapter(Optional[List[UUIDStr]]),
+    'file_names': TypeAdapter(Optional[List[Annotated[str, Field(max_length=500)]]]),
 
     # Diagnostic fields (for feedbacks)
     'console_logs': TypeAdapter(Optional[Any]),
