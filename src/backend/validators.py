@@ -149,6 +149,7 @@ FIELD_VALIDATORS = {
     'selected_groups': TypeAdapter(List[UUIDStr]),
     'ids': TypeAdapter(Optional[List[UUIDStr]]),
     'file_names': TypeAdapter(Optional[List[Annotated[str, Field(max_length=500)]]]),
+    'filenames': TypeAdapter(List[Annotated[str, Field(max_length=500)]]),
 
     # Diagnostic fields (for feedbacks)
     'console_logs': TypeAdapter(Optional[Any]),
