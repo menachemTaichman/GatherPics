@@ -1396,11 +1396,11 @@ const isProfileEditable = useMemo(() => {
         },
         getHighQualityUrl: (imageId) => {
           if (!selectedEventId) return null;
-          return `${API_BASE}/api/events/${selectedEventId}/high_quality/${imageId}.webp`;
+          return `${API_BASE}/api/events/${selectedEventId}/high_quality/${imageId}.jpg`;
         },
         getOriginalUrl: (imageId) => {
           if (!selectedEventId) return null;
-          return `${API_BASE}/api/events/${selectedEventId}/original/${imageId}.webp`;
+          return `${API_BASE}/api/events/${selectedEventId}/original/${imageId}.jpg`;
         },
         getFaceCropUrl: (faceId) => {
           if (!selectedEventId) return null;

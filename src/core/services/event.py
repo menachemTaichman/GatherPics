@@ -171,7 +171,7 @@ class Event():
         Returns:
             dict: Summary of processing results
         """
-        from ..utils.image_utils import resize_image, crop_image, extract_all_metadata, save_image
+        from ..utils.image_utils import resize_image, crop_image, extract_metadata_from_bytes, save_image
         import os
         from PIL import Image as PILImage
         from io import BytesIO
@@ -213,17 +213,26 @@ class Event():
                     # For now, return empty - files should be specified by name
                     return []
 
-        def _process_face(display_img, bbox, face_id, image_id, unassociated_group_id):
-            crop_img = crop_image(display_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
+        def _process_face(source_img, bbox, face_id, image_id, unassociated_group_id):
+            # 1. Crop face with padding
+            crop_img = crop_image(source_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
+            
+            # 2. Resize to max 150x150 for smaller file size (maintains aspect ratio)
+            crop_img.thumbnail((150, 150), PILImage.Resampling.LANCZOS)
+            
+            # 3. Save to buffer then upload via stream (avoids reading entire buffer into memory)
             crop_path = f"{self.faces_dir}/{face_id}.webp"
-            save_image(
-                crop_img, crop_path, format='WEBP', quality=90, optimize=True, storage_backend=self.file_helper.storage
-            )
-            face_file_size = self.file_helper.get_file_size(crop_path)
+            face_buffer = BytesIO()
+            crop_img.save(face_buffer, format='WEBP', quality=70, optimize=True)
+            face_file_size = face_buffer.tell()  # Get size before seeking
+            face_buffer.seek(0)
+            self.file_helper.write_stream(crop_path, face_buffer, content_type='image/webp')
+            
             del crop_img
+            
             return {
                 "image_id": image_id,
-                "face_width": bbox['width'],
+                "face_width": bbox['width'],  # Original bbox dimensions from detection
                 "face_height": bbox['height'],
                 "face_left": bbox['left'],
                 "face_top": bbox['top'],
@@ -261,103 +270,109 @@ class Event():
             return groups_created
 
         def _process_image(image_file, unassociated_group_id: str, upload_id: str):
-            # Read image from storage
+            # Read image from storage once
             image_path = f"{self.to_process_dir}/{image_file}"
             image_bytes = self.file_helper.read(image_path)
-            original_img = PILImage.open(BytesIO(image_bytes))
+            image_stream = BytesIO(image_bytes)
             file_size = len(image_bytes)
             
-            # Extract metadata - need temp file for exifread
-            temp_path = f"/tmp/{image_file}"
-            with open(temp_path, 'wb') as f:
-                f.write(image_bytes)
-            metadata = extract_all_metadata(temp_path)
-            os.remove(temp_path)
-            del image_bytes  # No longer needed after metadata extraction
+            # Extract metadata (lightweight operation)
+            metadata = extract_metadata_from_bytes(image_bytes)
             
             try:
-                width, height = original_img.size
-                date_taken = metadata.get('date_taken')
-                exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
-                image_name, image_ext = os.path.splitext(image_file)
-                label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, event_id=self.event_id)
-
-                image_id = self.models.add(
-                    'images',
-                    {
-                        'label': label,
-                        'date_taken': date_taken,
-                        'file_size': file_size,
-                        'width': width,
-                        'height': height,
-                        'upload_id': upload_id
-                    }
-                )
-                # Save high quality (4096px, jpg, quality=95, with EXIF)
-                high_quality_img = resize_image(original_img, 4096)
-                high_quality_path = f"{self.high_quality_dir}/{image_id}.jpg"
-                save_image(
-                    high_quality_img, high_quality_path, exif=exif_bytes, format='JPEG', quality=95, optimize=True, storage_backend=self.file_helper.storage
-                )
-                high_quality_file_size = self.file_helper.get_file_size(high_quality_path)
-                del high_quality_img
+                # Open image with context manager for proper resource management
+                with PILImage.open(image_stream) as original_img:
+                    width, height = original_img.size
+                    date_taken = metadata.get('date_taken')
+                    image_name, image_ext = os.path.splitext(image_file)
+                    
+                    # Extract EXIF for high quality version
+                    exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
+                    
+                    # Create DB record
+                    label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, event_id=self.event_id)
+                    image_id = self.models.add(
+                        'images',
+                        {
+                            'label': label,
+                            'date_taken': date_taken,
+                            'file_size': file_size,
+                            'width': width,
+                            'height': height,
+                            'upload_id': upload_id
+                        }
+                    )
+                    
+                    # --- STAGE A: High Quality (used for face detection and cropping) ---
+                    high_quality_img = resize_image(original_img, 4096)
+                    high_quality_path = f"{self.high_quality_dir}/{image_id}.jpg"
+                    
+                    # Save HQ to buffer then upload via stream (avoids reading entire buffer into memory)
+                    hq_buffer = BytesIO()
+                    high_quality_img.save(hq_buffer, format='JPEG', quality=95, optimize=True, exif=exif_bytes)
+                    high_quality_file_size = hq_buffer.tell()  # Get size from buffer position (before seeking)
+                    hq_buffer.seek(0)
+                    self.file_helper.write_stream(high_quality_path, hq_buffer, content_type='image/jpeg')
+                    
+                    # --- STAGE B: Face Detection & Cropping (use high quality for better results) ---
+                    # In dev (local storage), pass image directly; in prod (S3), image_path is used
+                    detected_faces = self.face_utils.detect_faces(image=high_quality_img, image_path=high_quality_path, external_image_id=image_id)
+                    image_faces = []
+                    for face_id, bbox in detected_faces:
+                        # Use high_quality_img for better face cropping quality
+                        face_data = _process_face(high_quality_img, bbox, face_id, image_id, unassociated_group_id)
+                        image_faces.append(face_data)
+                    
+                    # Free high quality image from memory after face processing
+                    del high_quality_img
+                    
+                    # --- STAGE C: Display & Thumb ---
+                    # Display (WebP)
+                    display_img = resize_image(original_img, display_size)
+                    display_path = f"{self.display_dir}/{image_id}.webp"
+                    
+                    disp_buffer = BytesIO()
+                    display_img.save(disp_buffer, format='WEBP', quality=90, optimize=True)
+                    display_file_size = disp_buffer.tell()  # Get size before seeking
+                    disp_buffer.seek(0)
+                    self.file_helper.write_stream(display_path, disp_buffer, content_type='image/webp')
+                    del display_img
+                    
+                    # Thumb (WebP)
+                    thumb_img = resize_image(original_img, thumb_size)
+                    thumb_path = f"{self.thumb_dir}/{image_id}.webp"
+                    
+                    thumb_buffer = BytesIO()
+                    thumb_img.save(thumb_buffer, format='WEBP', quality=80, optimize=True)
+                    thumb_file_size = thumb_buffer.tell()  # Get size before seeking
+                    thumb_buffer.seek(0)
+                    self.file_helper.write_stream(thumb_path, thumb_buffer, content_type='image/webp')
+                    del thumb_img
                 
-                # Save display (2048px, webp, quality=90)
-                display_img = resize_image(original_img, display_size)
-                display_path = f"{self.display_dir}/{image_id}.webp"
-                save_image(
-                    display_img, display_path, format='WEBP', quality=90, optimize=True, storage_backend=self.file_helper.storage
-                )
-                display_file_size = self.file_helper.get_file_size(display_path)
+                # --- STAGE D: Original Copy (server-side copy, no data transfer) ---
+                original_path = f"{self.original_dir}/{image_id}.jpg"
+                self.file_helper.copy(image_path, original_path, content_type='image/jpeg')
                 
-                # Save thumb (512px, webp, quality=80)
-                thumb_img = resize_image(original_img, thumb_size)
-                thumb_path = f"{self.thumb_dir}/{image_id}.webp"
-                save_image(
-                    thumb_img, thumb_path, format='WEBP', quality=80, optimize=True, storage_backend=self.file_helper.storage
-                )
-                thumb_file_size = self.file_helper.get_file_size(thumb_path)
-                del thumb_img
-                
-                # Update image record with file sizes
+                # Update DB with file sizes
                 self.models.edit('images', image_id, {
                     'high_quality_file_size': high_quality_file_size,
                     'display_file_size': display_file_size,
                     'thumb_file_size': thumb_file_size
                 })
                 
-                # Save original (copy)
-                original_save_path = f"{self.original_dir}/{image_id}.jpg"
-                # Read original bytes and save
-                original_bytes = self.file_helper.read(image_path)
-                self.file_helper.write(original_save_path, original_bytes, content_type='image/jpeg')
-                del original_bytes
+                # Cleanup
+                del image_bytes  # Free original bytes from memory
+                self.file_helper.delete(image_path)  # Delete processed file
+                gc.collect()  # Free memory after processing
                 
-                detected_faces = self.face_utils.detect_faces(display_img, external_image_id=image_id)
-                image_faces = []
-                for face_id, bbox in detected_faces:
-                    face_data = _process_face(original_img, bbox, face_id, image_id, unassociated_group_id)
-                    image_faces.append(face_data)
-                original_img.close()
-                del original_img
-                gc.collect()
-                
-                # Delete processed file from to_process after successful processing
-                # TODO: This is the correct behavior - to_process is a temp dir.
-                # Files should be removed after each photo is processed (right?).
-                # For every error: remove the file. Current logic:
-                # - Success: file deleted here (line 346) ✓
-                # - Error in _process_image: file NOT deleted (returns error, file remains) ✗
-                # - Error before _process_image: handled in outer try/except, only unprocessed files cleaned ✗
-                # Consider: Always delete file on error in _process_image to prevent orphaned files
-                self.file_helper.delete(image_path)
-                
-                return display_img, image_id, image_faces, None
+                return image_id, image_faces, None
+
             except Exception as e:
+                # Cleanup on error
+                gc.collect()
                 # TODO: Should we delete the file here on error? Or let outer handler clean up?
                 # Current: File remains in to_process if _process_image fails
-                # Option: Delete here to prevent orphaned files, but might lose file for debugging
-                return None, None, [], e
+                return None, [], e
 
         # Check limitations before starting
         _send_progress('validation', 0, 1, 'Checking upload limits...')
@@ -438,8 +453,8 @@ class Event():
                 _log(f"Processing image {i}/{len(image_files)}: {image_file}")
                 
                 self.models.add_rekognition_calls(1)
-                display_img, image_id, image_faces, error = _process_image(image_file, unassociated_group_id, upload_id)
-                if error is not None or display_img is None or image_id is None:
+                image_id, image_faces, error = _process_image(image_file, unassociated_group_id, upload_id)
+                if error is not None or image_id is None:
                     error_msg = f"Error processing {image_file}: {str(error) if error else 'Invalid image or id'}"
                     _log(f"  {error_msg}")
                     errors.append(error_msg)
@@ -448,7 +463,6 @@ class Event():
                 all_faces.extend(image_faces)
                 processed_images.append(image_id)
                 processed_file_names.append(image_file)  # Track successfully processed file
-                del display_img  # No longer needed after face detection
                 gc.collect()  # Free memory between image processing iterations
 
             _log(f"Completed image processing. Detected {len(all_faces)} total faces")

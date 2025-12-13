@@ -1,7 +1,5 @@
-from flask import Blueprint, abort, make_response, send_file
+from flask import Blueprint, abort, make_response, jsonify
 import os
-import io
-import zipfile
 
 from src.backend.middleware.auth import require_auth, optional_auth
 from src.backend.helpers import get_event, get_general_models
@@ -9,6 +7,22 @@ from src.backend.validators import get_input, validate_path_param
 from src.core.storage import get_file_helper
 
 file_bp = Blueprint('files', __name__, url_prefix='/api/events/<event_id>')
+
+def _add_cache_headers(resp):
+    """Add cache headers to response, handling redirects, streaming, and regular responses."""
+    if hasattr(resp, 'status_code') and resp.status_code in (301, 302, 303, 307, 308):
+        # Redirect response (S3 presigned URL)
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        return resp
+    elif hasattr(resp, 'direct_passthrough') and resp.direct_passthrough:
+        # Streaming response (S3 proxy)
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        return resp
+    else:
+        # Regular response (local file)
+        resp = make_response(resp)
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        return resp
 
 @file_bp.route('/file/<file_type>/<file_id>.webp')
 @require_auth
@@ -43,14 +57,20 @@ def get_file_webp(event_id, file_type, file_id):
         abort(403)
     
     file_helper = get_file_helper()
-    file_path = f"{dir_map[file_type]}/{file_id}.webp"
+    
+    # High quality and original files are stored as .jpg, not .webp
+    if file_type in ['high_quality', 'original']:
+        file_path = f"{dir_map[file_type]}/{file_id}.jpg"
+        mimetype = 'image/jpeg'
+    else:
+        file_path = f"{dir_map[file_type]}/{file_id}.webp"
+        mimetype = 'image/webp'
     
     if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
-    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-    return resp
+    resp = file_helper.serve_file(file_path, mimetype=mimetype)
+    return _add_cache_headers(resp)
 
 @file_bp.route('/display/<image_id>.webp')
 @require_auth
@@ -73,19 +93,47 @@ def get_thumbnail_image_webp(event_id, image_id):
     image_id = validate_path_param('image_id', image_id)
     return get_file_webp(event_id, 'thumb', image_id)
 
-@file_bp.route('/high_quality/<image_id>.webp')
+@file_bp.route('/high_quality/<image_id>.jpg')
 @require_auth
-def get_high_quality_image_webp(event_id, image_id):
+def get_high_quality_image_jpg(event_id, image_id):
+    """Serve high quality JPG images (for streaming in ZIP downloads)."""
     event_id = validate_path_param('event_id', event_id)
     image_id = validate_path_param('image_id', image_id)
-    return get_file_webp(event_id, 'high_quality', image_id)
+    event = get_event(event_id)
+    
+    if not event.models.is_accessible('images', image_id):
+        abort(403)
+    
+    file_helper = get_file_helper()
+    file_path = f"{event.high_quality_dir}/{image_id}.jpg"
+    
+    if not file_helper.exists(file_path):
+        abort(404)
+    
+    # For ZIP streaming, use as_attachment=False to proxy/stream the file
+    resp = file_helper.serve_file(file_path, mimetype='image/jpeg', as_attachment=False)
+    return _add_cache_headers(resp)
 
-@file_bp.route('/original/<image_id>.webp')
+@file_bp.route('/original/<image_id>.jpg')
 @require_auth
-def get_original_image_webp(event_id, image_id):
+def get_original_image_jpg(event_id, image_id):
+    """Serve original JPG images (for streaming in ZIP downloads)."""
     event_id = validate_path_param('event_id', event_id)
     image_id = validate_path_param('image_id', image_id)
-    return get_file_webp(event_id, 'original', image_id)
+    event = get_event(event_id)
+    
+    if not event.models.is_accessible('images', image_id):
+        abort(403)
+    
+    file_helper = get_file_helper()
+    file_path = f"{event.original_dir}/{image_id}.jpg"
+    
+    if not file_helper.exists(file_path):
+        abort(404)
+    
+    # For ZIP streaming, use as_attachment=False to proxy/stream the file
+    resp = file_helper.serve_file(file_path, mimetype='image/jpeg', as_attachment=False)
+    return _add_cache_headers(resp)
 
 @file_bp.route('/representative/display', methods=['GET', 'HEAD'])
 @require_auth
@@ -105,9 +153,8 @@ def get_event_display_representative_webp(event_id):
     if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
-    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-    return resp
+    resp = file_helper.serve_file(file_path, mimetype='image/webp')
+    return _add_cache_headers(resp)
 
 @file_bp.route('/representative/thumb', methods=['GET', 'HEAD'])
 @optional_auth
@@ -127,9 +174,8 @@ def get_event_thumb_representative_webp(event_id):
     if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
-    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-    return resp
+    resp = file_helper.serve_file(file_path, mimetype='image/webp')
+    return _add_cache_headers(resp)
 
 @file_bp.route('/<entity>/<parent_id>/representative', methods=['GET', 'HEAD'])
 @require_auth
@@ -159,14 +205,13 @@ def get_representative_webp(event_id, entity, parent_id):
     if not file_helper.exists(file_path):
         abort(404)
     
-    resp = make_response(file_helper.serve_file(file_path, mimetype='image/webp'))
-    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-    return resp
+    resp = file_helper.serve_file(file_path, mimetype='image/webp')
+    return _add_cache_headers(resp)
 
 @file_bp.route("/download", methods=["POST"])
 @require_auth
 def download_images(event_id):
-    """Download images as a ZIP file."""
+    """Return presigned URLs for downloading images (client-side ZIP creation)."""
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     image_ids = get_input('image_ids', required=True)
@@ -174,32 +219,33 @@ def download_images(event_id):
     quality = quality.lower()
     
     images = event.models.get_entities('images', image_ids)
-    memory_file = io.BytesIO()
-    failed_images = []
     accessible_image_ids = set(images.keys())
-    failed_images.extend(image_id for image_id in image_ids if image_id not in accessible_image_ids)
+    failed_images = [image_id for image_id in image_ids if image_id not in accessible_image_ids]
     
     file_helper = get_file_helper()
-    with zipfile.ZipFile(memory_file, 'w') as zf:
-        for image_id, image_data in images.items():
-            label = image_data.get('label') or image_id
-            
-            src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
-            file_path = f"{src_dir}/{image_id}.jpg"
-            if file_helper.exists(file_path):
-                if not os.path.splitext(label)[1]:
-                    label = f"{label}.jpg"
-                file_data = file_helper.read(file_path)
-                zf.writestr(label, file_data)
-            else:
-                failed_images.append(image_id)
+    files = []
     
-    # Serve ZIP file from memory (not from storage, so use send_file directly)
-    memory_file.seek(0)
-    return send_file(
-        memory_file,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name='images.zip'
-    )
+    for image_id, image_data in images.items():
+        label = image_data.get('label') or image_id
+        
+        src_dir = event.high_quality_dir if quality != 'original' else event.original_dir
+        file_path = f"{src_dir}/{image_id}.jpg"
+        
+        if not os.path.splitext(label)[1]:
+            label = f"{label}.jpg"
+        
+        # Generate presigned URL for download
+        presigned_url = file_helper.get_url(file_path, expires_in=3600)
+        if presigned_url:
+            files.append({
+                'url': presigned_url,
+                'filename': label
+            })
+        else:
+            failed_images.append(image_id)
+    
+    return jsonify({
+        'files': files,
+        'failed_images': failed_images
+    })
 

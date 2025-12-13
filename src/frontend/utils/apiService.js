@@ -200,14 +200,14 @@ export const urlHelpers = {
     if (!eventId) {
       throw new Error(`Event not found: ${eventUrl}`);
     }
-    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp`;
+    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.jpg`;
   },
   getOriginalUrl: async (eventUrl, imageId) => {
     const eventId = await resolveEventId(eventUrl);
     if (!eventId) {
       throw new Error(`Event not found: ${eventUrl}`);
     }
-    return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp`;
+    return `${API_BASE}/api/events/${eventId}/original/${imageId}.jpg`;
   },
   getFaceCropUrl: async (eventUrl, faceId) => {
     const eventId = await resolveEventId(eventUrl);
@@ -254,10 +254,10 @@ export const urlHelpers = {
     return `${API_BASE}/api/events/${eventId}/thumb/${imageId}.webp`;
   },
   getHighQualityUrlSync: (eventId, imageId) => {
-    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.webp`;
+    return `${API_BASE}/api/events/${eventId}/high_quality/${imageId}.jpg`;
   },
   getOriginalUrlSync: (eventId, imageId) => {
-    return `${API_BASE}/api/events/${eventId}/original/${imageId}.webp`;
+    return `${API_BASE}/api/events/${eventId}/original/${imageId}.jpg`;
   },
   getFaceCropUrlSync: (eventId, faceId) => {
     return `${API_BASE}/api/events/${eventId}/faces/${faceId}.webp`;
@@ -945,19 +945,17 @@ export const albumsAPI = {
 
 // Download API
 export const downloadAPI = {
-  // Download images
-  download: async (imageIds, format = 'zip', eventUrl, options = {}) => {
+  // Get presigned URLs for downloading images
+  getDownloadUrls: async (imageIds, eventUrl, options = {}) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(
       `/api/events/${eventId}/download`,
       {
         image_ids: imageIds,
-        format,
         quality: options.quality || 'high'
-      },
-      { responseType: 'blob' }
+      }
     );
-    return response.data; // Blob
+    return response.data; // { files: [{url, filename}], failed_images: [] }
   }
 };
 

@@ -92,11 +92,11 @@ export function useEventUrls(eventUrl) {
       },
       getHighQualityUrl: (imageId) => {
         if (!currentEventId) return null;
-        return `${API_BASE}/api/events/${currentEventId}/high_quality/${imageId}.webp`;
+        return `${API_BASE}/api/events/${currentEventId}/high_quality/${imageId}.jpg`;
       },
       getOriginalUrl: (imageId) => {
         if (!currentEventId) return null;
-        return `${API_BASE}/api/events/${currentEventId}/original/${imageId}.webp`;
+        return `${API_BASE}/api/events/${currentEventId}/original/${imageId}.jpg`;
       },
       getFaceCropUrl: (faceId) => {
         if (!currentEventId) return null;

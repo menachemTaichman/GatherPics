@@ -66,21 +66,29 @@ class AWSRekognitionHelper:
             print(f"Error getting face ids: {e}")
             return []
 
-    def index_faces(self, image_bytes: bytes, external_image_id: str = '') -> list[dict]:
+    def index_faces(self, image_bytes: bytes = None, image_s3_object: dict = None, external_image_id: str = '') -> list[dict]:
         """
         Index a face into the collection.
         
         Args:
-            image_bytes: Image bytes (image already in memory)
+            image_bytes: Image bytes (for local storage or when image is in memory)
+            image_s3_object: S3 object reference dict with 'Bucket' and 'Name' keys (for S3 storage - preferred)
             external_image_id: External image identifier
         
         Returns:
             List of face records
         """
         try:
+            if image_s3_object:
+                image_param = {'S3Object': image_s3_object}
+            elif image_bytes:
+                image_param = {'Bytes': image_bytes}
+            else:
+                raise ValueError("Either image_bytes or image_s3_object must be provided")
+            
             response = self.client.index_faces(
                 CollectionId=self.collection_id,
-                Image={'Bytes': image_bytes},
+                Image=image_param,
                 ExternalImageId=external_image_id,
                 DetectionAttributes=['DEFAULT'],
                 MaxFaces=50
@@ -144,26 +152,35 @@ class FaceUtils:
             self._rek_helper = AWSRekognitionHelper(self.event_id, storage_backend=self.storage_backend)
         return self._rek_helper
 
-    def detect_faces(self, image: Image.Image, external_image_id: str = '') -> list[tuple[str, dict]]:
+    def detect_faces(self, image: Image.Image = None, image_path: str = None, external_image_id: str = '') -> list[tuple[str, dict]]:
         """
-        Detects faces in the given PIL image and returns a list of tuples of AWSfaceId and face bounding box dicts.
+        Detects faces in an image and returns a list of tuples of AWSfaceId and face bounding box dicts.
         
         Args:
-            image: PIL Image object (already in memory)
+            image: PIL Image object (already in memory) - used when image_path is not provided
+            image_path: Path to image file in storage (preferred for S3 storage to avoid data transfer)
             external_image_id: External image identifier
         
         Returns:
             List of tuples: (face_id, bounding_box_dict)
         """
-        # Convert PIL Image to JPEG bytes (in memory, no disk I/O)
+        if image_path and self.storage_backend:
+            s3_ref = self.storage_backend.get_s3_reference(image_path)
+            if s3_ref and 'S3Object' in s3_ref:
+                face_details = self.rek_helper.index_faces(image_s3_object=s3_ref['S3Object'], external_image_id=external_image_id)
+                faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
+                return faces
+        
+        # Fallback: Convert PIL Image to JPEG bytes (for local storage or when image is in memory)
+        if image is None:
+            raise ValueError("Either image or image_path must be provided")
+        
         buffer = BytesIO()
         image.save(buffer, format='JPEG', quality=90)
         buffer.seek(0)
         image_bytes = buffer.read()
         
-        # Use bytes method - image is already in memory
         face_details = self.rek_helper.index_faces(image_bytes=image_bytes, external_image_id=external_image_id)
-        
         faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
         return faces
 

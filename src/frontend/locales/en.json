@@ -1533,7 +1533,15 @@
     "clickToRemoveFromQueue": "Click to remove from queue",
     "addBackToQueue": "Add back to queue",
     "removeFromDownloadedList": "Remove from downloaded list",
-    "removeFromUploadedList": "Remove from uploaded list"
+    "removeFromUploadedList": "Remove from uploaded list",
+    "gettingDownloadUrls": "Getting download URLs...",
+    "noFilesToDownload": "No files available to download",
+    "someImagesFailed": "{{count}} image(s) failed to download",
+    "downloadingZip": "Creating ZIP file...",
+    "downloadingProgress": "Downloading {{current}} of {{total}}",
+    "downloading": "Downloading...",
+    "downloadComplete": "Download complete!",
+    "downloadFailed": "Download failed: {{error}}"
   },
   "imageActions": {
     "addedTo": "Added to",

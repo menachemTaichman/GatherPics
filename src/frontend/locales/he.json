@@ -1534,7 +1534,15 @@
     "clickToRemoveFromQueue": "לחץ כדי להסיר מהתור",
     "addBackToQueue": "הוסף חזרה לתור",
     "removeFromDownloadedList": "הסר מרשימת הורדות",
-    "removeFromUploadedList": "הסר מרשימת העלאות"
+    "removeFromUploadedList": "הסר מרשימת העלאות",
+    "gettingDownloadUrls": "מביא כתובות הורדה...",
+    "noFilesToDownload": "אין קבצים זמינים להורדה",
+    "someImagesFailed": "{{count}} תמונה/ות נכשלו בהורדה",
+    "downloadingZip": "יוצר קובץ ZIP...",
+    "downloadingProgress": "מוריד {{current}} מתוך {{total}}",
+    "downloading": "מוריד...",
+    "downloadComplete": "ההורדה הושלמה!",
+    "downloadFailed": "ההורדה נכשלה: {{error}}"
   },
   "imageActions": {
     "addedTo": "נוסף ל-",

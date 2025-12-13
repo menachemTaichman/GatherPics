@@ -195,24 +195,130 @@ def upload_images(event_id):
             cleanup_files(saved_files, event.to_process_dir)
 """
 
+@upload_bp.route("/images/upload-urls", methods=["POST"])
+@require_auth
+def get_upload_urls(event_id):
+    """
+    Generate presigned URLs for direct S3 uploads.
+    
+    Request body:
+    {
+        "files": [
+            {"filename": "image1.jpg", "size": 1234567},
+            ...
+        ]
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "upload_urls": [
+            {
+                "filename": "image1.jpg",
+                "upload_url": "https://...",
+                "filepath": "event_id/to_process/image1.jpg"
+            },
+            ...
+        ]
+    }
+    """
+    event_id = validate_path_param('event_id', event_id)
+    event = get_event(event_id)
+    general_models = get_general_models()
+    
+    if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+        raise Forbidden("Permission denied: cannot upload and delete images")
+    
+    MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+    MAX_FILE_COUNT = 30
+    
+    files_data = get_input('files', required=True)
+    if not isinstance(files_data, list) or not files_data:
+        return jsonify({"error": "No files provided"}), 400
+    
+    # Check file count limit
+    if len(files_data) > MAX_FILE_COUNT:
+        return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
+    
+    file_helper = get_file_helper()
+    upload_urls = []
+    
+    for file_info in files_data:
+        if not isinstance(file_info, dict) or 'filename' not in file_info:
+            continue
+        
+        original_filename = file_info['filename']
+        file_size = file_info.get('size', 0)
+        
+        # Validate file extension (JPG only)
+        if not original_filename.lower().endswith(('.jpg', '.jpeg')):
+            continue
+        
+        # Validate file size
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({"error": f"File '{original_filename}' exceeds maximum size of 20 MB"}), 400
+        
+        filename = sanitize_filename(original_filename)
+        filepath = f"{event.to_process_dir}/{filename}"
+        
+        # Handle filename conflicts
+        base, ext = os.path.splitext(filename)
+        counter = 1
+        while file_helper.exists(filepath):
+            filename = f"{base}_{counter}{ext}"
+            filepath = f"{event.to_process_dir}/{filename}"
+            counter += 1
+        
+        # Generate presigned upload URL with conditions (only for S3)
+        upload_info = file_helper.get_upload_url(
+            filepath, 
+            content_type='image/jpeg', 
+            max_size=file_size if file_size > 0 else MAX_FILE_SIZE,
+            expires_in=3600
+        )
+        
+        if upload_info:
+            # S3 storage - return presigned POST URL with fields
+            upload_urls.append({
+                "filename": filename,
+                "upload_url": upload_info['url'],
+                "upload_fields": upload_info['fields'],
+                "filepath": filepath
+            })
+        else:
+            # Local storage - return filepath for direct upload
+            # For local storage, client will still upload to server
+            upload_urls.append({
+                "filename": filename,
+                "upload_url": None,  # Will use regular upload endpoint
+                "upload_fields": None,
+                "filepath": filepath
+            })
+    
+    if not upload_urls:
+        return jsonify({"error": "No valid JPG files provided"}), 400
+    
+    return jsonify({
+        "success": True,
+        "upload_urls": upload_urls
+    })
+
 @upload_bp.route("/images/upload", methods=["POST"])
 @require_auth
 def upload_files_only(event_id):
     """
-    Upload files to to_process directory without processing.
+    Verify uploaded files exist in storage (for S3 presigned uploads) or upload files directly (for local storage).
     
-    TODO: Cleanup logic gap - If upload succeeds but process-stream fails or is never called,
-    files remain in to_process. Current cleanup only happens:
-    1. On upload errors (in this route)
-    2. On processing errors (in process_new_images)
-    3. After successful processing (in _process_image, line 346)
+    For S3: Accepts filenames that were uploaded via presigned URLs and verifies they exist.
+    For local: Accepts files via multipart/form-data and uploads them.
     
-    Missing: Cleanup if process-stream is never called or fails before processing starts.
-    Options:
-    - Add client-side cleanup on process-stream failure
-    - Implement a queue system to track upload->process flow
-    - Add background job to clean orphaned files in to_process
-    - Add TTL/expiration to files in to_process
+    Request body (S3):
+    {
+        "filenames": ["image1.jpg", "image2.jpg"]
+    }
+    
+    Request body (local):
+    multipart/form-data with 'files' field
     """
     import traceback
     from src.core.errors import log_error
@@ -226,74 +332,107 @@ def upload_files_only(event_id):
         event = get_event(event_id)
         general_models = get_general_models()
         
-        # Wrap request.files access in try-except to catch parsing errors
-        try:
-            if 'files' not in request.files:
-                return jsonify({"error": "No files provided"}), 400
-            
-            files = request.files.getlist('files')
-        except Exception as e:
-            # Catch errors during request parsing (e.g., timeout, disconnect)
-            error_msg = f"Error reading uploaded files: {str(e)}"
-            traceback_str = traceback.format_exc()
-            log_error(error_msg, "RequestParsingError", traceback_str)
-            return jsonify({"error": "Failed to read uploaded files. The upload may have timed out or been interrupted."}), 500
-        
-        if not files:
-            return jsonify({"error": "No files provided"}), 400
-        
-        # Check file count limit
-        if len(files) > MAX_FILE_COUNT:
-            return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
-        
         file_helper = get_file_helper()
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
-        for file in files:
-            if file and file.filename:
-                # Validate file extension (JPG only)
-                if not file.filename.lower().endswith(('.jpg', '.jpeg')):
+        # Check if using S3 (presigned URLs) or local storage
+        if not file_helper.is_local:
+            # S3 storage - verify files exist that were uploaded via presigned URLs
+            filenames = get_input('filenames', required=True)
+            if not isinstance(filenames, list) or not filenames:
+                return jsonify({"error": "No filenames provided"}), 400
+            
+            # Check file count limit
+            if len(filenames) > MAX_FILE_COUNT:
+                return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
+            
+            # Verify each file exists
+            for filename in filenames:
+                if not isinstance(filename, str):
                     continue
                 
-                filename = sanitize_filename(file.filename)
+                # Validate file extension (JPG only)
+                if not filename.lower().endswith(('.jpg', '.jpeg')):
+                    continue
+                
                 filepath = f"{event.to_process_dir}/{filename}"
                 
-                base, ext = os.path.splitext(filename)
-                counter = 1
-                while file_helper.exists(filepath):
-                    filename = f"{base}_{counter}{ext}"
-                    filepath = f"{event.to_process_dir}/{filename}"
-                    counter += 1
-                
-                # Stream file upload with size validation (true streaming, no memory accumulation)
-                try:
-                    file_helper.write_stream(filepath, file, content_type='image/jpeg', size_limit=MAX_FILE_SIZE)
+                # Verify file exists in S3
+                if file_helper.exists(filepath):
                     saved_files.append(filename)
-                except ValueError as e:
-                    # Size limit exceeded
-                    cleanup_files(saved_files, event.to_process_dir)
-                    return jsonify({"error": f"File '{filename}' exceeds maximum size of 20 MB"}), 400
-                except Exception as e:
-                    # Cleanup on error
-                    if saved_files:
+                else:
+                    # File doesn't exist - might not have been uploaded yet
+                    return jsonify({"error": f"File '{filename}' not found. Please upload it first using the presigned URL."}), 400
+            
+            if not saved_files:
+                return jsonify({"error": "No valid JPG files provided"}), 400
+            
+            return jsonify({
+                "success": True,
+                "files_saved": len(saved_files),
+                "filenames": saved_files
+            })
+        else:
+            # Local storage - upload files directly (backward compatibility)
+            try:
+                if 'files' not in request.files:
+                    return jsonify({"error": "No files provided"}), 400
+                
+                files = request.files.getlist('files')
+            except Exception as e:
+                error_msg = f"Error reading uploaded files: {str(e)}"
+                traceback_str = traceback.format_exc()
+                log_error(error_msg, "RequestParsingError", traceback_str)
+                return jsonify({"error": "Failed to read uploaded files. The upload may have timed out or been interrupted."}), 500
+            
+            if not files:
+                return jsonify({"error": "No files provided"}), 400
+            
+            # Check file count limit
+            if len(files) > MAX_FILE_COUNT:
+                return jsonify({"error": f"Too many files. Maximum {MAX_FILE_COUNT} files allowed."}), 400
+            
+            for file in files:
+                if file and file.filename:
+                    # Validate file extension (JPG only)
+                    if not file.filename.lower().endswith(('.jpg', '.jpeg')):
+                        continue
+                    
+                    filename = sanitize_filename(file.filename)
+                    filepath = f"{event.to_process_dir}/{filename}"
+                    
+                    base, ext = os.path.splitext(filename)
+                    counter = 1
+                    while file_helper.exists(filepath):
+                        filename = f"{base}_{counter}{ext}"
+                        filepath = f"{event.to_process_dir}/{filename}"
+                        counter += 1
+                    
+                    # Stream file upload with size validation
+                    try:
+                        file_helper.write_stream(filepath, file, content_type='image/jpeg', size_limit=MAX_FILE_SIZE)
+                        saved_files.append(filename)
+                    except ValueError as e:
                         cleanup_files(saved_files, event.to_process_dir)
-                    raise
-        
-        if not saved_files:
-            cleanup_files(saved_files, event.to_process_dir)
-            return jsonify({"error": "No valid JPG files provided"}), 400
-        
-        return jsonify({
-            "success": True,
-            "files_saved": len(saved_files),
-            "filenames": saved_files
-        })
+                        return jsonify({"error": f"File '{filename}' exceeds maximum size of 20 MB"}), 400
+                    except Exception as e:
+                        if saved_files:
+                            cleanup_files(saved_files, event.to_process_dir)
+                        raise
+            
+            if not saved_files:
+                cleanup_files(saved_files, event.to_process_dir)
+                return jsonify({"error": "No valid JPG files provided"}), 400
+            
+            return jsonify({
+                "success": True,
+                "files_saved": len(saved_files),
+                "filenames": saved_files
+            })
     except Exception as e:
-        # Cleanup any files that were saved before the error
         if saved_files and 'event' in locals():
             cleanup_files(saved_files, event.to_process_dir)
-        # Log the error if it hasn't been logged yet (request parsing errors are already logged)
         error_msg = str(e)
         traceback_str = traceback.format_exc()
         log_error(error_msg, type(e).__name__, traceback_str)

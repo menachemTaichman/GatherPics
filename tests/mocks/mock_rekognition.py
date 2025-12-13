@@ -265,7 +265,7 @@ class MockRekognitionClient:
     def index_faces(
         self,
         CollectionId: str,
-        Image: Dict[str, bytes],
+        Image: Dict[str, Any],
         ExternalImageId: str = '',
         DetectionAttributes: List[str] = None,
         MaxFaces: int = 50
@@ -278,7 +278,7 @@ class MockRekognitionClient:
         
         Args:
             CollectionId: The collection ID
-            Image: Dict with 'Bytes' key containing image bytes
+            Image: Dict with either 'Bytes' key containing image bytes, or 'S3Object' with 'Bucket' and 'Name' keys
             ExternalImageId: Optional external identifier for the image
             DetectionAttributes: Optional list of attributes to detect
             MaxFaces: Maximum number of faces to detect
@@ -291,7 +291,26 @@ class MockRekognitionClient:
             if CollectionId not in self._collections:
                 self.create_collection(CollectionId)
             
+            # Support both Bytes and S3Object (for local dev, read from filesystem)
             image_bytes = Image.get('Bytes', b'')
+            if not image_bytes:
+                # Try S3Object reference (for local dev, read from local filesystem)
+                s3_object = Image.get('S3Object')
+                if s3_object:
+                    # In development, S3Object.Name is the local path
+                    # For mock, we just need to read the file to get bytes for face ID generation
+                    s3_key = s3_object.get('Name', '')
+                    if s3_key and os.path.exists(s3_key):
+                        with open(s3_key, 'rb') as f:
+                            image_bytes = f.read()
+                    elif s3_key:
+                        # Try with DATA_ROOT prefix (common in local dev)
+                        from src.core import DATA_ROOT
+                        local_path = os.path.join(DATA_ROOT, s3_key)
+                        if os.path.exists(local_path):
+                            with open(local_path, 'rb') as f:
+                                image_bytes = f.read()
+            
             if not image_bytes:
                 return {'FaceRecords': [], 'OrientationCorrection': 'ROTATE_0'}
             

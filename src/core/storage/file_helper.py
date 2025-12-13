@@ -8,7 +8,8 @@ Routes and core services should use this instead of accessing storage directly.
 import os
 from typing import Optional, BinaryIO
 from io import BytesIO
-from flask import send_file
+import urllib.parse
+from flask import send_file, redirect, Response, stream_with_context
 
 from .storage_backend import get_storage_backend, StorageBackend
 
@@ -87,6 +88,21 @@ class FileHelper:
         """
         return self.storage.get_url(path, expires_in=expires_in)
     
+    def get_upload_url(self, path: str, content_type: Optional[str] = None, max_size: Optional[int] = None, expires_in: int = 3600) -> Optional[dict]:
+        """
+        Get presigned URL for uploading file with conditions.
+        
+        Args:
+            path: File path
+            content_type: Required content type for the file
+            max_size: Maximum file size in bytes
+            expires_in: URL expiration in seconds (for S3 presigned URLs)
+            
+        Returns:
+            Dict with 'url' and 'fields' for POST upload (S3) or None (local storage)
+        """
+        return self.storage.get_upload_url(path, content_type=content_type, max_size=max_size, expires_in=expires_in)
+    
     def get_s3_reference(self, path: str) -> Optional[dict]:
         """
         Get S3 reference dict for Rekognition.
@@ -103,8 +119,9 @@ class FileHelper:
         """
         Serve file via Flask response.
         
-        Proxies files through the API to avoid exposing S3 URLs.
-        In development with local storage, serves file directly.
+        For downloads (as_attachment=True): returns presigned URL redirect for direct S3 access.
+        For viewing (as_attachment=False): proxies file through Flask server.
+        For local storage: always serves file directly through Flask.
         
         Args:
             path: File path
@@ -113,7 +130,7 @@ class FileHelper:
             download_name: Download filename
             
         Returns:
-            Flask response (send_file)
+            Flask response (send_file for local/proxy, redirect for S3 downloads)
         """
         # Local storage - serve file directly
         if self.is_local:
@@ -125,15 +142,44 @@ class FileHelper:
                 download_name=download_name
             )
         else:
-            # S3 storage - proxy through API (read from S3 and serve)
-            # This avoids exposing S3 URLs and prevents 403 errors from expired presigned URLs
-            file_data = self.read(path)
-            return send_file(
-                BytesIO(file_data),
-                mimetype=mimetype,
-                as_attachment=as_attachment,
-                download_name=download_name
-            )
+            # S3 storage
+            if as_attachment:
+                # Download: return presigned URL for direct S3 access
+                presigned_url = self.get_url(path, expires_in=3600)
+                if not presigned_url:
+                    raise FileNotFoundError(f"Could not generate presigned URL for: {path}")
+                
+                # Add Content-Disposition header if needed for downloads
+                # Note: We can't set headers on redirect, but S3 presigned URLs support response-content-disposition parameter
+                if download_name:
+                    # Add response-content-disposition parameter to presigned URL
+                    parsed = urllib.parse.urlparse(presigned_url)
+                    params = urllib.parse.parse_qs(parsed.query)
+                    params['response-content-disposition'] = [f'attachment; filename="{download_name}"']
+                    new_query = urllib.parse.urlencode(params, doseq=True)
+                    presigned_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
+                
+                return redirect(presigned_url, code=302)
+            else:
+                # Viewing: stream through Flask server
+                if hasattr(self.storage, 'get_object_stream'):
+                    # S3 Storage - Streaming Proxy
+                    s3_response = self.storage.get_object_stream(path)
+                    return Response(
+                        stream_with_context(s3_response['Body']),
+                        mimetype=mimetype,
+                        direct_passthrough=True
+                    )
+                else:
+                    # Local storage or fallback - read into memory
+                    file_data = self.read(path)
+                    file_stream = BytesIO(file_data)
+                    return send_file(
+                        file_stream,
+                        mimetype=mimetype,
+                        as_attachment=False,
+                        download_name=download_name
+                    )
     
     def get_file_size(self, path: str) -> int:
         """
@@ -145,12 +191,18 @@ class FileHelper:
         Returns:
             File size in bytes
         """
-        if self.is_local:
-            full_path = self.get_file_path(path)
-            return os.path.getsize(full_path)
-        else:
-            # For S3, read to get size (could be optimized with head_object)
-            return len(self.read(path))
+        return self.storage.get_file_size(path)
+    
+    def copy(self, source_path: str, dest_path: str, content_type: Optional[str] = None) -> None:
+        """
+        Copy file from source to destination (efficient server-side copy when possible).
+        
+        Args:
+            source_path: Source file path (relative to storage root)
+            dest_path: Destination file path (relative to storage root)
+            content_type: Optional content type (used for S3, preserved from source if not specified)
+        """
+        self.storage.copy(source_path, dest_path, content_type=content_type)
 
 
 # Global instance for convenience

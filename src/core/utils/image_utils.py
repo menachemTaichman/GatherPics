@@ -1,6 +1,7 @@
 from PIL import Image as PILImage
 import exifread
 import os
+from io import BytesIO
 
 def crop_image(pil_img: PILImage.Image, box: dict, padding_width_percent: float = 0.0, padding_height_percent: float = 0.0) -> PILImage.Image:
     """Crops a PIL image to the given box and returns the cropped PIL image."""
@@ -62,6 +63,42 @@ def get_image_metadata(pil_img: PILImage.Image) -> dict:
     except Exception:
         return {}
 
+
+def extract_metadata_from_bytes(image_bytes: bytes) -> dict:
+    """Extract metadata including accurate date_taken using exifread from bytes.
+    
+    Args:
+        image_bytes: Image data as bytes
+        
+    Returns:
+        dict: Metadata dictionary with 'date_taken' and 'exif' keys
+    """
+    metadata = {}
+    exif_data = {}
+    date_taken = None
+
+    try:
+        with BytesIO(image_bytes) as image_stream:
+            tags = exifread.process_file(image_stream, stop_tag='UNDEF', details=False)
+            for tag, value in tags.items():
+                exif_data[tag] = str(value)
+
+            # Prefer DateTimeOriginal if available
+            for tag in ['EXIF DateTimeOriginal', 'EXIF DateTimeDigitized', 'Image DateTime']:
+                if tag in tags:
+                    date_str = str(tags[tag])
+                    if ':' in date_str and len(date_str) >= 19:
+                        date_taken = date_str.replace(':', '-', 2)
+                        break
+
+    except Exception as e:
+        metadata['error'] = str(e)
+
+    metadata['exif'] = exif_data
+    if date_taken:
+        metadata['date_taken'] = date_taken
+
+    return metadata
 
 def extract_all_metadata(image_path: str) -> dict:
     """Extract metadata including accurate date_taken using exifread."""
@@ -129,7 +166,6 @@ def save_image(
     
     # If storage backend is provided and it's S3, save to bytes first then upload
     if storage_backend and hasattr(storage_backend, 'write'):
-        from io import BytesIO
         buffer = BytesIO()
         pil_img.save(buffer, **save_kwargs)
         buffer.seek(0)

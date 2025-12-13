@@ -9,9 +9,12 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { RemovableThumbnail } from '../common';
 import { useRTL } from '../../hooks/useRTL';
+import { downloadAsZip } from '../../utils/downloadHelper';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0, filename: '' });
   const { t } = useTranslation();
   const { isRTL, startClass, endClass } = useRTL();
   
@@ -91,20 +94,53 @@ export default function BucketDrawer() {
           setNote(t('bucketDrawer.nothingToDownload'));
           return;
         }
-        const blob = await downloadAPI.download(toDownload, 'zip', eventUrl, { quality });
-        const url = window.URL.createObjectURL(new Blob([blob]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'images.zip');
-        document.body.appendChild(link);
-        link.click();
-        link.parentNode && link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(url);
+
+        setDownloading(true);
+        setDownloadProgress({ current: 0, total: toDownload.length, filename: '' });
+        setNote(t('bucketDrawer.gettingDownloadUrls'));
+
+        // 1. Create Promise for getting URLs (without await!)
+        const filesPromise = downloadAPI.getDownloadUrls(toDownload, eventUrl, { quality })
+          .then(response => {
+            // Checks and error handling inside the Promise
+            if (response.failed_images && response.failed_images.length > 0) {
+              // Can show message, but don't stop the flow
+              setNote(t('bucketDrawer.someImagesFailed', { count: response.failed_images.length }));
+            }
+            
+            if (!response.files || response.files.length === 0) {
+              throw new Error('No files available to download');
+            }
+            
+            return response.files;
+          });
+
+        setNote(t('bucketDrawer.downloadingZip'));
+
+        // 2. Call download function immediately (pass the Promise)
+        await downloadAsZip(
+          filesPromise, // Pass the promise, not the result
+          'images.zip',
+          (current, total, filename) => {
+            setDownloadProgress({ current, total, filename });
+            setNote(t('bucketDrawer.downloadingProgress', { current, total }));
+          }
+        );
+
+        setNote(t('bucketDrawer.downloadComplete'));
         markDownloaded(toDownload);
         // Remove only the downloaded ones from queue
         removeManyFromQueue(toDownload);
+        
+        // Clear progress after a short delay
+        setTimeout(() => {
+          setDownloading(false);
+          setDownloadProgress({ current: 0, total: 0, filename: '' });
+        }, 2000);
       } catch (e) {
-        console.error('Download failed', e);
+        console.error('Download failed:', e);
+        setNote(t('bucketDrawer.downloadFailed', { error: e.message }));
+        setDownloading(false);
       }
     } else {
       // Upload to Google Photos: to be implemented later
@@ -260,15 +296,36 @@ export default function BucketDrawer() {
           {/* Footer actions */}
           <div className="p-4 border-t border-gray-200">
             {note && (
-              <div className="text-xs text-gray-500 mb-2" title={note}>{note}</div>
+              <div className="text-xs text-gray-500 mb-2" title={note}>
+                {note}
+                {downloading && downloadProgress.total > 0 && (
+                  <div className="mt-1">
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div 
+                        className="bg-primary-600 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${(downloadProgress.current / downloadProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {downloadProgress.current} / {downloadProgress.total}
+                      {downloadProgress.filename && ` - ${downloadProgress.filename}`}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             <button
-              disabled={queue.length === 0}
+              disabled={queue.length === 0 || downloading}
               onClick={handlePrimaryAction}
-              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-medium gap-2 ${queue.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
+              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-md text-white font-medium gap-2 ${queue.length === 0 || downloading ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
             >
               {mode === 'download' ? <Download className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-              <span>{mode === 'download' ? t('bucketDrawer.downloadAsZip') : t('bucketDrawer.uploadToGooglePhotos')}</span>
+              <span>
+                {downloading 
+                  ? t('bucketDrawer.downloading') 
+                  : (mode === 'download' ? t('bucketDrawer.downloadAsZip') : t('bucketDrawer.uploadToGooglePhotos'))
+                }
+              </span>
             </button>
           </div>
         </motion.aside>
