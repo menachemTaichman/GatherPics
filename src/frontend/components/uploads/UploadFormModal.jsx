@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
-import { imagesAPI, eventsAPI } from '../../utils/apiService';
+import { imagesAPI, eventsAPI, uploadsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useEventGeneralById } from '../../utils/dataManager';
@@ -24,9 +24,13 @@ export default function UploadFormModal({
   const [uploadProgress, setUploadProgress] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStartTime, setUploadStartTime] = useState(null);
+  const [uploadId, setUploadId] = useState(null);
+  const [fileToImageMap, setFileToImageMap] = useState({}); // Maps file index to image_id
+  const [imageStatuses, setImageStatuses] = useState({}); // Maps image_id to status
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
   const timeUpdateIntervalRef = useRef(null);
+  const pollIntervalRef = useRef(null);
   const { showToast } = useToast();
   const { t } = useTranslation();
   const { isRTL } = useRTL();
@@ -126,19 +130,30 @@ export default function UploadFormModal({
       setUploading(false);
       setIsDragging(false);
       setUploadStartTime(null);
+      setUploadId(null);
+      setFileToImageMap({});
+      setImageStatuses({});
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
       }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     }
   }, [isOpen]);
 
-  // Cleanup interval on unmount
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     };
   }, []);
@@ -249,17 +264,13 @@ export default function UploadFormModal({
   const calculateOverallProgress = (progress) => {
     // Define weight for each step (total = 100%)
     const stepWeights = {
-      'uploading': 1,       // 0-1% (variable, will be tested in staging)
-      'validation': 1,      // 1-2%
-      'processing': 87,     // 2-89% (face detection takes most time)
-      'faces': 0.5,         // 89-89.5% (adding faces to DB)
-      'clustering': 9,      // 89.5-98.5%
-      'moments': 0.5,       // 98.5-99%
-      'finalizing': 1,      // 99-100%
-      'complete': 0         // 100%
+      'preparing': 2,       // 0-2% (getting presigned URLs)
+      'uploading': 10,      // 2-12% (uploading to S3)
+      'processing': 88,      // 12-100% (image processing - face detection, clustering, etc.)
+      'complete': 100       // 100%
     };
     
-    const stepOrder = ['uploading', 'validation', 'processing', 'faces', 'clustering', 'moments', 'finalizing', 'complete'];
+    const stepOrder = ['preparing', 'uploading', 'processing', 'complete'];
     const currentStepIndex = stepOrder.indexOf(progress.step);
     
     if (currentStepIndex === -1) return 0;
@@ -272,8 +283,9 @@ export default function UploadFormModal({
     
     // Calculate progress within current step
     let stepProgress = 0;
-    if (progress.total > 0 && progress.current > 0) {
-      stepProgress = (progress.current / progress.total) * stepWeights[progress.step];
+    if (progress.total > 0 && progress.current >= 0) {
+      const weight = stepWeights[progress.step] || 0;
+      stepProgress = (progress.current / progress.total) * weight;
     }
     
     return Math.min(100, baseProgress + stepProgress);
@@ -289,11 +301,11 @@ export default function UploadFormModal({
     setUploadStartTime(startTime);
     setUploading(true);
     setUploadProgress({ 
-      step: 'uploading', 
-      current: selectedFiles.length, 
+      step: 'preparing', 
+      current: 0, 
       total: selectedFiles.length, 
-      message: `Uploading ${selectedFiles.length} image(s)...`,
-      percentage: 10,
+      message: 'Preparing upload...',
+      percentage: 0,
       elapsedTime: 0,
       estimatedTimeRemaining: null
     });
@@ -318,76 +330,186 @@ export default function UploadFormModal({
     try {
       const files = selectedFiles.map(f => f.file);
       
-      // Use SSE-based upload with real-time progress
-      const result = await imagesAPI.uploadWithProgress(
-        files, 
-        assignMoments, 
-        eventUrl,
-        (progress) => {
-          // Real-time progress updates from server with calculated percentage
-          const percentage = calculateOverallProgress(progress);
-          const elapsed = Date.now() - startTime;
-          let estimatedTimeRemaining = null;
-          if (percentage > 0 && percentage < 100) {
-            const totalEstimated = (elapsed / percentage) * 100;
-            estimatedTimeRemaining = Math.max(0, totalEstimated - elapsed);
-          }
-          setUploadProgress({
-            step: progress.step,
-            current: progress.current,
-            total: progress.total,
-            message: progress.message,
-            percentage: percentage,
-            elapsedTime: elapsed,
-            estimatedTimeRemaining: estimatedTimeRemaining
-          });
-        }
-      );
-      
-      const successMsg = `${t('upload.successfullyProcessed')} ${result.images_processed} ${result.images_processed === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${result.faces_detected} ${result.faces_detected === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${result.groups_created} ${result.groups_created === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
-      
-      const finalElapsed = Date.now() - startTime;
+      // Start upload (API handles everything, returns immediately)
       setUploadProgress({ 
-        step: 'complete', 
-        current: 1, 
-        total: 1, 
-        message: successMsg,
-        percentage: 100,
-        elapsedTime: finalElapsed,
+        step: 'preparing', 
+        current: 0, 
+        total: selectedFiles.length, 
+        message: 'Preparing upload...',
+        percentage: 0,
+        elapsedTime: Date.now() - startTime,
         estimatedTimeRemaining: null
       });
       
-      // Clear time update interval
-      if (timeUpdateIntervalRef.current) {
-        clearInterval(timeUpdateIntervalRef.current);
-        timeUpdateIntervalRef.current = null;
+      const result = await imagesAPI.uploadWithProgress(files, assignMoments, eventUrl);
+      
+      setUploadId(result.upload_id);
+      setFileToImageMap(result.file_to_image_map);
+      
+      // Initialize image statuses - all start as UPLOADING since they're being uploaded
+      const initialStatuses = {};
+      Object.values(result.file_to_image_map).forEach(imageId => {
+        initialStatuses[imageId] = 'UPLOADING';
+      });
+      setImageStatuses(initialStatuses);
+      
+      // Update progress to uploading
+      setUploadProgress({ 
+        step: 'uploading', 
+        current: 0, 
+        total: selectedFiles.length, 
+        message: `Uploading ${selectedFiles.length} image(s)...`,
+        percentage: 2,
+        elapsedTime: Date.now() - startTime,
+        estimatedTimeRemaining: null
+      });
+      
+      // Start polling for progress
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
-
-      showToast(successMsg, 'success');
-
-      if (result.errors && result.errors.length > 0) {
-        console.warn('Upload errors:', result.errors);
-        showToast(`${result.errors.length} ${t('upload.imageFailedToProcess')}`, 'warning');
-      }
-
-      try {
-        await eventsAPI.getById(eventUrl);
-      } catch (refreshError) {
-        console.error('Failed to refresh event data:', refreshError);
-      }
-
-      // Notify parent to refresh limits
-      if (onUploadComplete) {
-        onUploadComplete(result);
-      }
-
-      // Open upload detail modal after a delay
-      setTimeout(() => {
-        if (onUploadSuccess && result.upload_id) {
-          onUploadSuccess(result.upload_id);
+      
+      const pollProgress = async () => {
+        try {
+          if (!result.upload_id) return;
+          
+          const progress = await imagesAPI.getUploadProgress(result.upload_id, eventUrl);
+          const uploadStatus = progress.upload_status;
+          const images = progress.images || [];
+          
+          // Update image statuses
+          setImageStatuses(prev => {
+            const newStatuses = { ...prev };
+            images.forEach(img => {
+              newStatuses[img.image_id] = img.status || 'PENDING_UPLOAD';
+            });
+            return newStatuses;
+          });
+          
+          // Count images by status
+          let totalReady = 0;
+          let totalFailed = 0;
+          let totalProcessing = 0;
+          let totalQueued = 0;
+          
+          images.forEach(img => {
+            const status = img.status || 'PENDING_UPLOAD';
+            if (status === 'READY') totalReady++;
+            else if (status === 'FAILED') totalFailed++;
+            else if (status === 'PROCESSING') totalProcessing++;
+            else if (status === 'QUEUED') totalQueued++;
+          });
+          
+          // Calculate overall progress
+          const total = images.length;
+          const processed = totalReady + totalFailed;
+          const percentage = calculateOverallProgress({
+            step: uploadStatus === 'COMPLETED' ? 'complete' : 'processing',
+            current: totalReady,
+            total: total
+          });
+          
+          // Update progress
+          setUploadProgress({
+            step: uploadStatus === 'COMPLETED' ? 'complete' : uploadStatus === 'PROCESSING_IMAGES' ? 'processing' : 'uploading',
+            current: totalReady,
+            total: total,
+            message: uploadStatus === 'COMPLETED' 
+              ? `Processing complete: ${totalReady} images processed`
+              : `Processing: ${totalReady} ready, ${totalProcessing + totalQueued} processing, ${totalFailed} failed`,
+            percentage: percentage,
+            elapsedTime: Date.now() - startTime,
+            estimatedTimeRemaining: null
+          });
+          
+          // Check if complete
+          if (uploadStatus === 'COMPLETED' || uploadStatus === 'FAILED') {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+            
+            if (uploadStatus === 'COMPLETED') {
+              // Get final upload details
+              try {
+                const uploadDetails = await uploadsAPI.getById(result.upload_id, eventUrl);
+                
+                let facesCount = 0;
+                let clustersCount = 0;
+                
+                if (uploadDetails.changes) {
+                  const uploadChange = uploadDetails.changes.find(
+                    change => change.entity === 'upload' && (change.type === 'UPSERT' || change.type === 'UPDATE')
+                  );
+                  if (uploadChange && uploadChange.items) {
+                    const uploadEntity = Object.values(uploadChange.items)[0];
+                    facesCount = uploadEntity?.faces_count || 0;
+                    clustersCount = uploadEntity?.clusters_count || 0;
+                  }
+                }
+                
+                const successMsg = `${t('upload.successfullyProcessed')} ${totalReady} ${totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${clustersCount} ${clustersCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
+                
+                setUploadProgress({ 
+                  step: 'complete', 
+                  current: totalReady, 
+                  total: total, 
+                  message: successMsg,
+                  percentage: 100,
+                  elapsedTime: Date.now() - startTime,
+                  estimatedTimeRemaining: null
+                });
+                
+                showToast(successMsg, 'success');
+                
+                if (totalFailed > 0) {
+                  showToast(`${totalFailed} ${t('upload.imageFailedToProcess')}`, 'warning');
+                }
+                
+                try {
+                  await eventsAPI.getById(eventUrl);
+                } catch (refreshError) {
+                  console.error('Failed to refresh event data:', refreshError);
+                }
+                
+                if (onUploadComplete) {
+                  onUploadComplete({
+                    upload_id: result.upload_id,
+                    images_processed: totalReady,
+                    faces_detected: facesCount,
+                    groups_created: clustersCount,
+                    errors: totalFailed > 0 ? [`${totalFailed} images failed to process`] : []
+                  });
+                }
+                
+                setTimeout(() => {
+                  if (onUploadSuccess && result.upload_id) {
+                    onUploadSuccess(result.upload_id);
+                  }
+                  onClose();
+                }, 2000);
+              } catch (error) {
+                console.error('Failed to get final upload details:', error);
+              }
+            } else {
+              setUploadProgress({ 
+                step: 'error', 
+                current: 0, 
+                total: 0, 
+                message: `Upload failed: ${uploadStatus}`, 
+                percentage: 0,
+                elapsedTime: Date.now() - startTime,
+                estimatedTimeRemaining: null
+              });
+              setUploading(false);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to poll progress:', error);
         }
-        onClose();
-      }, 2000);
+      };
+      
+      // Poll every 2 seconds
+      pollIntervalRef.current = setInterval(pollProgress, 2000);
+      pollProgress(); // Initial poll
 
     } catch (error) {
       console.error('Upload failed:', error);
@@ -405,10 +527,14 @@ export default function UploadFormModal({
       });
       setUploading(false);
       
-      // Clear time update interval
+      // Clear intervals
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     }
   };
@@ -636,30 +762,73 @@ export default function UploadFormModal({
                   
                   {/* Files list with scroll - native scrollbar */}
                   <div className="max-h-64 overflow-y-auto space-y-2">
-                    {selectedFiles.map((fileItem) => (
-                      <div
-                        key={fileItem.id}
-                        className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
-                      >
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <ImageIcon className="w-6 h-6 text-blue-600" />
+                    {selectedFiles.map((fileItem, index) => {
+                      const imageId = fileToImageMap[index];
+                      const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
+                      
+                      // Status colors and icons
+                      const getStatusInfo = (status) => {
+                        switch (status) {
+                          case 'UPLOADING':
+                            return { color: 'text-blue-500', bg: 'bg-blue-100', icon: Upload, label: 'Uploading...', spinning: false };
+                          case 'PENDING_UPLOAD':
+                            return { color: 'text-gray-500', bg: 'bg-gray-100', icon: Upload, label: 'Pending' };
+                          case 'QUEUED':
+                            return { color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Loader2, label: 'Queued', spinning: true };
+                          case 'PROCESSING':
+                            return { color: 'text-blue-600', bg: 'bg-blue-100', icon: Loader2, label: 'Processing', spinning: true };
+                          case 'READY':
+                            return { color: 'text-green-600', bg: 'bg-green-100', icon: Check, label: 'Ready' };
+                          case 'FAILED':
+                            return { color: 'text-red-600', bg: 'bg-red-100', icon: AlertCircle, label: 'Failed' };
+                          default:
+                            return { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
+                        }
+                      };
+                      
+                      const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
+                      const StatusIcon = statusInfo.icon;
+                      
+                      return (
+                        <div
+                          key={fileItem.id}
+                          className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
+                            status === 'READY' 
+                              ? 'border-green-300 bg-green-50' 
+                              : status === 'FAILED'
+                              ? 'border-red-300 bg-red-50'
+                              : status === 'PROCESSING' || status === 'QUEUED' || status === 'UPLOADING'
+                              ? 'border-blue-300 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                            <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
+                              {status && (
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
+                                  {statusInfo.label}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
+                          </div>
+                          {!uploading && (
+                            <button
+                              onClick={() => handleRemoveFile(fileItem.id)}
+                              className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
+                              title={t('upload.removeFile')}
+                              aria-label={t('upload.removeFile')}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
-                          <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
-                        </div>
-                        {!uploading && (
-                          <button
-                            onClick={() => handleRemoveFile(fileItem.id)}
-                            className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
-                            title={t('upload.removeFile')}
-                            aria-label={t('upload.removeFile')}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -14,6 +14,54 @@ def validate_uuid_string(v: Any) -> str:
 
 UUIDStr = Annotated[str, AfterValidator(validate_uuid_string)]
 
+def validate_files_data(v: Any) -> List[Dict[str, Any]]:
+    """Validate that files_data is a list of dicts with filename (str) and size (int > 0)."""
+    if not isinstance(v, list):
+        raise ValueError('files_data must be a list')
+    
+    if not v:
+        raise ValueError('files_data cannot be empty')
+    
+    validated_list = []
+    for i, item in enumerate(v):
+        if not isinstance(item, dict):
+            raise ValueError(f'files_data[{i}] must be a dictionary')
+        
+        if 'filename' not in item:
+            raise ValueError(f'files_data[{i}] must have a "filename" field')
+        
+        if 'size' not in item:
+            raise ValueError(f'files_data[{i}] must have a "size" field')
+        
+        filename = item['filename']
+        if not isinstance(filename, str):
+            raise ValueError(f'files_data[{i}].filename must be a string')
+        
+        # Validate filename safety - reject dangerous patterns
+        if '\x00' in filename:
+            raise ValueError(f'files_data[{i}].filename contains null bytes')
+        
+        # Reject path traversal attempts
+        if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+            raise ValueError(f'files_data[{i}].filename contains path traversal characters')
+        
+        # Validate file extension (JPG/JPEG only, case-insensitive)
+        if not filename.lower().endswith(('.jpg', '.jpeg')):
+            raise ValueError(f'files_data[{i}].filename must end with .jpg or .jpeg')
+        
+        size = item['size']
+        if not isinstance(size, int) or size <= 0:
+            raise ValueError(f'files_data[{i}].size must be an integer greater than 0')
+        
+        validated_list.append({
+            'filename': filename,
+            'size': size
+        })
+    
+    return validated_list
+
+FilesData = Annotated[List[Dict[str, Any]], AfterValidator(validate_files_data)]
+
 # Field validators for all fields in STRUCTURE
 FIELD_VALIDATORS = {
 
@@ -150,6 +198,7 @@ FIELD_VALIDATORS = {
     'ids': TypeAdapter(Optional[List[UUIDStr]]),
     'file_names': TypeAdapter(Optional[List[Annotated[str, Field(max_length=500)]]]),
     'filenames': TypeAdapter(List[Annotated[str, Field(max_length=500)]]),
+    'files_data': TypeAdapter(FilesData),
 
     # Diagnostic fields (for feedbacks)
     'console_logs': TypeAdapter(Optional[Any]),

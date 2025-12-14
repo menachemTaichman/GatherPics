@@ -89,25 +89,48 @@ docker-compose up
 
 #### Option 2: Development Mode
 
-1. **Start the database** (if using Docker Compose)
-   ```bash
-   docker-compose up -d db
-   ```
+For local development, you'll run the backend, frontend, and worker locally, but use Docker for database and Redis.
 
-2. **Start the backend server**
+1. **Start development services** (database and Redis only)
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
+   This starts:
+   - PostgreSQL database on port 5432
+   - Redis on port 6379
+
+   **Note:** The worker is commented out in `docker-compose.dev.yml` by default. Run it locally instead (see step 4).
+
+2. **Set up your `.env` file** - Make sure it includes:
+   ```env
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   REDIS_DB=0
+   ```
+   This is needed because your local backend/worker will connect to Redis running in Docker.
+
+3. **Start the backend server** (in a new terminal)
    ```bash
    python -m src.backend.app
    ```
    The backend will run on http://localhost:5000
 
-3. **Start the frontend server** (in a new terminal)
+4. **Start the Celery worker** (in a new terminal) - **REQUIRED for image uploads**
+   ```bash
+   celery -A src.backend.celery_worker.celery worker --loglevel=info --concurrency=2
+   ```
+   This processes uploaded images (face detection, resizing, etc.). Without it, images will upload but won't be processed.
+
+5. **Start the frontend server** (in a new terminal)
    ```bash
    npm run dev
    ```
    The frontend will run on http://localhost:5173
 
-4. **Open your browser**
+6. **Open your browser**
    Navigate to http://localhost:5173 to see the application
+
+**Important:** All three processes (backend, worker, frontend) must be running for full functionality. The worker is especially critical for image processing.
 
 #### Option 3: Production Build with Docker
 ```bash
@@ -356,6 +379,12 @@ DB_PORT=5432
 DB_NAME=gather_pics
 DB_USER=postgres
 DB_PASSWORD=your_password
+
+# Redis (for Celery task queue)
+# Use 'localhost' if running worker locally, 'redis' if worker is in Docker
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
 
 # AWS
 AWS_ACCESS_KEY_ID=your_key

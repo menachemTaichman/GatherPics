@@ -639,222 +639,133 @@ export const imagesAPI = {
     return response.data;
   },
 
-  upload: async (files, assignMoments, eventUrl) => {
+  // New upload flow: Get presigned URLs, upload to S3, notify backend
+  getUploadUrls: async (files, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const formData = new FormData();
+    const files_data = files.map(file => ({
+      filename: file.name,
+      size: file.size
+    }));
     
-    // Add files to FormData
-    for (const file of files) {
-      formData.append('files', file);
-    }
-    
-    // Add assign_moments option
-    formData.append('assign_moments', assignMoments ? 'true' : 'false');
-    
-    const response = await api.post(`/api/events/${eventId}/images`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    const response = await api.post(`/api/events/${eventId}/upload`, {
+      files_data
     });
     return response.data;
   },
 
-  uploadWithProgress: async (files, assignMoments, eventUrl, onProgress) => {
+  notifyImageReady: async (uploadId, imageId, filename, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/upload/image_ready`, {
+      upload_id: uploadId,
+      image_id: imageId,
+      filename
+    });
+    return response.data;
+  },
+
+  notifyUploadFinished: async (uploadId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.post(`/api/events/${eventId}/upload/finished`, {
+      upload_id: uploadId
+    });
+    return response.data;
+  },
+
+  getUploadProgress: async (uploadId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.get(`/api/events/${eventId}/uploads/${uploadId}/progress`);
+    return response.data;
+  },
+
+  uploadWithProgress: async (files, assignMoments, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     
-    // Step 1: Upload files to server in batches of 10
-    const BATCH_SIZE = 10;
-    const totalFiles = files.length;
-    const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
-    let uploadedFilenames = [];
-    
     try {
-      // Report initial upload progress
-      if (onProgress) {
-        onProgress({
-          step: 'uploading',
-          current: 0,
-          total: totalFiles,
-          message: `Uploading files (0/${totalFiles})...`
-        });
+      // Step 1: Get presigned URLs
+      const uploadUrlsResponse = await imagesAPI.getUploadUrls(files, eventUrl);
+      const { upload_id, upload_urls } = uploadUrlsResponse;
+      
+      if (!upload_urls || upload_urls.length === 0) {
+        throw new Error('No upload URLs received');
       }
       
-      // Upload files in batches
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        const startIndex = batchIndex * BATCH_SIZE;
-        const endIndex = Math.min(startIndex + BATCH_SIZE, totalFiles);
-        const batch = files.slice(startIndex, endIndex);
-        
-        const formData = new FormData();
-        for (const file of batch) {
-          formData.append('files', file);
-        }
-        
-        const uploadResponse = await api.post(`/api/events/${eventId}/images/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        
-        const batchFilenames = uploadResponse.data.filenames || [];
-        uploadedFilenames = uploadedFilenames.concat(batchFilenames);
-        
-        // Report progress after each batch
-        if (onProgress) {
-          onProgress({
-            step: 'uploading',
-            current: endIndex,
-            total: totalFiles,
-            message: `Uploading files (${endIndex}/${totalFiles})...`
+      // Step 2: Upload files directly to S3 and notify backend
+      const uploadResults = await Promise.allSettled(
+        upload_urls.map(async (uploadInfo, index) => {
+          const file = files[index];
+          if (!file) {
+            throw new Error(`File not found for upload URL at index ${index}`);
+          }
+          
+          // Upload to S3 using presigned POST URL
+          const formData = new FormData();
+          formData.append('Content-Type', 'image/jpeg');
+          
+          // Add all fields from upload_fields
+          if (uploadInfo.upload_fields) {
+            Object.keys(uploadInfo.upload_fields).forEach(key => {
+              formData.append(key, uploadInfo.upload_fields[key]);
+            });
+          }
+          
+          // Add file last (required by S3)
+          formData.append('file', file);
+          
+          // Upload to S3
+          const uploadResponse = await fetch(uploadInfo.upload_url, {
+            method: 'POST',
+            body: formData
           });
-        }
-      }
-    } catch (error) {
-      throw new Error(error.response?.data?.error || 'Failed to upload files');
-    }
-    
-    // Step 2: Process with SSE, passing the uploaded filenames
-    return new Promise((resolve, reject) => {
-      const url = `${API_BASE}/api/events/${eventId}/images/process-stream`;
+          
+          if (!uploadResponse.ok) {
+            throw new Error(`Failed to upload ${file.name} to S3: ${uploadResponse.statusText}`);
+          }
+          
+          // Notify backend that image is ready
+          await imagesAPI.notifyImageReady(
+            upload_id,
+            uploadInfo.image_id,
+            uploadInfo.filename,
+            eventUrl
+          );
+          
+          return { 
+            image_id: uploadInfo.image_id, 
+            filename: uploadInfo.filename,
+            file_index: index
+          };
+        })
+      );
       
-      // Get auth token for fetch request
-      const token = jwtService.getTokenSync();
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      // Check for upload failures
+      const failures = uploadResults.filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.warn('Some files failed to upload:', failures);
       }
       
-      // Use fetch with POST to send file names in body instead of query string
-      fetch(url, {
-        method: 'POST',
-        headers: headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          assign_moments: assignMoments,
-          file_names: uploadedFilenames.length > 0 ? uploadedFilenames : null,
-        }),
-      }).then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+      // Step 3: Notify backend that all uploads are finished
+      await imagesAPI.notifyUploadFinished(upload_id, eventUrl);
+      
+      // Return upload_id and mapping of files to image_ids
+      const fileToImageMap = {};
+      uploadResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          fileToImageMap[index] = result.value.image_id;
         }
-        
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        
-        // Timeout for connection inactivity (no messages for 10 minutes)
-        // This is reset on each message (including keepalive), so processing can take hours
-        // Server sends keepalive messages every 30 seconds, so this only triggers if connection is truly dead
-        let timeout = setTimeout(() => {
-          reader.cancel();
-          reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
-        }, 10 * 60 * 1000);
-        
-        const resetTimeout = () => {
-          // Reset timeout on any message (including keepalive)
-          clearTimeout(timeout);
-          timeout = setTimeout(() => {
-            reader.cancel();
-            reject(new Error('Connection timeout: No messages received from server for 10 minutes'));
-          }, 10 * 60 * 1000);
-        };
-        
-        const cleanup = () => {
-          clearTimeout(timeout);
-          reader.cancel();
-        };
-        
-        const processStream = () => {
-          reader.read().then(({ done, value }) => {
-            if (done) {
-              cleanup();
-              reject(new Error('Stream ended unexpectedly'));
-              return;
-            }
-            
-            // Decode chunk and add to buffer
-            buffer += decoder.decode(value, { stream: true });
-            
-            // Process complete SSE messages (lines ending with \n\n)
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep incomplete line in buffer
-            
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              
-              // Skip empty lines and keepalive messages
-              if (!line.trim() || line.trim() === ': keepalive') {
-                resetTimeout();
-                continue;
-              }
-              
-              // Parse SSE data line (format: "data: {...}")
-              if (line.startsWith('data: ')) {
-                const dataStr = line.substring(6); // Remove "data: " prefix
-                
-                try {
-                  const data = JSON.parse(dataStr);
-                  
-                  // Reset timeout on any message (server is alive)
-                  resetTimeout();
-                  
-                  if (data.step === 'complete') {
-                    cleanup();
-                    
-                    // Apply changes to store
-                    if (data.changes) {
-                      const store = useDataStore.getState();
-                      store.applyChanges(Array.isArray(data.changes) ? data.changes : []);
-                    }
-                    
-                    // Ensure result exists before resolving
-                    if (!data.result) {
-                      console.error('Complete event received but no result:', data);
-                      reject(new Error('Processing completed but no result data received'));
-                      return;
-                    }
-                    
-                    resolve(data.result);
-                    return;
-                  } else if (data.step === 'error') {
-                    cleanup();
-                    reject(new Error(data.message || 'Processing failed'));
-                    return;
-                  } else {
-                    // Progress update
-                    if (onProgress) {
-                      onProgress(data);
-                    }
-                  }
-                } catch (parseError) {
-                  // If it's not JSON, it might be a keepalive - reset timeout and continue
-                  if (dataStr.trim() === '' || dataStr.trim() === ': keepalive') {
-                    resetTimeout();
-                    continue;
-                  }
-                  console.error('Failed to parse SSE data:', parseError, 'Raw data:', dataStr);
-                  // Continue processing - don't reject on parse errors
-                }
-              }
-            }
-            
-            // Continue reading
-            processStream();
-          }).catch(error => {
-            cleanup();
-            console.error('Stream read error:', error);
-            reject(new Error('Connection to server lost: ' + error.message));
-          });
-        };
-        
-        // Start processing the stream
-        processStream();
-      }).catch(error => {
-        console.error('Fetch error:', error);
-        reject(new Error('Failed to connect to server: ' + error.message));
       });
-    });
+      
+      return {
+        upload_id,
+        file_to_image_map: fileToImageMap,
+        upload_urls: upload_urls.map((url, idx) => ({
+          ...url,
+          file_index: idx
+        }))
+      };
+      
+    } catch (error) {
+      throw new Error(error.response?.data?.error || error.message || 'Failed to upload files');
+    }
   }
 };
 

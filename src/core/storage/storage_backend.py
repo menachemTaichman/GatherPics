@@ -173,8 +173,20 @@ class LocalStorageBackend(StorageBackend):
         return api_url
     
     def get_upload_url(self, path: str, content_type: Optional[str] = None, max_size: Optional[int] = None, expires_in: int = 3600) -> Optional[dict]:
-        """Local storage doesn't support presigned upload URLs."""
-        return None
+        """
+        Path format: {event_id}/to_process/{filename}
+        Returns: dict with 'url' pointing to /api/events/{event_id}/upload/direct and 'fields' as None
+        """
+        # Extract event_id from path: {event_id}/to_process/{filename}
+        parts = path.split('/')
+        if len(parts) < 2:
+            return None
+        
+        event_id = parts[0]
+        return {
+            'url': f"/api/events/{event_id}/upload/direct",
+            'fields': None
+        }
     
     def get_file_size(self, path: str) -> int:
         """Get file size in bytes."""

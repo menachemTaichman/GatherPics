@@ -1,39 +1,92 @@
 """
-Add status column to images table for queue-based processing.
-Status values: PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED
+Upgrade upload and image tables for queue-based processing.
+Upload status values: PROCESSING_IMAGES, CLUSTERING_FACES, COMPLETED, FAILED
+Image status values: PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED
+Alter errors column in uploads table to TEXT[] and add default value.
 """
 
 from yoyo import step
 
-__depends__ = {'0005_add_events_profiles_conflict_handling'}
+__depends__ = {'0006_add_default_preferences_to_developer'}
 
 steps = [
     step(
         """
-        -- Create ENUM type for image status
-        CREATE TYPE image_status AS ENUM ('PENDING_UPLOAD', 'QUEUED', 'PROCESSING', 'READY', 'FAILED');
-        
+        -- add requested_images_count column to uploads table
+        ALTER TABLE uploads
+        ADD COLUMN requested_images_count INTEGER NOT NULL DEFAULT 0;
+        """,
+        """
+        ALTER TABLE uploads
+        DROP COLUMN IF EXISTS requested_images_count;
+        """
+    ),
+    step(
+        """
+        -- update status column in uploads table
+        UPDATE uploads SET status = 'PROCESSING_IMAGES' WHERE status IS NULL OR status NOT IN (
+            'completed',
+            'failed'
+        );
+        UPDATE uploads SET status = 'COMPLETED' WHERE status = 'completed';
+        UPDATE uploads SET status = 'FAILED' WHERE status = 'failed';
+
+        ALTER TABLE uploads
+        ADD CONSTRAINT uploads_status_check
+        CHECK (status IN (
+            'PROCESSING_IMAGES',
+            'CLUSTERING_FACES',
+            'COMPLETED',
+            'FAILED'
+        )) NOT VALID;
+
+        ALTER TABLE uploads
+        VALIDATE CONSTRAINT uploads_status_check;
+
+        ALTER TABLE uploads
+        ALTER COLUMN status SET DEFAULT 'PROCESSING_IMAGES',
+        ALTER COLUMN status SET NOT NULL;
+        """,
+        """
+        ALTER TABLE uploads
+        ALTER COLUMN status DROP NOT NULL,
+        ALTER COLUMN status DROP DEFAULT;
+
+        ALTER TABLE uploads
+        DROP CONSTRAINT IF EXISTS uploads_status_check;
+
+        UPDATE uploads SET status = 'processing' WHERE status = 'PROCESSING_IMAGES';        
+        UPDATE uploads SET status = 'completed' WHERE status = 'COMPLETED';
+        UPDATE uploads SET status = 'failed' WHERE status = 'FAILED';
+        """
+    ),
+    step(
+        """        
         -- Add status column to images table with default PENDING_UPLOAD
         ALTER TABLE images 
-            ADD COLUMN status image_status NOT NULL DEFAULT 'PENDING_UPLOAD';
+        ADD COLUMN status TEXT NOT NULL DEFAULT 'PENDING_UPLOAD';
+
+        ALTER TABLE images
+        ADD CONSTRAINT images_status_check
+        CHECK (status IN (
+            'PENDING_UPLOAD',
+            'QUEUED',
+            'PROCESSING',
+            'READY',
+            'FAILED'
+        ));
         
-        -- Update existing images to READY (they were already processed)
-        UPDATE images SET status = 'READY' WHERE status = 'PENDING_UPLOAD';
+        -- legacy images are considered READY
+        UPDATE images SET status = 'READY';
         
-        -- Create index on status for faster queries
         CREATE INDEX idx_images_status ON images(status);
         CREATE INDEX idx_images_upload_id_status ON images(upload_id, status) WHERE upload_id IS NOT NULL;
         """,
         """
-        -- Drop indexes
         DROP INDEX IF EXISTS idx_images_upload_id_status;
         DROP INDEX IF EXISTS idx_images_status;
         
-        -- Remove status column
         ALTER TABLE images DROP COLUMN IF EXISTS status;
-        
-        -- Drop ENUM type
-        DROP TYPE IF EXISTS image_status;
         """
     ),
     step(

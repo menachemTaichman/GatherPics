@@ -23,9 +23,13 @@ services:
     command: gunicorn -w 4 -b 0.0.0.0:5000 --access-logfile - --error-logfile - --timeout 120 src.backend.app:app
     environment:
       TZ: Asia/Jerusalem
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
     env_file: .env
     depends_on:
       - db
+      - redis
     logging:
       driver: "json-file"
       options:
@@ -58,6 +62,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes --save 60 1000
     logging:
       driver: "json-file"
       options:
@@ -67,9 +72,12 @@ services:
   worker:
     image: metaich/photo-app:latest
     restart: always
-    command: celery -A src.backend.celery_worker.celery worker --loglevel=info
+    command: celery -A src.backend.celery_worker.celery worker --loglevel=info --concurrency=2
     environment:
       TZ: Asia/Jerusalem
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
     env_file: .env
     depends_on:
       - redis
