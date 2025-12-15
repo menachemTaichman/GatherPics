@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
-import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key } from 'lucide-react';
+import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key, Info } from 'lucide-react';
 import { uploadsAPI, groupsAPI, momentsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadById, useDataStore } from '../../utils/dataManager';
@@ -18,6 +18,7 @@ import { FloatingSelectionControls } from '../../components/layout';
 import { ManageAccessModal } from '../../components/profiles';
 import { MoveToMomentModal } from '../../components/moments';
 import { TransferFacesModal } from '../../components/groups';
+import UploadFormModal from '../../components/uploads/UploadFormModal';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import useImageSelection from '../../hooks/useImageSelection';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
@@ -61,6 +62,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
   const [showTransferFacesModal, setShowTransferFacesModal] = useState(false);
   const [selectedFacesForTransfer, setSelectedFacesForTransfer] = useState([]);
+  const [showUploadFormModal, setShowUploadFormModal] = useState(false);
   
   const permissions = usePermissions();
   
@@ -671,6 +673,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             >
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
             </Link>
+            <button
+              onClick={() => setShowUploadFormModal(true)}
+              className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+              title={t('uploadDetail.uploadDetails')}
+              aria-label={t('uploadDetail.uploadDetails')}
+            >
+              <Info className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            </button>
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
               <div className="w-10 h-10 sm:w-16 sm:h-16 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Upload className="w-5 h-5 sm:w-7 sm:h-7 text-primary-600" />
@@ -1584,7 +1594,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
           showFavorites={false}
           showBucket={false}
           showAlbum={false}
-          showDelete={false}
+          showDelete={true}
           showManageAccess={false}
           showSetRepresentative={false}
           selectionMode={selectionMode}
@@ -1636,6 +1646,20 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
           urlHelpers={urlHelpers}
         />
       )}
+
+      {/* Upload Form Modal */}
+      <UploadFormModal
+        isOpen={showUploadFormModal}
+        onClose={() => setShowUploadFormModal(false)}
+        eventUrl={eventUrl}
+        existingUploadId={uploadId}
+        onUploadComplete={fetchUploadDetails}
+        onUploadSuccess={(newUploadId) => {
+          if (newUploadId) {
+            navigate(`/${eventUrl}/uploads/${newUploadId}`);
+          }
+        }}
+      />
     </div>
   );
 }

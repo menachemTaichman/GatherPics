@@ -653,12 +653,11 @@ export const imagesAPI = {
     return response.data;
   },
 
-  notifyImageReady: async (uploadId, imageId, filename, eventUrl) => {
+  notifyImageReady: async (uploadId, imageId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.post(`/api/events/${eventId}/upload/image_ready`, {
       upload_id: uploadId,
-      image_id: imageId,
-      filename
+      image_id: imageId
     });
     return response.data;
   },
@@ -697,21 +696,29 @@ export const imagesAPI = {
             throw new Error(`File not found for upload URL at index ${index}`);
           }
           
-          // Upload to S3 using presigned POST URL
+          // Validate required fields
+          if (!uploadInfo.image_id) {
+            throw new Error(`Missing image_id for file ${file.name}`);
+          }
+          
+          // Upload to S3 using presigned POST URL (or direct upload endpoint)
           const formData = new FormData();
           formData.append('Content-Type', 'image/jpeg');
           
-          // Add all fields from upload_fields
+          // Add all fields from upload_fields (for S3 presigned POST)
           if (uploadInfo.upload_fields) {
             Object.keys(uploadInfo.upload_fields).forEach(key => {
               formData.append(key, uploadInfo.upload_fields[key]);
             });
+          } else {
+            // For direct upload endpoint, only image_id is needed (filename is generated from image_id)
+            formData.append('image_id', uploadInfo.image_id);
           }
           
-          // Add file last (required by S3)
+          // Add file last (required by S3 and direct upload)
           formData.append('file', file);
           
-          // Upload to S3
+          // Upload to S3 or direct upload endpoint
           const uploadResponse = await fetch(uploadInfo.upload_url, {
             method: 'POST',
             body: formData
@@ -725,13 +732,11 @@ export const imagesAPI = {
           await imagesAPI.notifyImageReady(
             upload_id,
             uploadInfo.image_id,
-            uploadInfo.filename,
             eventUrl
           );
           
           return { 
             image_id: uploadInfo.image_id, 
-            filename: uploadInfo.filename,
             file_index: index
           };
         })

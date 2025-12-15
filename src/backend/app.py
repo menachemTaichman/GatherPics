@@ -3,12 +3,18 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 import os
+import logging
 
 # Load environment variables from .env file if it exists (development only)
 # In production (AWS), environment variables are already set
 if os.path.exists('.env'):
     from dotenv import load_dotenv
     load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO if os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION' else logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 DIST_DIR = os.getenv('DIST_DIR')
 from src.backend.routes import (

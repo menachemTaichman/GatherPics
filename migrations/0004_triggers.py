@@ -1329,10 +1329,12 @@ steps = [
             UPDATE images SET
                 description = NEW.description,
                 moment_id = NEW.moment_id,
+                width = NEW.width,
+                height = NEW.height,
                 high_quality_file_size = NEW.high_quality_file_size,
                 display_file_size = NEW.display_file_size,
                 thumb_file_size = NEW.thumb_file_size,
-                status = COALESCE(NEW.status, OLD.status)
+                status = NEW.status
             WHERE image_id = OLD.image_id
             RETURNING image_id INTO updated_image_id;
             
@@ -1858,7 +1860,7 @@ steps = [
                 cur_profile_uuid('profile_id'),
                 COALESCE(NEW.started_at, CURRENT_TIMESTAMP),
                 NEW.completed_at,
-                COALESCE(NEW.status, 'pending'),
+                COALESCE(NEW.status, 'PROCESSING_IMAGES'),
                 COALESCE(NEW.images_count, 0),
                 COALESCE(NEW.faces_count, 0),
                 COALESCE(NEW.clusters_count, 0),

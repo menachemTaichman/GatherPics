@@ -197,6 +197,7 @@ FIELD_VALIDATORS = {
     'selected_groups': TypeAdapter(List[UUIDStr]),
     'ids': TypeAdapter(Optional[List[UUIDStr]]),
     'file_names': TypeAdapter(Optional[List[Annotated[str, Field(max_length=500)]]]),
+    'filename': TypeAdapter(Annotated[str, Field(max_length=500)]),
     'filenames': TypeAdapter(List[Annotated[str, Field(max_length=500)]]),
     'files_data': TypeAdapter(FilesData),
 
@@ -270,9 +271,25 @@ def _validate_field(key: str, value: Any, required: bool = False, location: tupl
         raise
 
 def get_input(key: str, required: bool = False) -> Any:
-    """Get input from request JSON body and validate it."""
-    data = request.get_json(silent=True) or {}
-    val = data.get(key)
+    """Get input from request JSON body or form data and validate it.
+    
+    For JSON requests: reads from request.get_json()
+    For multipart/form-data: reads from request.form
+    """
+    # Try JSON first (for application/json requests)
+    json_data = request.get_json(silent=True)
+    if json_data is not None:
+        val = json_data.get(key)
+        if val is not None:
+            return _validate_field(key, val, required)
+    
+    # Try form data (for multipart/form-data requests)
+    if key in request.form:
+        val = request.form.get(key)
+        return _validate_field(key, val, required)
+    
+    # Not found in either location
+    val = None
     return _validate_field(key, val, required)
 
 def get_query_param(key: str, required: bool = False) -> Any:

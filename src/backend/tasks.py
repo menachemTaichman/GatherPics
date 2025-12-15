@@ -4,11 +4,15 @@ Uses Redis-backed atomic counter/set mechanism to track upload progress.
 """
 
 import traceback
+
+from celery.utils.log import get_task_logger
+from datetime import datetime
 from src.backend.celery_worker import celery
 from src.backend.redis_client import get_redis_client
 from src.core.services.event import Event
 from src.core.errors import log_error
 
+logger = get_task_logger(__name__)
 
 def try_trigger_cluster(upload_id: int, event_id: str, profile_id: str) -> bool:
     """
@@ -69,7 +73,7 @@ def try_trigger_cluster(upload_id: int, event_id: str, profile_id: str) -> bool:
 
 
 @celery.task(name='process_image_task')
-def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id: str, filename: str):
+def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id: str):
     """
     Process a single image: resize to HQ, display and thumb, detect faces, crop faces, move from to_process to original.
     Uses Redis Set to track processing state and triggers cluster task when all images are done.
@@ -79,7 +83,6 @@ def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id:
         profile_id: Profile ID (for context)
         upload_id: ID of the upload this image belongs to
         image_id: UUID of the image to process
-        filename: Original filename in to_process directory
         
     Returns:
         dict with image_id and face_ids, or None on failure
@@ -97,11 +100,11 @@ def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id:
         event = Event(event_id, profile_id=profile_id)
         
         event.models.update_image_status(image_id, 'PROCESSING')
-        result = event._process_single_image(image_id, filename)
+        result = event._process_single_image(image_id)
         
         if result:
             event.models.update_image_status(image_id, 'READY')
-            return {'image_id': image_id, 'face_ids': result.get('face_ids', [])}
+            return True
         else:
             event.models.update_image_status(image_id, 'FAILED')
             return None
@@ -147,17 +150,24 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)        
         face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
-        
-        # Cluster faces
-        groups_created = event._cluster_faces(face_ids)
+        if len(face_ids) == 0:
+            images = event.models.get_upload_images(upload_id)
+            if len(images) > 0:
+                raise Exception('All images failed to process')
+        else:
+            # Cluster faces
+            groups_created, groups_related, images_count = event._cluster_faces(face_ids)
         
         # Update upload status
         faces_count = len(face_ids)
         event.models.edit('uploads', upload_id, {
             'status': 'COMPLETED',
+            'completed_at': datetime.now().isoformat(),
+            'images_count': images_count,
             'faces_count': faces_count,
-            'clusters_count': groups_created
+            'clusters_count': groups_related
         })
+        logger.info(f"completed cluster_faces_task for upload {upload_id}")
         
         return {'upload_id': upload_id, 'groups_created': groups_created, 'faces_count': faces_count}
         
@@ -167,7 +177,7 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
         
         # Update upload status to FAILED
         try:
-            event.models.edit('uploads', upload_id, {'status': 'FAILED', 'errors': [str(e)]})
+            event.models.edit('uploads', upload_id, {'status': 'FAILED', 'errors': []})
         except Exception as e:
             log_error(f"Error updating upload status to FAILED: {str(e)}", "ClusteringError", traceback.format_exc())
         

@@ -375,9 +375,6 @@ class DB:
                         'relation_table_fields': ['images_count', 'upload_images_count']
                     },
                 },
-                'serializable': {
-                    'errors': list,
-                }
             },
             'access_requests': {
                 'id_type': 'INTEGER',
@@ -503,10 +500,14 @@ class DB:
         return type_map.get(value_type, str)
 
     @staticmethod
-    def serialize_value(value_type: type | str, value: Any) -> str:
+    def serialize_value(value_type: type | str, value: Any) -> Any:
         if isinstance(value_type, str):
             value_type = DB.resolve_value_type(value_type)
-        """Convert a Python value to a string for database storage."""
+        """Convert a Python value for database storage.
+        
+        For PostgreSQL arrays (TEXT[], INTEGER[], etc.), returns the list as-is
+        so psycopg2 can handle the conversion. For JSONB fields, returns JSON string.
+        """
         
         if value_type == bool:
             return 1 if value else 0
@@ -514,8 +515,14 @@ class DB:
             return str(int(value))
         elif value_type == float:
             return str(float(value))
-        elif value_type in (list, dict):
-            return json.dumps(value if value is not None else [])
+        elif value_type == list:
+            # For PostgreSQL arrays, return list as-is (psycopg2 will handle conversion)
+            # For JSONB fields that store lists, this would need to be handled differently,
+            # but currently all list fields in STRUCTURE are PostgreSQL arrays
+            return value if value is not None else []
+        elif value_type == dict:
+            # For JSONB fields, serialize to JSON string
+            return json.dumps(value if value is not None else {})
         else:  # str
             return str(value)
     

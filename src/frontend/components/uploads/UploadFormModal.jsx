@@ -6,6 +6,7 @@ import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { imagesAPI, eventsAPI, uploadsAPI } from '../../utils/apiService';
+import { formatErrorMessage } from '../../utils/errorHandler';
 import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useEventGeneralById } from '../../utils/dataManager';
@@ -16,7 +17,8 @@ export default function UploadFormModal({
   onClose, 
   eventUrl, 
   onUploadComplete,
-  onUploadSuccess 
+  onUploadSuccess,
+  existingUploadId = null
 }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [assignMoments, setAssignMoments] = useState(true);
@@ -27,18 +29,28 @@ export default function UploadFormModal({
   const [uploadId, setUploadId] = useState(null);
   const [fileToImageMap, setFileToImageMap] = useState({}); // Maps file index to image_id
   const [imageStatuses, setImageStatuses] = useState({}); // Maps image_id to status
+  const [existingUploadImages, setExistingUploadImages] = useState([]); // Images from existing upload
+  const [existingUploadStatus, setExistingUploadStatus] = useState(null);
+  const [loadingExistingUpload, setLoadingExistingUpload] = useState(false);
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
   const timeUpdateIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const existingPollIntervalRef = useRef(null);
   const { showToast } = useToast();
   const { t } = useTranslation();
   const { isRTL } = useRTL();
   const eventId = useEventId(eventUrl);
-  useApplyScopes(isOpen && eventId ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
-  const eventData = useEventGeneralById(eventId);
+  
+  // Determine if we're viewing an existing upload (either from prop or after starting upload)
+  const isViewingExistingUpload = existingUploadId || uploadId;
+  
+  // Only fetch event data when not viewing existing upload (to avoid unnecessary fetch)
+  useApplyScopes(isOpen && eventId && !isViewingExistingUpload ? [{ entity: 'event', id: String(eventId), eventId: 'general' }] : []);
+  const eventData = useEventGeneralById(!isViewingExistingUpload ? eventId : null);
   const eventLimits = useMemo(() => {
-    if (!eventData) {
+    // Don't calculate limits when viewing existing upload
+    if (isViewingExistingUpload || !eventData) {
       return null;
     }
     const currentImagesCount = Number(eventData.images_count ?? eventData.current_images_count ?? 0);
@@ -53,7 +65,7 @@ export default function UploadFormModal({
       available_images_count: availableImagesCount,
       image_size_limit_bytes: imageSizeLimitBytes
     };
-  }, [eventData]);
+  }, [eventData, isViewingExistingUpload]);
   
   const { registerModal, unregisterModal } = useModalManager();
   const modalId = 'upload-form-modal';
@@ -122,6 +134,75 @@ export default function UploadFormModal({
     allowOutsideScroll: true
   });
 
+  // Fetch existing upload images when modal opens with existingUploadId
+  useEffect(() => {
+    if (isOpen && existingUploadId && eventUrl) {
+      setLoadingExistingUpload(true);
+      const fetchExistingUpload = async () => {
+        try {
+          const progress = await imagesAPI.getUploadProgress(existingUploadId, eventUrl);
+          setExistingUploadStatus(progress.upload_status);
+          setExistingUploadImages(progress.images || []);
+          
+          // Initialize image statuses from existing upload
+          const statuses = {};
+          (progress.images || []).forEach(img => {
+            statuses[img.image_id] = img.status || 'PENDING_UPLOAD';
+          });
+          setImageStatuses(statuses);
+        } catch (error) {
+          console.error('Failed to fetch existing upload:', error);
+          showToast(formatErrorMessage('fetch existing upload', error), 'error');
+        } finally {
+          setLoadingExistingUpload(false);
+        }
+      };
+      fetchExistingUpload();
+      
+      // Poll for updates if upload is still processing
+      const pollExistingUpload = async () => {
+        try {
+          const progress = await imagesAPI.getUploadProgress(existingUploadId, eventUrl);
+          setExistingUploadStatus(progress.upload_status);
+          setExistingUploadImages(progress.images || []);
+          
+          // Update image statuses
+          setImageStatuses(prev => {
+            const newStatuses = { ...prev };
+            (progress.images || []).forEach(img => {
+              newStatuses[img.image_id] = img.status || 'PENDING_UPLOAD';
+            });
+            return newStatuses;
+          });
+          
+          // Stop polling if upload is complete or failed
+          if (progress.upload_status === 'COMPLETED' || progress.upload_status === 'FAILED') {
+            if (existingPollIntervalRef.current) {
+              clearInterval(existingPollIntervalRef.current);
+              existingPollIntervalRef.current = null;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to poll existing upload:', error);
+        }
+      };
+      
+      // Poll every 2 seconds if upload is still processing
+      if (existingPollIntervalRef.current) {
+        clearInterval(existingPollIntervalRef.current);
+      }
+      existingPollIntervalRef.current = setInterval(pollExistingUpload, 2000);
+      pollExistingUpload(); // Initial poll
+      
+      return () => {
+        if (existingPollIntervalRef.current) {
+          clearInterval(existingPollIntervalRef.current);
+          existingPollIntervalRef.current = null;
+        }
+      };
+    }
+  }, [isOpen, existingUploadId, eventUrl, showToast]);
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -133,6 +214,9 @@ export default function UploadFormModal({
       setUploadId(null);
       setFileToImageMap({});
       setImageStatuses({});
+      setExistingUploadImages([]);
+      setExistingUploadStatus(null);
+      setLoadingExistingUpload(false);
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
@@ -140,6 +224,10 @@ export default function UploadFormModal({
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
+      }
+      if (existingPollIntervalRef.current) {
+        clearInterval(existingPollIntervalRef.current);
+        existingPollIntervalRef.current = null;
       }
     }
   }, [isOpen]);
@@ -154,6 +242,10 @@ export default function UploadFormModal({
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
+      }
+      if (existingPollIntervalRef.current) {
+        clearInterval(existingPollIntervalRef.current);
+        existingPollIntervalRef.current = null;
       }
     };
   }, []);
@@ -346,6 +438,9 @@ export default function UploadFormModal({
       setUploadId(result.upload_id);
       setFileToImageMap(result.file_to_image_map);
       
+      // Clear selected files since they're now part of the upload and will appear in existingUploadImages
+      setSelectedFiles([]);
+      
       // Initialize image statuses - all start as UPLOADING since they're being uploaded
       const initialStatuses = {};
       Object.values(result.file_to_image_map).forEach(imageId => {
@@ -373,9 +468,16 @@ export default function UploadFormModal({
         try {
           if (!result.upload_id) return;
           
+          // Stop polling if upload has failed
+          if (pollIntervalRef.current === null) return;
+          
           const progress = await imagesAPI.getUploadProgress(result.upload_id, eventUrl);
           const uploadStatus = progress.upload_status;
           const images = progress.images || [];
+          
+          // Update existing upload images (switch to view existing upload mode)
+          setExistingUploadImages(images);
+          setExistingUploadStatus(uploadStatus);
           
           // Update image statuses
           setImageStatuses(prev => {
@@ -426,6 +528,12 @@ export default function UploadFormModal({
           if (uploadStatus === 'COMPLETED' || uploadStatus === 'FAILED') {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
+            
+            // Stop time update interval
+            if (timeUpdateIntervalRef.current) {
+              clearInterval(timeUpdateIntervalRef.current);
+              timeUpdateIntervalRef.current = null;
+            }
             
             if (uploadStatus === 'COMPLETED') {
               // Get final upload details
@@ -504,6 +612,17 @@ export default function UploadFormModal({
           }
         } catch (error) {
           console.error('Failed to poll progress:', error);
+          // Stop polling on error
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          // Stop time update interval
+          if (timeUpdateIntervalRef.current) {
+            clearInterval(timeUpdateIntervalRef.current);
+            timeUpdateIntervalRef.current = null;
+          }
+          setUploading(false);
         }
       };
       
@@ -696,164 +815,229 @@ export default function UploadFormModal({
                 </div>
               )}
 
-              {/* Drag and drop area */}
-              <div
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                className={`relative border-2 border-dashed rounded-lg p-3 transition-all ${
-                  isDragging 
-                    ? 'border-primary-500 bg-primary-50' 
-                    : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-                } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Upload className={`w-8 h-8 ${isDragging ? 'text-primary-600' : 'text-gray-400'}`} />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {isDragging ? t('upload.dropFilesHere') : t('upload.dragAndDropFiles')}
-                      </p>
-                      <p className="text-xs text-gray-500">{t('upload.jpgFilesOnly')}</p>
+              {/* Drag and drop area - only show when not viewing existing upload */}
+              {!isViewingExistingUpload && (
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-lg p-3 transition-all ${
+                    isDragging 
+                      ? 'border-primary-500 bg-primary-50' 
+                      : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+                  } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Upload className={`w-8 h-8 ${isDragging ? 'text-primary-600' : 'text-gray-400'}`} />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {isDragging ? t('upload.dropFilesHere') : t('upload.dragAndDropFiles')}
+                        </p>
+                        <p className="text-xs text-gray-500">{t('upload.jpgFilesOnly')}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex-shrink-0">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".jpg,.jpeg,image/jpeg"
-                      multiple
-                      onChange={handleFileSelect}
-                      disabled={uploading}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={t('upload.selectFiles')}
-                      aria-label={t('upload.selectFiles')}
-                    >
-                      {t('upload.selectFiles')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Selected files list */}
-              {selectedFiles.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      {t('upload.selectedFiles')} ({selectedFiles.length})
-                    </h3>
-                    {!uploading && (
+                    <div className="flex-shrink-0">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".jpg,.jpeg,image/jpeg"
+                        multiple
+                        onChange={handleFileSelect}
+                        disabled={uploading}
+                        className="hidden"
+                      />
                       <button
-                        onClick={() => setSelectedFiles([])}
-                        className="text-xs text-red-600 hover:text-red-700 font-medium"
-                        title={t('upload.clearAll')}
-                        aria-label={t('upload.clearAll')}
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        title={t('upload.selectFiles')}
+                        aria-label={t('upload.selectFiles')}
                       >
-                        {t('upload.clearAll')}
+                        {t('upload.selectFiles')}
                       </button>
-                    )}
-                  </div>
-                  
-                  {/* Files list with scroll - native scrollbar */}
-                  <div className="max-h-64 overflow-y-auto space-y-2">
-                    {selectedFiles.map((fileItem, index) => {
-                      const imageId = fileToImageMap[index];
-                      const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
-                      
-                      // Status colors and icons
-                      const getStatusInfo = (status) => {
-                        switch (status) {
-                          case 'UPLOADING':
-                            return { color: 'text-blue-500', bg: 'bg-blue-100', icon: Upload, label: 'Uploading...', spinning: false };
-                          case 'PENDING_UPLOAD':
-                            return { color: 'text-gray-500', bg: 'bg-gray-100', icon: Upload, label: 'Pending' };
-                          case 'QUEUED':
-                            return { color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Loader2, label: 'Queued', spinning: true };
-                          case 'PROCESSING':
-                            return { color: 'text-blue-600', bg: 'bg-blue-100', icon: Loader2, label: 'Processing', spinning: true };
-                          case 'READY':
-                            return { color: 'text-green-600', bg: 'bg-green-100', icon: Check, label: 'Ready' };
-                          case 'FAILED':
-                            return { color: 'text-red-600', bg: 'bg-red-100', icon: AlertCircle, label: 'Failed' };
-                          default:
-                            return { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
-                        }
-                      };
-                      
-                      const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
-                      const StatusIcon = statusInfo.icon;
-                      
-                      return (
-                        <div
-                          key={fileItem.id}
-                          className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
-                            status === 'READY' 
-                              ? 'border-green-300 bg-green-50' 
-                              : status === 'FAILED'
-                              ? 'border-red-300 bg-red-50'
-                              : status === 'PROCESSING' || status === 'QUEUED' || status === 'UPLOADING'
-                              ? 'border-blue-300 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                            <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
-                              {status && (
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
-                                  {statusInfo.label}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
-                          </div>
-                          {!uploading && (
-                            <button
-                              onClick={() => handleRemoveFile(fileItem.id)}
-                              className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
-                              title={t('upload.removeFile')}
-                              aria-label={t('upload.removeFile')}
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Assign moments toggle */}
-              <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mt-4">
-                <div>
-                  <p className="font-medium text-gray-900 text-sm">{t('upload.autoAssignToMoments')}</p>
-                  <p className="text-xs text-gray-500">{t('upload.assignImagesToMomentsByCaptureTime')}</p>
+              {/* Unified images list - shows both existing upload images and newly selected files */}
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    {isViewingExistingUpload ? t('uploadDetail.uploadDetails') : t('upload.selectedFiles')} ({existingUploadImages.length + selectedFiles.length})
+                  </h3>
+                  {existingUploadStatus && (
+                    <span className={`text-xs font-medium px-2 py-1 rounded ${
+                      existingUploadStatus === 'COMPLETED' 
+                        ? 'bg-green-100 text-green-700'
+                        : existingUploadStatus === 'FAILED'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {existingUploadStatus === 'COMPLETED' ? t('upload.successfullyProcessed') : 
+                       existingUploadStatus === 'FAILED' ? t('upload.imageFailedToProcess') :
+                       t('upload.processing')}
+                    </span>
+                  )}
+                  {!isViewingExistingUpload && !uploading && selectedFiles.length > 0 && (
+                    <button
+                      onClick={() => setSelectedFiles([])}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium"
+                      title={t('upload.clearAll')}
+                      aria-label={t('upload.clearAll')}
+                    >
+                      {t('upload.clearAll')}
+                    </button>
+                  )}
                 </div>
-                <label className="relative inline-flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={assignMoments}
-                    onChange={(e) => setAssignMoments(e.target.checked)}
-                    disabled={uploading}
-                    className="sr-only peer"
-                  />
-                  <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:bg-primary-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${
-                    isRTL 
-                      ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
-                      : 'after:left-[2px] peer-checked:after:translate-x-5'
-                  } after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:border-white`}></div>
-                </label>
+                
+                {loadingExistingUpload && isViewingExistingUpload ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                ) : (existingUploadImages.length === 0 && selectedFiles.length === 0) ? (
+                  <div className="border rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-500 text-center py-4">{t('uploadDetail.noImagesInThisUpload')}</p>
+                  </div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3 bg-gray-50">
+                      {/* Helper function for status info */}
+                      {(() => {
+                        const getStatusInfo = (status) => {
+                          switch (status) {
+                            case 'UPLOADING':
+                              return { color: 'text-blue-500', bg: 'bg-blue-100', icon: Upload, label: 'Uploading...', spinning: false };
+                            case 'PENDING_UPLOAD':
+                              return { color: 'text-gray-500', bg: 'bg-gray-100', icon: Upload, label: 'Pending' };
+                            case 'QUEUED':
+                              return { color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Loader2, label: 'Queued', spinning: true };
+                            case 'PROCESSING':
+                              return { color: 'text-blue-600', bg: 'bg-blue-100', icon: Loader2, label: 'Processing', spinning: true };
+                            case 'READY':
+                              return { color: 'text-green-600', bg: 'bg-green-100', icon: Check, label: 'Ready' };
+                            case 'FAILED':
+                              return { color: 'text-red-600', bg: 'bg-red-100', icon: AlertCircle, label: 'Failed' };
+                            default:
+                              return { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
+                          }
+                        };
+
+                        return (
+                          <>
+                            {/* Existing upload images */}
+                            {existingUploadImages.map((img) => {
+                              const status = img.status || 'PENDING_UPLOAD';
+                              const statusInfo = getStatusInfo(status);
+                              const StatusIcon = statusInfo.icon;
+                              
+                              return (
+                                <div
+                                  key={img.image_id}
+                                  className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
+                                    status === 'READY' 
+                                      ? 'border-green-300 bg-green-50' 
+                                      : status === 'FAILED'
+                                      ? 'border-red-300 bg-red-50'
+                                      : status === 'PROCESSING' || status === 'QUEUED'
+                                      ? 'border-blue-300 bg-blue-50'
+                                      : 'border-gray-200'
+                                  }`}
+                                >
+                                  <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                    <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-medium text-gray-900 truncate">{img.label || img.image_id}</p>
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
+                                        {statusInfo.label}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">ID: {img.image_id}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            
+                            {/* Newly selected files */}
+                            {selectedFiles.map((fileItem, index) => {
+                              const imageId = fileToImageMap[index];
+                              const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
+                              const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
+                              const StatusIcon = statusInfo.icon;
+                              
+                              return (
+                                <div
+                                  key={fileItem.id}
+                                  className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
+                                    status === 'READY' 
+                                      ? 'border-green-300 bg-green-50' 
+                                      : status === 'FAILED'
+                                      ? 'border-red-300 bg-red-50'
+                                      : status === 'PROCESSING' || status === 'QUEUED' || status === 'UPLOADING'
+                                      ? 'border-blue-300 bg-blue-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                    <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
+                                      {status && (
+                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
+                                          {statusInfo.label}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
+                                  </div>
+                                  {!uploading && !isViewingExistingUpload && (
+                                    <button
+                                      onClick={() => handleRemoveFile(fileItem.id)}
+                                      className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
+                                      title={t('upload.removeFile')}
+                                      aria-label={t('upload.removeFile')}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                  </div>
+                )}
               </div>
+
+              {/* Assign moments toggle - only show when not viewing existing upload */}
+              {!isViewingExistingUpload && (
+                <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mt-4">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">{t('upload.autoAssignToMoments')}</p>
+                    <p className="text-xs text-gray-500">{t('upload.assignImagesToMomentsByCaptureTime')}</p>
+                  </div>
+                  <label className="relative inline-flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={assignMoments}
+                      onChange={(e) => setAssignMoments(e.target.checked)}
+                      disabled={uploading}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:bg-primary-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${
+                      isRTL 
+                        ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
+                        : 'after:left-[2px] peer-checked:after:translate-x-5'
+                    } after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:border-white`}></div>
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -883,25 +1067,27 @@ export default function UploadFormModal({
                     ? t('account.close') 
                     : t('account.cancel')}
               </button>
-              <button
-                onClick={handleStartUpload}
-                disabled={uploading || selectedFiles.length === 0}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={uploading ? t('upload.processing') : t('upload.startUpload')}
-                aria-label={uploading ? t('upload.processing') : t('upload.startUpload')}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{t('upload.processing')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    <span>{t('upload.startUpload')}</span>
-                  </>
-                )}
-              </button>
+              {!isViewingExistingUpload && (
+                <button
+                  onClick={handleStartUpload}
+                  disabled={uploading || selectedFiles.length === 0}
+                  className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={uploading ? t('upload.processing') : t('upload.startUpload')}
+                  aria-label={uploading ? t('upload.processing') : t('upload.startUpload')}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{t('upload.processing')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>{t('upload.startUpload')}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

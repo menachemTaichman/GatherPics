@@ -72,7 +72,14 @@ services:
   worker:
     image: metaich/photo-app:latest
     restart: always
-    command: celery -A src.backend.celery_worker.celery worker --loglevel=info --concurrency=2
+    command: >
+      celery -A src.backend.celery_worker.celery worker
+      --loglevel=DEBUG
+      --concurrency=2
+      --no-color
+      --without-gossip
+      --without-mingle
+      --without-heartbeat
     environment:
       TZ: Asia/Jerusalem
       REDIS_HOST: redis

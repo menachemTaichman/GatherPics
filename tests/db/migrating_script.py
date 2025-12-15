@@ -133,6 +133,9 @@ SKIP_IDS = {
     'settings': {
         1,  # Settings row with id=1 inserted in 0001_initial_schema.py
     },
+    'images': {
+        'aee4e1c6-4624-414b-9b7d-efbb7cb42b5b',
+    },
     # Add more tables/IDs as needed
 }
 
@@ -883,6 +886,9 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                     pg_conn.commit()
             else:
                 # Execute the batch insert
+                if pg_table_name in ['images', 'faces']:
+                    print(f"insert_sql: {insert_sql}")
+                    print(f"converted_rows: {converted_rows}")
                 execute_batch(
                     pg_cursor,
                     insert_sql,

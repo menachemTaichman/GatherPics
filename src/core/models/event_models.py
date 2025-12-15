@@ -468,9 +468,10 @@ class EventModels(BaseModels):
         query = """
             SELECT set_transaction_context('include_pending_images', 'true');
             SELECT ufc.face_id
-            FROM uplodas_faces_ctx ufc
-            INNER JOIN images i ON ufc.image_id = i.image_id
-            WHERE upload_id = %s
+            FROM uploads_faces_ctx ufc
+            INNER JOIN faces f ON ufc.face_id = f.face_id
+            INNER JOIN images i ON f.image_id = i.image_id
+            WHERE ufc.upload_id = %s
             AND i.status = 'READY'
         """
         return self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_VALUES)

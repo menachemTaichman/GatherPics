@@ -1,9 +1,15 @@
 import os
+import logging
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
 from src.core.storage.file_helper import get_file_helper
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
 dev_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
@@ -345,9 +351,11 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = find_incomplete_images(event_id)
-print(result)
-print('--------------------------------')
+# result = event._process_single_image('b6ec7cb5-c1dc-451f-9df0-6f0b8133dec4')
+
+# result = find_incomplete_images(event_id)
+# print(result)
+# print('--------------------------------')
 # general_models.process_new_images(event_id=event_id)
 
 # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)

@@ -53,11 +53,18 @@ def get_upload_urls(event_id):
         files_data = get_input('files_data', required=True)
 
         result = event.prepare_upload_urls(files_data)
+        upload_id = result["upload_id"]
+        changes = [{
+            'type': 'UPSERT',
+            'entity': 'upload',
+            'items': event.models.get_entities('uploads', [upload_id])
+        }]
         
         return jsonify({
             "success": True,
-            "upload_id": result["upload_id"],
-            "upload_urls": result["upload_urls"]
+            "upload_id": upload_id,
+            "upload_urls": result["upload_urls"],
+            "changes": changes
         })
         
     except Exception as e:
@@ -74,7 +81,8 @@ def direct_upload(event_id):
     Dev only - Direct file upload endpoint for local storage.
     Accepts file uploads and saves them to to_process directory.
     
-    Request: multipart/form-data with 'file' field and 'image_id', 'filename' fields
+    Request: multipart/form-data with 'file' field and 'image_id' field
+    The file is saved with image_id as filename and .jpg extension (lowercase)
     Returns: success status
     """
     event_id = validate_path_param('event_id', event_id)
@@ -88,13 +96,13 @@ def direct_upload(event_id):
         return jsonify({"error": "No file provided"}), 400
     
     image_id = get_input('image_id', required=True)
-    filename = get_input('filename', required=True)
     
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
     
-    # Save file to to_process directory
+    # Use image_id as filename with lowercase .jpg extension
+    filename = f"{image_id}.jpg"
     filepath = f"{event.to_process_dir}/{filename}"
     file_helper = get_file_helper()
     
@@ -119,8 +127,7 @@ def image_ready(event_id):
     Request body:
     {
         "upload_id": 123,
-        "image_id": "uuid",
-        "filename": "image.jpg"
+        "image_id": "uuid"
     }
     
     Returns:
@@ -141,7 +148,6 @@ def image_ready(event_id):
         # Get request data
         upload_id = get_input('upload_id', required=True)
         image_id = get_input('image_id', required=True)
-        filename = get_input('filename', required=True)
         
         # Validate upload_id is accessible
         if not event.models.is_accessible('uploads', upload_id):
@@ -168,7 +174,7 @@ def image_ready(event_id):
             event.models.edit('uploads', upload_id, {'status': 'PROCESSING_IMAGES'})
         
         # Trigger processing task
-        process_image_task.delay(event_id, profile_id, upload_id, image_id, filename)
+        process_image_task.delay(event_id, profile_id, upload_id, image_id)
         
         return jsonify({
             "success": True,
@@ -230,13 +236,11 @@ def upload_finished(event_id):
         redis_client.set(upload_finished_key, "true")
         
         # Check if we should trigger cluster task (all images already processed)
-        cluster_triggered = try_trigger_cluster(upload_id, event_id, profile_id)
-        
+        try_trigger_cluster(upload_id, event_id, profile_id)
+
         return jsonify({
             "success": True,
-            "message": "Upload finished" + (" - clustering triggered" if cluster_triggered else " - clustering will trigger when all images are processed"),
             "upload_id": upload_id,
-            "cluster_triggered": cluster_triggered
         })
         
     except Exception as e:
@@ -346,18 +350,29 @@ def update_upload(event_id, upload_id):
 @upload_bp.route("/uploads/<int:upload_id>", methods=["DELETE"])
 @require_auth
 def delete_upload(event_id, upload_id):
-    """Delete an upload."""
+    """Delete an upload and all related not ready images."""
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
     
+    changes = []
+    # Get all images related to this upload
+    upload_images = event.models.get_upload_images(upload_id)
+    not_ready_image_ids = [img['image_id'] for img in upload_images if img['status'] != 'READY']
+    if not_ready_image_ids:
+        event.delete_images(not_ready_image_ids)
+        changes.append({
+            'type': 'REMOVE',
+                'entity': 'image',
+            'ids': not_ready_image_ids
+        })
+
     event.models.delete('uploads', upload_id)
-    
-    response = {"success": True, "deleted_ids": [upload_id]}
-    response['changes'] = [{
+    changes.append({
         'type': 'REMOVE',
         'entity': 'upload',
         'ids': [upload_id]
-    }]
-    return jsonify(response)
+    })
+    
+    return jsonify({'success': True, 'deleted_ids': [upload_id], 'changes': changes})
