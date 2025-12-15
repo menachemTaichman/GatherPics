@@ -107,7 +107,8 @@ steps = [
                 all_groups,
                 all_albums
             )
-            VALUES (cur_profile_uuid('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
+            VALUES (cur_profile_uuid('profile_id'), NEW.event_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+            ON CONFLICT (event_id, profile_id) DO NOTHING;
             
             RETURN NEW;
         END;
@@ -1278,7 +1279,8 @@ steps = [
                 height,
                 description,
                 moment_id,
-                upload_id
+                upload_id,
+                status
             )
             VALUES (
                 COALESCE(NEW.image_id, gen_random_uuid()),
@@ -1293,7 +1295,8 @@ steps = [
                 COALESCE(NEW.height, 0),
                 NEW.description,
                 NEW.moment_id,
-                NEW.upload_id
+                NEW.upload_id,
+                COALESCE(NEW.status, 'PENDING_UPLOAD')
             )
             RETURNING image_id INTO new_image_id;
             
@@ -1328,7 +1331,8 @@ steps = [
                 moment_id = NEW.moment_id,
                 high_quality_file_size = NEW.high_quality_file_size,
                 display_file_size = NEW.display_file_size,
-                thumb_file_size = NEW.thumb_file_size
+                thumb_file_size = NEW.thumb_file_size,
+                status = COALESCE(NEW.status, OLD.status)
             WHERE image_id = OLD.image_id
             RETURNING image_id INTO updated_image_id;
             

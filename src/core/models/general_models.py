@@ -430,6 +430,7 @@ class GeneralModels(BaseModels):
         query = 'SELECT url FROM events WHERE event_id = %s'
         return self.db.execute_query(query, (event_id,), return_format=ReturnFormat.VALUE)
 
+    # TODO: remove
     def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
         """Process images for an event."""
         event = self.get_event(event_id)

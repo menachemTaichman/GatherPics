@@ -121,6 +121,8 @@ EXCLUDED_COLUMNS = {
     'events_profiles_images': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
     'events_profiles_groups': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
     'events_profiles_albums': ['event_id'],  # Junction table doesn't have event_id in PostgreSQL
+    'uploads': ['requested_images_count'],
+    'images': ['status'],
 }
 
 # IDs to skip per table (rows already inserted by initial schema migration)
@@ -679,7 +681,6 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
         all_column_names = [description[0] for description in source_cursor.description]
     
     rows = source_cursor.fetchall()
-    
     if not rows:
         print(f"  No data in {table_name}")
         return
@@ -850,21 +851,27 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                 identity_col = IDENTITY_COLUMN_TABLES[pg_table_name]
                 if identity_col in column_names:
                     # Insert row by row to handle conflicts gracefully
+                    # Commit after each successful insert to avoid losing data on errors
                     inserted_count = 0
                     for row in converted_rows:
                         try:
                             pg_cursor.execute(insert_sql, row)
+                            pg_conn.commit()  # Commit after each successful insert
                             inserted_count += 1
                         except psycopg2.IntegrityError as e:
                             # Skip duplicates - this can happen when migrating from PostgreSQL
                             # if rows were already inserted by migrations
                             # IntegrityError is the base class for UniqueViolation
+                            # Rollback to clear the aborted transaction state
+                            print(f"    Error: Failed to insert row in {pg_table_name}: {e}")
+                            pg_conn.rollback()
                             pass
                         except Exception as e:
                             # Log other errors but continue
+                            # Rollback to clear the aborted transaction state
                             print(f"    Warning: Failed to insert row in {pg_table_name}: {e}")
+                            pg_conn.rollback()
                             pass
-                    pg_conn.commit()
                 else:
                     # No identity column in this insert, use batch
                     execute_batch(
@@ -899,8 +906,10 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
                     if sequence_result and sequence_result[0]:
                         sequence_name = sequence_result[0]  # Use full qualified name (schema.sequence)
                         # Reset the sequence to the max value (true means it's been used, so next value will be max_id + 1)
-                        pg_cursor.execute(f"SELECT setval('{sequence_name}', {max_id}, true)")
-                        pg_conn.commit()
+                        # Only set the sequence if max_id > 0 (PostgreSQL sequences must be >= 1)
+                        if max_id > 0:
+                            pg_cursor.execute(f"SELECT setval('{sequence_name}', {max_id}, true)")
+                            pg_conn.commit()
             
             # Get count after insert to calculate how many were actually inserted
             pg_cursor.execute(f'SELECT COUNT(*) FROM {pg_table_name}')

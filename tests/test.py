@@ -183,7 +183,11 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-general_models.process_new_images(event_id=event_id)
+result = db.execute_query('SELECT * FROM images;', return_format=ReturnFormat.LIST_DICT)
+print(result)
+print('--------------------------------')
+
+# general_models.process_new_images(event_id=event_id)
 
 # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)
 # print(result)

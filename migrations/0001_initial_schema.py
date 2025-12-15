@@ -170,6 +170,7 @@ steps = [
             moment_id UUID,
             description TEXT,
             upload_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'PENDING_UPLOAD',
             UNIQUE (event_id, label)
         );
         
@@ -250,12 +251,13 @@ steps = [
             upload_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMP,
-            status TEXT,
+            status TEXT NOT NULL DEFAULT 'PROCESSING_IMAGES',
+            requested_images_count INTEGER NOT NULL DEFAULT 0,
             images_count INTEGER,
             faces_count INTEGER,
             clusters_count INTEGER,
             moments_count INTEGER,
-            errors TEXT,
+            errors TEXT[] DEFAULT ARRAY[]::TEXT[],
             notes TEXT,
             profile_id UUID
         );
@@ -639,6 +641,8 @@ step(
         CREATE INDEX IF NOT EXISTS idx_images_event_id_image_id ON images(event_id, image_id);
         CREATE INDEX IF NOT EXISTS idx_images_date_taken ON images(date_taken);
         CREATE INDEX IF NOT EXISTS idx_images_upload_id ON images(upload_id);
+        CREATE INDEX IF NOT EXISTS idx_images_status ON images(status);
+        CREATE INDEX IF NOT EXISTS idx_images_upload_id_status ON images(upload_id, status) WHERE upload_id IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_faces_group_id_image_id ON faces(group_id, image_id);
         CREATE INDEX IF NOT EXISTS idx_faces_image_id_group_id ON faces(image_id, group_id); -- Reverse index for joins
         CREATE INDEX IF NOT EXISTS idx_events_profiles_profile_event ON events_profiles(profile_id, event_id);
@@ -667,6 +671,8 @@ step(
         DROP INDEX IF EXISTS idx_events_profiles_profile_event;
         DROP INDEX IF EXISTS idx_faces_image_id_group_id;
         DROP INDEX IF EXISTS idx_faces_group_id_image_id;
+        DROP INDEX IF EXISTS idx_images_upload_id_status;
+        DROP INDEX IF EXISTS idx_images_status;
         DROP INDEX IF EXISTS idx_images_upload_id;
         DROP INDEX IF EXISTS idx_images_date_taken;
         DROP INDEX IF EXISTS idx_images_event_id_image_id;
@@ -682,7 +688,36 @@ step(
         DROP INDEX IF EXISTS idx_rekognition_usaged_created_at;
         """
     ),
-    # Step 4: Insert initial data (developer profile, settings, and default preferences)
+    # Step 4: Add status constraints
+    step(
+        """
+        -- Add status constraint to uploads table
+        ALTER TABLE uploads
+        ADD CONSTRAINT uploads_status_check
+        CHECK (status IN (
+            'PROCESSING_IMAGES',
+            'CLUSTERING_FACES',
+            'COMPLETED',
+            'FAILED'
+        ));
+        
+        -- Add status constraint to images table
+        ALTER TABLE images
+        ADD CONSTRAINT images_status_check
+        CHECK (status IN (
+            'PENDING_UPLOAD',
+            'QUEUED',
+            'PROCESSING',
+            'READY',
+            'FAILED'
+        ));
+        """,
+        """
+        ALTER TABLE images DROP CONSTRAINT IF EXISTS images_status_check;
+        ALTER TABLE uploads DROP CONSTRAINT IF EXISTS uploads_status_check;
+        """
+    ),
+    # Step 5: Insert initial data (developer profile, settings, and default preferences)
     step(
         """
         -- Insert developer profile
@@ -775,6 +810,17 @@ step(
             ('SettingsPage', 'auditSortDir', 'str', 'desc'),
             ('general', 'language', 'str', 'en')
         ON CONFLICT (preference_group, preference_key) DO NOTHING;
+        
+        -- Insert default preferences into profiles_preferences for all profiles
+        INSERT INTO profiles_preferences (profile_id, preference_group, preference_key, preference_value)
+        SELECT 
+            profile_id,
+            preference_group,
+            preference_key,
+            value
+        FROM default_preferences
+        JOIN profiles ON TRUE
+        ON CONFLICT (profile_id, preference_group, preference_key) DO NOTHING;
         """,
         """
         -- Delete default preferences

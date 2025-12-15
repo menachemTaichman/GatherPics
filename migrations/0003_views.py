@@ -414,7 +414,11 @@ steps = [
         WHERE
             i.event_id = cur_event_profile_uuid('event_id')
             AND ie.profile_id = cur_profile_uuid('profile_id')
-            AND ie.is_accessible;
+            AND ie.is_accessible
+            AND (
+                i.status = 'READY'
+                OR cur_transaction('include_pending_images') = 'true'
+            );
         
         CREATE OR REPLACE VIEW faces_ctx AS
         SELECT
