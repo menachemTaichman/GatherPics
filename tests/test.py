@@ -1,8 +1,9 @@
+import os
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
-import os
+from src.core.storage.file_helper import get_file_helper
 
 event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
 dev_profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
@@ -131,14 +132,175 @@ def test_faces_in_aws_and_db(event_id: str, test_prod: bool = False):
         if test_prod:
             DB._connection_pool = None
 
-def find_incomplete_images():
-    images = event.models.db.execute_query('SELECT image_id FROM images;', return_format=ReturnFormat.LIST_VALUES)
-    incomplete_images = []
-    for image in images:
-        if not os.path.exists(os.path.join(event.original_dir, f"{image}.jpg")):
-            incomplete_images.append(image)
+def find_incomplete_images(event_id: str, test_prod: bool = False):
+    """
+    Test images and faces in database and file system in both directions.
+    Tests all types: original, high_quality, display, thumb, and faces.
     
-    return incomplete_images
+    Args:
+        event_id: The event ID to test
+        test_prod: If True, use production DB (port 9000) and production storage
+    
+    Returns:
+        dict with comparison results for all image types
+    """
+
+    # Save original environment variables
+    original_env = os.environ.get('ENVIRONMENT')
+    original_db_port = os.environ.get('DB_PORT')
+    
+    try:
+        if test_prod:
+            # Set ENVIRONMENT to 'PRODUCTION' to use S3 storage
+            os.environ['ENVIRONMENT'] = 'PRODUCTION'
+            # Set DB_PORT to production port (9000)
+            os.environ['DB_PORT'] = '9000'
+            # Reset DB connection pool to use new port
+            DB._connection_pool = None
+            # Reset file_helper global instance to use new storage backend
+            import src.core.storage.file_helper as file_helper_module
+            file_helper_module._file_helper = None
+        
+        # Create Event instance with the event_id
+        test_event = Event(event_id, profile_id=dev_profile_id)
+        file_helper = get_file_helper()
+        
+        # Get data from database
+        db = None
+        images_in_db = None
+        faces_in_db = None
+        try:
+            db = DB(event_id=event_id, profile_id=dev_profile_id)
+            images_in_db = db.execute_query('SELECT image_id FROM images;', return_format=ReturnFormat.LIST_VALUES)
+            faces_in_db = db.execute_query('SELECT face_id FROM faces;', return_format=ReturnFormat.LIST_VALUES)
+        except Exception as e:
+            print(f"Warning: Could not query database for event {event_id}: {e}")
+        
+        # Define image types to test
+        image_types = [
+            {'name': 'original', 'dir': test_event.original_dir, 'ext': '.jpg', 'table': 'images', 'id_field': 'image_id'},
+            {'name': 'high_quality', 'dir': test_event.high_quality_dir, 'ext': '.jpg', 'table': 'images', 'id_field': 'image_id'},
+            {'name': 'display', 'dir': test_event.display_dir, 'ext': '.webp', 'table': 'images', 'id_field': 'image_id'},
+            {'name': 'thumb', 'dir': test_event.thumb_dir, 'ext': '.webp', 'table': 'images', 'id_field': 'image_id'},
+        ]
+        
+        # Test faces separately
+        faces_type = {'name': 'faces', 'dir': test_event.faces_dir, 'ext': '.webp', 'table': 'faces', 'id_field': 'face_id'}
+        
+        results = {
+            'event_id': event_id,
+            'images': {},
+            'faces': {}
+        }
+        
+        # Test each image type
+        for img_type in image_types:
+            type_name = img_type['name']
+            dir_path = img_type['dir']
+            file_ext = img_type['ext']
+            
+            # Test direction 1: DB to file system
+            ids_in_db_but_not_in_fs = []
+            if images_in_db is not None:
+                for image_id in images_in_db:
+                    file_path = f"{dir_path}/{image_id}{file_ext}"
+                    if not file_helper.exists(file_path):
+                        ids_in_db_but_not_in_fs.append(image_id)
+            
+            # Test direction 2: File system to DB
+            files_in_fs = []
+            try:
+                files_in_fs = file_helper.list_files(dir_path, suffix=file_ext)
+            except Exception as e:
+                print(f"Warning: Could not list {type_name} files from file system for event {event_id}: {e}")
+            
+            # Extract IDs from file paths
+            ids_in_fs = []
+            for file_path in files_in_fs:
+                # File path format: "event_id/{dir}/{id}.{ext}"
+                filename = file_path.split('/')[-1]
+                if filename.endswith(file_ext):
+                    entity_id = filename[:-len(file_ext)]  # Remove extension
+                    ids_in_fs.append(entity_id)
+            
+            # Check which IDs in file system are missing from DB
+            ids_in_fs_but_not_in_db = []
+            if images_in_db is not None:
+                ids_in_fs_but_not_in_db = [entity_id for entity_id in ids_in_fs if entity_id not in images_in_db]
+            else:
+                # If we can't query DB, all FS IDs are potentially missing from DB
+                ids_in_fs_but_not_in_db = ids_in_fs
+            
+            results['images'][type_name] = {
+                'in_db_but_not_in_fs': ids_in_db_but_not_in_fs,
+                'in_fs_but_not_in_db': ids_in_fs_but_not_in_db,
+                'in_db_count': len(images_in_db) if images_in_db is not None else 0,
+                'in_fs_count': len(ids_in_fs)
+            }
+        
+        # Test faces
+        type_name = faces_type['name']
+        dir_path = faces_type['dir']
+        file_ext = faces_type['ext']
+        
+        # Test direction 1: DB to file system
+        faces_in_db_but_not_in_fs = []
+        if faces_in_db is not None:
+            for face_id in faces_in_db:
+                file_path = f"{dir_path}/{face_id}{file_ext}"
+                if not file_helper.exists(file_path):
+                    faces_in_db_but_not_in_fs.append(face_id)
+        
+        # Test direction 2: File system to DB
+        files_in_fs = []
+        try:
+            files_in_fs = file_helper.list_files(dir_path, suffix=file_ext)
+        except Exception as e:
+            print(f"Warning: Could not list {type_name} files from file system for event {event_id}: {e}")
+        
+        # Extract face IDs from file paths
+        faces_in_fs = []
+        for file_path in files_in_fs:
+            filename = file_path.split('/')[-1]
+            if filename.endswith(file_ext):
+                face_id = filename[:-len(file_ext)]  # Remove extension
+                faces_in_fs.append(face_id)
+        
+        # Check which faces in file system are missing from DB
+        faces_in_fs_but_not_in_db = []
+        if faces_in_db is not None:
+            faces_in_fs_but_not_in_db = [face_id for face_id in faces_in_fs if face_id not in faces_in_db]
+        else:
+            # If we can't query DB, all FS faces are potentially missing from DB
+            faces_in_fs_but_not_in_db = faces_in_fs
+        
+        results['faces'] = {
+            'in_db_but_not_in_fs': faces_in_db_but_not_in_fs,
+            'in_fs_but_not_in_db': faces_in_fs_but_not_in_db,
+            'in_db_count': len(faces_in_db) if faces_in_db is not None else 0,
+            'in_fs_count': len(faces_in_fs)
+        }
+        
+        return results
+    finally:
+        # Restore original environment variables
+        if original_env is not None:
+            os.environ['ENVIRONMENT'] = original_env
+        elif 'ENVIRONMENT' in os.environ and test_prod:
+            # If ENVIRONMENT wasn't originally set, remove it after we're done
+            del os.environ['ENVIRONMENT']
+        
+        if original_db_port is not None:
+            os.environ['DB_PORT'] = original_db_port
+        elif 'DB_PORT' in os.environ and test_prod:
+            # If DB_PORT wasn't originally set, remove it after we're done
+            del os.environ['DB_PORT']
+        
+        # Reset DB connection pool and file_helper to use original settings
+        if test_prod:
+            DB._connection_pool = None
+            import src.core.storage.file_helper as file_helper_module
+            file_helper_module._file_helper = None
 
 def add_preference(preference_group: str, preference_key: str, value_type: str, value: any):
     query = f"""
@@ -183,10 +345,9 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = db.execute_query('SELECT * FROM images;', return_format=ReturnFormat.LIST_DICT)
+result = find_incomplete_images(event_id)
 print(result)
 print('--------------------------------')
-
 # general_models.process_new_images(event_id=event_id)
 
 # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)

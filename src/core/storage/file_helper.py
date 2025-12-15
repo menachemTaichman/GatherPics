@@ -203,6 +203,19 @@ class FileHelper:
             content_type: Optional content type (used for S3, preserved from source if not specified)
         """
         self.storage.copy(source_path, dest_path, content_type=content_type)
+    
+    def list_files(self, prefix: str, suffix: Optional[str] = None) -> list[str]:
+        """
+        List files with given prefix (directory path).
+        
+        Args:
+            prefix: Directory path prefix (e.g., "event_id/original")
+            suffix: Optional file suffix to filter by (e.g., ".jpg")
+            
+        Returns:
+            List of file paths (relative to storage root)
+        """
+        return self.storage.list_files(prefix, suffix)
 
 
 # Global instance for convenience

@@ -83,6 +83,19 @@ class StorageBackend(ABC):
             For local: file handle or None
         """
         pass
+    
+    @abstractmethod
+    def list_files(self, prefix: str, suffix: Optional[str] = None) -> list[str]:
+        """List files with given prefix (directory path).
+        
+        Args:
+            prefix: Directory path prefix (e.g., "event_id/original")
+            suffix: Optional file suffix to filter by (e.g., ".jpg")
+            
+        Returns:
+            List of file paths (relative to storage root)
+        """
+        pass
 
 
 class LocalStorageBackend(StorageBackend):
@@ -201,6 +214,22 @@ class LocalStorageBackend(StorageBackend):
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {path}")
         return open(full_path, 'rb')
+    
+    def list_files(self, prefix: str, suffix: Optional[str] = None) -> list[str]:
+        """List files with given prefix (directory path)."""
+        full_path = self._get_full_path(prefix)
+        if not full_path.exists() or not full_path.is_dir():
+            return []
+        
+        files = []
+        for item in full_path.iterdir():
+            if item.is_file():
+                if suffix is None or item.name.endswith(suffix):
+                    # Return relative path from storage root
+                    relative_path = str(item.relative_to(self.base_path))
+                    files.append(relative_path)
+        
+        return files
 
 
 class S3StorageBackend(StorageBackend):
@@ -398,6 +427,37 @@ class S3StorageBackend(StorageBackend):
             if e.response['Error']['Code'] == 'NoSuchKey':
                 raise FileNotFoundError(f"File not found: {path}")
             raise
+    
+    # TODO: think maybe its very expensive
+    def list_files(self, prefix: str, suffix: Optional[str] = None) -> list[str]:
+        """List files with given prefix (directory path) in S3."""
+        return []
+        key_prefix = self._get_key(prefix)
+        if not key_prefix.endswith('/'):
+            key_prefix += '/'
+        
+        files = []
+        paginator = self.s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=self.bucket_name, Prefix=key_prefix)
+        
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    key = obj['Key']
+                    # Remove base_prefix if present to get relative path
+                    if self.base_prefix:
+                        if key.startswith(self.base_prefix + '/'):
+                            relative_key = key[len(self.base_prefix) + 1:]
+                        else:
+                            continue
+                    else:
+                        relative_key = key
+                    
+                    # Filter by suffix if specified
+                    if suffix is None or relative_key.endswith(suffix):
+                        files.append(relative_key)
+        
+        return files
 
 
 def get_storage_backend() -> StorageBackend:
