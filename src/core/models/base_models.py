@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from src.core.database.db import DB, ReturnFormat
 from abc import ABC
 from enum import Enum
+import re
 
 class ChildOperation(Enum):
     ADD = 'ADD'
@@ -508,36 +509,50 @@ class BaseModels(ABC):
             str_mid_suffix = f'){separator}'
             
             re_mid_prefix = ' \\('  
-            re_mid_suffix = f'\\){separator}'
+            re_mid_suffix = f'\\){re.escape(separator)}'
+            
+            # Pattern to match counter at the end
+            counter_pattern = re.compile(r' \(\d+\)' + (re.escape(separator) if separator else '') + r'?$')
         else:
             str_mid_prefix = ' '
-            str_mid_suffix = separator  # No space after number for space format
+            str_mid_suffix = separator 
+            
             re_mid_prefix = ' '
-            re_mid_suffix = separator  # No space in regex either
+            re_mid_suffix = re.escape(separator)
+            
+            counter_pattern = re.compile(r' \d+' + (re.escape(separator) if separator else '') + r'?$')
 
+        base_prefix = prefix
+        while True:
+            new_prefix = counter_pattern.sub('', base_prefix)
+            if new_prefix == base_prefix:
+                break
+            base_prefix = new_prefix
+        
         full_suffix = f'{suffix}' if suffix else ''
+        
+        safe_base_prefix = re.escape(base_prefix)
 
         query = f"""
-            SELECT MAX(
+            SELECT 
                 COALESCE(
                     substring(label
                         FROM ('^' || %s || %s || '([0-9]+)' || %s || %s || '$')
                     )::bigint,
                     0
-                )
-            ) AS max_num
+                ) AS label_num
             FROM {original_table}
             WHERE
                 (
-                    label LIKE %s || '%%' || %s 
+                    label LIKE %s || %s || '%%' || %s || %s
                     OR label = %s || %s || %s
                 )
         """
 
         params = [
-            prefix, re_mid_prefix, re_mid_suffix, full_suffix,
-            prefix + str_mid_prefix, str_mid_suffix + full_suffix,
-            prefix, separator, full_suffix,
+            safe_base_prefix, re_mid_prefix, re_mid_suffix, re.escape(full_suffix), # Regex params
+            base_prefix, str_mid_prefix, str_mid_suffix, full_suffix,               # LIKE params
+            base_prefix, separator, full_suffix,                                    # Equality params
         ]
 
         if exclude_id:
@@ -550,14 +565,18 @@ class BaseModels(ABC):
         
         query += ';'
 
-        max_num = self.db.execute_query(query, params, return_format=ReturnFormat.VALUE)
-
-        if max_num is None:
-            return f'{prefix}{separator}{full_suffix}'
+        results = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_TUPLES)
+        
+        numbers = [row[0] for row in results] if results else []
+        
+        if not numbers:
+            return f'{base_prefix}{separator}{full_suffix}'
+        
+        max_num = max(numbers)
         
         if max_num == 0:
             next_num = start_from
         else:
             next_num = max_num + 1
         
-        return f'{prefix}{str_mid_prefix}{next_num}{str_mid_suffix}{full_suffix}'
+        return f'{base_prefix}{str_mid_prefix}{next_num}{str_mid_suffix}{full_suffix}'
