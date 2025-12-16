@@ -343,9 +343,38 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     depsSigRef.current = next;
   }, [imageId, currentIndex, parent, entity, sortBy, sortOrder, includeArchived]);
   
-  // Refs to track values for use in callback defined earlier
-  const anyChildModalOpenRef = useRef(false);
-  const modalRefForKeys = useRef(null);
+  // Custom keyboard handler for ImageViewer-specific shortcuts
+  const handleImageViewerKeys = (e) => {
+    // Allow all normal input behavior for input, textarea, and select elements
+    const targetTagName = e.target.tagName?.toLowerCase();
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
+    }
+      
+    switch (e.key) {
+      case 'Escape':
+        // If drawer is open, close it only (don't close modal)
+        if (drawerOpenRef.current) {
+          setDrawerOpen(false);
+          return true; // Mark as handled
+        }
+        // If drawer is closed, let useModalFocus handle closing the modal
+        return false;
+      case 'ArrowLeft':
+        if (filteredImages.length > 1) {
+          handleNavigate(isRTL ? 'next' : 'prev');
+          return true; // Mark as handled (circular via handleNavigate)
+        }
+        break;
+      case 'ArrowRight':
+        if (filteredImages.length > 1) {
+          handleNavigate(isRTL ? 'prev' : 'next');
+          return true; // Mark as handled (circular via handleNavigate)
+        }
+        break;
+    }
+    return false; // Not handled
+  };
   
   // Stable modal id (must be defined before using useModalFocus)
   const imageViewerModalIdRef = useRef(null);
@@ -362,12 +391,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   useEffect(() => {
     drawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
-
-  // Modal state variables - must be defined before useMemo that uses them
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
-  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   // Wrapped close handler - only closes modal if drawer is not open
   // ESC key is handled separately in handleImageViewerKeys
@@ -388,154 +411,20 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     onClose();
   }, [onClose]);
 
-  // Subscribe to modal store to track other modals
-  const modalStack = useModalStore(state => state.stack);
-  const modalRegistry = useModalStore(state => state.registry);
-  
-  // Check if any child modal is open
-  const anyChildModalOpen = useMemo(() => {
-    // Check state variables for modals opened from ImageViewer
-    const stateModalsOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || deleteModalOpen;
-    
-    // Check modal store for other registered modals (excluding ImageViewer itself)
-    const otherModals = modalStack ? modalStack.filter(id => id !== imageViewerModalId) : [];
-    const hasOtherModals = otherModals.length > 0;
-    
-    const result = stateModalsOpen || hasOtherModals;
-    console.log('[ImageViewer] anyChildModalOpen calculated:', {
-      showTransferModal,
-      showMoveToMomentModal,
-      showManageAccessModal,
-      deleteModalOpen,
-      stateModalsOpen,
-      otherModals,
-      hasOtherModals,
-      result,
-      modalStack,
-      imageViewerModalId
-    });
-    return result;
-  }, [showTransferModal, showMoveToMomentModal, showManageAccessModal, deleteModalOpen, imageViewerModalId, modalStack]);
-
-  // Update ref when anyChildModalOpen changes
-  useEffect(() => {
-    console.log('[ImageViewer] Updating anyChildModalOpenRef:', anyChildModalOpen);
-    anyChildModalOpenRef.current = anyChildModalOpen;
-  }, [anyChildModalOpen]);
-
-  // Custom keyboard handler for ImageViewer-specific shortcuts
-  // Defined here so it can access anyChildModalOpen and modalRef
-  const handleImageViewerKeys = useCallback((e) => {
-    console.log('[ImageViewer] Key handler called:', {
-      key: e.key,
-      target: e.target,
-      targetTag: e.target.tagName,
-      anyChildModalOpen: anyChildModalOpenRef.current,
-      modalRefForKeys: modalRefForKeys.current
-    });
-    
-    const target = e.target;
-    const imageViewerModal = modalRefForKeys.current;
-    
-    // First check: if target is NOT inside ImageViewer modal, it must be in a child modal
-    if (imageViewerModal && !imageViewerModal.contains(target)) {
-      console.log('[ImageViewer] Target is NOT in ImageViewer modal, must be in child modal', {
-        targetTag: target.tagName,
-        targetType: target.type,
-        isInput: target.tagName === 'INPUT' || target.tagName === 'TEXTAREA',
-        key: e.key
-      });
-      // Mark the event to prevent useModalFocus from calling stopPropagation
-      e._allowPropagation = true;
-      // For input/textarea elements, we definitely want to allow the event through
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-        console.log('[ImageViewer] Target is input element in child modal - allowing event');
-      }
-      // Return false so useModalFocus doesn't treat it as handled, but we've marked it to allow propagation
-      return false;
-    }
-    
-    // Check if child modals are open and if the event target is inside a child modal
-    if (anyChildModalOpenRef.current) {
-      console.log('[ImageViewer] Child modal is open, checking target');
-      // Check if target is inside a modal that's not ImageViewer by checking z-index or parent structure
-      // Child modals typically have higher z-index (100010) than ImageViewer
-      const targetZIndex = window.getComputedStyle(target).zIndex;
-      const parentWithHighZ = target.closest('[style*="z-index"]');
-      if (parentWithHighZ) {
-        const parentZIndex = window.getComputedStyle(parentWithHighZ).zIndex;
-        console.log('[ImageViewer] Found parent with z-index:', parentZIndex, 'target z-index:', targetZIndex);
-        // Child modals have z-index 100010
-        if (parseInt(parentZIndex) >= 100010 && imageViewerModal && !imageViewerModal.contains(target)) {
-          console.log('[ImageViewer] Target is in child modal (high z-index), returning true to prevent stopPropagation');
-          return true;
-        }
-      }
-    }
-    
-    // Always allow normal input behavior for input, textarea, and select elements INSIDE ImageViewer
-    const targetTagName = e.target.tagName?.toLowerCase();
-    console.log('[ImageViewer] Target tag name:', targetTagName);
-    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
-      console.log('[ImageViewer] Target is input element, returning true');
-      return true; // Signal that we're handling this, preventing useModalFocus from stopping it.
-    }
-      
-    switch (e.key) {
-      case 'Escape':
-        // If child modals are open, let them handle ESC
-        if (anyChildModalOpenRef.current) {
-          return false;
-        }
-        // If drawer is open, close it only (don't close modal)
-        if (drawerOpenRef.current) {
-          setDrawerOpen(false);
-          return true; // Mark as handled
-        }
-        // If drawer is closed, let useModalFocus handle closing the modal
-        return false;
-      case 'ArrowLeft':
-        if (filteredImages.length > 1 && handleNavigateRef.current) {
-          handleNavigateRef.current(isRTL ? 'next' : 'prev');
-          return true; // Mark as handled (circular via handleNavigate)
-        }
-        break;
-      case 'ArrowRight':
-        if (filteredImages.length > 1 && handleNavigateRef.current) {
-          handleNavigateRef.current(isRTL ? 'prev' : 'next');
-          return true; // Mark as handled (circular via handleNavigate)
-        }
-        break;
-    }
-    return false; // Not handled
-  }, [filteredImages, isRTL]);
-
   // Use modal focus hook
   // Back button handling is automatically included, but only when imageId is set
-  const enableFocusTrappingValue = !drawerOpen && !anyChildModalOpen;
-  console.log('[ImageViewer] useModalFocus called with:', {
-    drawerOpen,
-    anyChildModalOpen,
-    enableFocusTrapping: enableFocusTrappingValue
-  });
   const { modalRef } = useModalFocus(true, handleModalClose, {
     customKeyHandler: handleImageViewerKeys,
     allowOutsideScroll: true,
     modalType: 'popup',
     modalId: imageViewerModalId,
-    // Disable focus trapping when drawer is open or when child modals are open
-    enableFocusTrapping: enableFocusTrappingValue,
+    // Disable focus trapping when drawer is open to prevent conflict with Vaul
+    enableFocusTrapping: !drawerOpen,
     // Use custom state key for ImageViewer
     backButtonStateKey: 'imageViewerOpen',
     // Only enable back button when imageId is set (viewer is actually ready)
     enableBackButton: !!imageId
   });
-
-  // Update modalRefForKeys when modalRef is available
-  useEffect(() => {
-    console.log('[ImageViewer] Updating modalRefForKeys:', modalRef.current);
-    modalRefForKeys.current = modalRef.current;
-  }, [modalRef]);
   const [imageInfo, setImageInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const pswpRef = useRef(null);
@@ -549,8 +438,11 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const facesListRef = useRef(EMPTY_ARRAY);
   const handleFaceClickRef = useRef(null);
   const handleTransferFaceRef = useRef(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedFaceForTransfer, setSelectedFaceForTransfer] = useState(null);
   const [transferImageId, setTransferImageId] = useState(null); // Store image ID before transfer
+  const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
+  const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState('');
   const [isSavingDescription, setIsSavingDescription] = useState(false);
@@ -709,11 +601,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     entityId: parent
   });
 
-  // Update deleteModalOpen when imageActions.showDeleteConfirmModal changes
-  useEffect(() => {
-    setDeleteModalOpen(imageActions?.showDeleteConfirmModal || false);
-  }, [imageActions?.showDeleteConfirmModal]);
-
   const [drawerDirection, setDrawerDirection] = useState('none');
   const [drawerContentKey, setDrawerContentKey] = useState(imageId);
 
@@ -732,7 +619,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
   // Use a ref to track navigation direction for animation
   const lastNavDirectionRef = useRef('next');
-  const handleNavigateRef = useRef(null);
 
   // Circular navigation
   const handleNavigate = (direction, index) => {
@@ -766,11 +652,6 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     lastNavDirectionRef.current = targetDirection;
     setDrawerDirection(targetDirection);
   };
-  
-  // Update ref when handleNavigate is defined
-  useEffect(() => {
-    handleNavigateRef.current = handleNavigate;
-  }, [handleNavigate]);
 
 
   // Subscribe to current image info from store
