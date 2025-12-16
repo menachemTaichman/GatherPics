@@ -132,7 +132,24 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   // Handle keyboard events
   const handleKeyDown = useCallback((e) => {
     if (!isOpen) return;
-    // Custom handler first
+    
+    // First check: if target is in a child modal (high z-index), don't handle the event at all
+    const target = e.target;
+    if (target && modalRef.current && !modalRef.current.contains(target)) {
+      // Target is outside this modal, check if it's in a child modal
+      let current = target;
+      while (current && current !== document.body) {
+        const zIndex = window.getComputedStyle(current).zIndex;
+        // Child modals typically have z-index 100010 or higher
+        if (zIndex && parseInt(zIndex) >= 100010) {
+          // This is a child modal, don't handle the event - let it pass through
+          return;
+        }
+        current = current.parentElement;
+      }
+    }
+    
+    // Custom handler second
     if (customKeyHandler) {
       const handled = customKeyHandler(e);
       if (handled) return;
@@ -186,6 +203,10 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     if (allowOutsideScroll && isMouseOutsideModal.current) {
       const scrollKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
       if (scrollKeys.includes(e.key)) return;
+    }
+    // Check if custom handler marked this event to allow propagation (e.g., for child modals)
+    if (e._allowPropagation) {
+      return; // Don't prevent or stop propagation, let it reach child modals
     }
     e.preventDefault();
     e.stopPropagation();
@@ -271,6 +292,19 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       if (pswpElement) {
         // Don't close if clicking on PhotoSwipe elements - they're part of the modal content
         return;
+      }
+      
+      // Check if click is on a child modal (modals with high z-index like 100010)
+      const targetElement = e.target;
+      let current = targetElement;
+      while (current && current !== document.body) {
+        const zIndex = window.getComputedStyle(current).zIndex;
+        // Child modals typically have z-index 100010 or higher
+        if (zIndex && parseInt(zIndex) >= 100010) {
+          // This is a child modal, don't close
+          return;
+        }
+        current = current.parentElement;
       }
       
       // Check if the click is on the toggle button (for BucketDrawer or NotificationsDropdown)
