@@ -442,9 +442,14 @@ class EventModels(BaseModels):
             SELECT set_transaction_context('include_pending_images', 'true');
             SELECT image_id, label, status
             FROM images_ctx
-            WHERE upload_id = %s
+            WHERE upload_id = %s;
         """
-        return self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_DICTS)
+        result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_DICTS)
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'false');
+        """
+        self.db.execute_query(query)
+        return result
 
     def update_image_status(self, image_id: str, status: str):
         """Update image status.
@@ -455,6 +460,7 @@ class EventModels(BaseModels):
         query = f"""
             SELECT set_transaction_context('include_pending_images', 'true');
             UPDATE images_ctx SET status = %s WHERE image_id = %s;
+            SELECT set_transaction_context('include_pending_images', 'false');
         """
         self.db.execute_query(query, (status, image_id))
     
@@ -472,9 +478,14 @@ class EventModels(BaseModels):
             INNER JOIN faces f ON ufc.face_id = f.face_id
             INNER JOIN images i ON f.image_id = i.image_id
             WHERE ufc.upload_id = %s
-            AND i.status = 'READY'
+            AND i.status = 'READY';
         """
-        return self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_VALUES)
+        result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_VALUES)
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'false');
+        """
+        self.db.execute_query(query)
+        return result
     
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
@@ -664,6 +675,7 @@ class EventModels(BaseModels):
             INSERT INTO my_access_requests_groups_ctx
             (access_request_id, group_id)
             VALUES {values_clause};
+            SELECT set_transaction_context('temp_access_request_id', 'null');
         """
         self.db.execute_query(query, values)
         

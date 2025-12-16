@@ -662,11 +662,15 @@ export const imagesAPI = {
     return response.data;
   },
 
-  notifyUploadFinished: async (uploadId, eventUrl) => {
+  notifyUploadFinished: async (uploadId, assignMoments, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/upload/finished`, {
-      upload_id: uploadId
-    });
+    const params = new URLSearchParams();
+    if (assignMoments) {
+      params.append('assign_moments', 'true');
+    }
+    const queryString = params.toString();
+    const url = `/api/events/${eventId}/uploads/${uploadId}/finished${queryString ? `?${queryString}` : ''}`;
+    const response = await api.get(url);
     return response.data;
   },
 
@@ -676,7 +680,7 @@ export const imagesAPI = {
     return response.data;
   },
 
-  uploadWithProgress: async (files, assignMoments, eventUrl) => {
+  uploadWithProgress: async (files, assignMoments, eventUrl, onProgress = null) => {
     const eventId = await getEventIdForApi(eventUrl);
     
     try {
@@ -688,7 +692,18 @@ export const imagesAPI = {
         throw new Error('No upload URLs received');
       }
       
+      // Notify progress: starting uploads
+      if (onProgress) {
+        onProgress({ 
+          phase: 'uploading', 
+          total: files.length, 
+          completed: 0,
+          message: 'Starting uploads...'
+        });
+      }
+      
       // Step 2: Upload files directly to S3 and notify backend
+      let completedCount = 0;
       const uploadResults = await Promise.allSettled(
         upload_urls.map(async (uploadInfo, index) => {
           const file = files[index];
@@ -735,6 +750,17 @@ export const imagesAPI = {
             eventUrl
           );
           
+          // Update progress
+          completedCount++;
+          if (onProgress) {
+            onProgress({ 
+              phase: 'uploading', 
+              total: files.length, 
+              completed: completedCount,
+              message: `Uploaded ${completedCount} of ${files.length} files...`
+            });
+          }
+          
           return { 
             image_id: uploadInfo.image_id, 
             file_index: index
@@ -748,8 +774,18 @@ export const imagesAPI = {
         console.warn('Some files failed to upload:', failures);
       }
       
+      // Notify progress: all uploads complete
+      if (onProgress) {
+        onProgress({ 
+          phase: 'uploads_complete', 
+          total: files.length, 
+          completed: files.length,
+          message: 'All files uploaded to S3'
+        });
+      }
+      
       // Step 3: Notify backend that all uploads are finished
-      await imagesAPI.notifyUploadFinished(upload_id, eventUrl);
+      await imagesAPI.notifyUploadFinished(upload_id, assignMoments, eventUrl);
       
       // Return upload_id and mapping of files to image_ids
       const fileToImageMap = {};
@@ -1313,6 +1349,13 @@ export const uploadsAPI = {
   delete: async (uploadId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
     const response = await api.delete(`/api/events/${eventId}/uploads/${uploadId}`);
+    return response.data;
+  },
+  
+  // Delete unready (failed) images in an upload
+  deleteUnreadyImages: async (uploadId, eventUrl) => {
+    const eventId = await getEventIdForApi(eventUrl);
+    const response = await api.delete(`/api/events/${eventId}/uploads/${uploadId}/unready_images`);
     return response.data;
   },
   

@@ -148,7 +148,7 @@ class Event():
             
             # Create image record with PENDING_UPLOAD status
             image_name, image_ext = os.path.splitext(filename)
-            label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, event_id=self.event_id)
+            label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, separator='.', event_id=self.event_id)
             image_id = self.models.add('images', {
                 'label': label,
                 'upload_id': upload_id,
@@ -347,6 +347,22 @@ class Event():
             self.file_helper.copy(image_path, original_path, content_type='image/jpeg')
             self.file_helper.delete(image_path)
 
+            # Update DB record with data
+            logger.debug("Updating database record...")
+            query = f"""
+                SELECT set_transaction_context('include_pending_images', 'true');
+                UPDATE images_ctx SET
+                    date_taken = %s,
+                    file_size = %s,
+                    width = %s,
+                    height = %s,
+                    high_quality_file_size = %s,
+                    display_file_size = %s,
+                    thumb_file_size = %s
+                WHERE image_id = %s;
+            """
+            self.models.db.execute_query(query, (date_taken, file_size, width, height, high_quality_file_size, display_file_size, thumb_file_size, image_id))                
+
             # Add faces to database
             if image_faces:
                 logger.debug(f"Adding {len(image_faces)} faces to database for image: image_id={image_id}")
@@ -365,21 +381,11 @@ class Event():
                     'face_left', 'face_top', 'group_id', 'file_size'
                 ], all_faces_values)
 
-            # Update DB record with data
-            logger.debug("Updating database record...")
             query = f"""
-                SELECT set_transaction_context('include_pending_images', 'true');
-                UPDATE images_ctx SET
-                    date_taken = %s,
-                    file_size = %s,
-                    width = %s,
-                    height = %s,
-                    high_quality_file_size = %s,
-                    display_file_size = %s,
-                    thumb_file_size = %s
-                WHERE image_id = %s;
+                SELECT set_transaction_context('include_pending_images', 'false');
             """
-            self.models.db.execute_query(query, (date_taken, file_size, width, height, high_quality_file_size, display_file_size, thumb_file_size, image_id))                
+            self.models.db.execute_query(query)
+
             # Cleanup
             gc.collect()
             logger.info(f"Completed processing image: image_id={image_id}, faces_detected={len(image_faces)}")
@@ -428,7 +434,7 @@ class Event():
         )
         logger.debug(f"Face clustering completed: found {len(clusters)} clusters")
         groups_created = 0
-        groups_related = len(face_ids) > 0
+        groups_related = 1 if len(face_ids) > 0 else 0
 
         for new_faces, existing_faces in clusters:
             if len(new_faces) + len(existing_faces) < minimal_group_size:
@@ -467,12 +473,30 @@ class Event():
         image_ids = self.models.get_parents('faces', face_ids, 'images')
         return groups_created, groups_related, len(image_ids)
 
+    def delete_unready_images_in_upload(self, upload_id: int) -> int:
+        """Delete unready images in an upload.
+        Args:
+            upload_id: upload id
+        Returns:
+            number of deleted images
+        """
+        images = self.models.get_upload_images(upload_id)
+        unready_image_ids = [img['image_id'] for img in images if img['status'] != 'READY']
+        if unready_image_ids:
+            self.delete_images(unready_image_ids)
+
+        return len(unready_image_ids)
+
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
         # TODO: dont access db
         if not self.models.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'true');
+        """
+        self.models.db.execute_query(query)
         if not self.models.is_accessible('images', image_ids):
             raise Forbidden(f"Some of the images are not accessible to the profile")
 
@@ -486,9 +510,9 @@ class Event():
             SELECT set_transaction_context('include_pending_images', 'true');
             SELECT image_id, label, status
             FROM images_ctx
-            WHERE image_id IN ({','.join(['%s'] * len(image_ids))})
+            WHERE image_id IN ({','.join(['%s'] * len(image_ids))});
         """
-        images_details = self.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)        
+        images_details = self.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
 
         for image_id, label, status in images_details:
             image_parents = self.models.get_parents('images', image_id)
@@ -536,6 +560,11 @@ class Event():
             for entity, entity_ids in image_parents.items():
                 parents.setdefault(entity, set()).update(entity_ids)
 
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'false');
+        """
+        self.models.db.execute_query(query)
+
         for entity, entity_ids in parents.items():
             parents[entity] = list(entity_ids)
             for entity_id in entity_ids:
@@ -556,6 +585,7 @@ class Event():
                 
         return list(deleted_groups), parents
 
+    # TODO: remove
     def process_new_images(
         self,
         file_names: list[str] | None = None,

@@ -251,6 +251,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   useEffect(() => {
   }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);
   
+  // Close modal when all images are deleted/removed/moved
+  useEffect(() => {
+    if (filteredImages.length === 0) {
+      // Small delay to allow any animations or state updates to complete
+      const timeoutId = setTimeout(() => {
+        onClose();
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [filteredImages.length, onClose]);
+  
   // Determine the current image id from store data (clamped index to avoid oscillation)
   const currentImageId = useMemo(() => {
     if (filteredImages.length > 0) {
@@ -2149,11 +2160,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
               }}
               className={isMobile 
                 ? "fixed bottom-0 left-0 right-0 flex flex-col bg-white rounded-t-[10px] max-h-[85vh]"
-                : `fixed top-0 ${isRTL ? 'right-0' : 'left-0'} bottom-0 flex flex-col bg-white w-80 max-w-[90vw] shadow-lg`
+                : `fixed top-0 ${isRTL ? 'right-0' : 'left-0'} bottom-0 flex flex-col bg-white w-80 max-w-[90vw] shadow-lg overflow-x-hidden`
               }
               style={{ 
                 zIndex: 100001, 
                 position: 'fixed',
+                overflowX: 'hidden',
                 ...(isMobile ? {} : {
                   [isRTL ? 'borderLeft' : 'borderRight']: '1px solid #e5e7eb',
                   borderRadius: 0,
@@ -2187,7 +2199,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {t('imageViewer.photoDetails')}
                 </Drawer.Description>
                 {isMobile && <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />}
-                <div className={`flex flex-col h-full min-h-0 overflow-y-auto ${isMobile ? 'px-4 pb-8' : 'p-4'}`}>
+                <div className={`flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? 'px-4 pb-8' : 'p-4'}`}>
                   {/* Controls */}
                   <div className="border-b border-gray-200 pb-3">
                     <ImageViewerActions
@@ -2228,7 +2240,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           opacity: 0 
                         }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="h-full overflow-y-auto"
+                        className="h-full overflow-y-auto overflow-x-hidden"
                       >
                   {/* Details Section */}
                   <div className="mt-3 pt-3 border-t border-gray-200">

@@ -189,35 +189,31 @@ def image_ready(event_id):
         log_error(error_msg, type(e).__name__, traceback_str)
         return jsonify({"error": error_msg}), 500
 
-@upload_bp.route("/upload/finished", methods=["POST"])
+@upload_bp.route("/uploads/<int:upload_id>/finished", methods=["GET"])
 @require_auth
-def upload_finished(event_id):
+def upload_finished(event_id, upload_id):
     """
     Hook called by frontend when ALL images have been uploaded to S3.
     Sets upload_finished flag in Redis and checks if cluster task should be triggered.
     
-    Request body:
-    {
-        "upload_id": 123
-    }
+    Query parameters:
+    - assign_moments (optional, bool): Whether to assign images to moments by time after clustering
     
     Returns:
     {
         "success": true,
-        "message": "Upload finished, processing will complete when all images are processed"
+        "upload_id": 123
     }
     """
     try:
         event_id = validate_path_param('event_id', event_id)
+        upload_id = validate_path_param('upload_id', upload_id)
         event = get_event(event_id)
         general_models = get_general_models()
         profile_id = general_models.db.profile_context.get('profile_id')
         
         if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
-        
-        # Get request data
-        upload_id = get_input('upload_id', required=True)
         
         # Validate upload_id is accessible
         if not event.models.is_accessible('uploads', upload_id):
@@ -231,9 +227,17 @@ def upload_finished(event_id):
             log_error(error_msg, "RedisConnectionError", traceback.format_exc())
             return jsonify({"error": "Redis service unavailable"}), 503
         
+        # Get assign_moments from query parameter (default False)
+        assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
+        
         # Set upload_finished flag to True
         upload_finished_key = f"upload:{upload_id}:upload_finished"
         redis_client.set(upload_finished_key, "true")
+        
+        # Store assign_moments flag in Redis for cluster task to use
+        if assign_moments:
+            assign_moments_key = f"upload:{upload_id}:assign_moments"
+            redis_client.set(assign_moments_key, "true")
         
         # Check if we should trigger cluster task (all images already processed)
         try_trigger_cluster(upload_id, event_id, profile_id)
@@ -347,6 +351,24 @@ def update_upload(event_id, upload_id):
         response = {"success": False}
     return jsonify(response)
 
+@upload_bp.route("/uploads/<int:upload_id>/unready_images", methods=["DELETE"])
+@require_auth
+def delete_unready_images_in_upload(event_id, upload_id):
+    """Delete all unready (failed) images in an upload."""
+    event_id = validate_path_param('event_id', event_id)
+    event = get_event(event_id)
+    general_models = get_general_models()
+    
+    if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+        raise Forbidden("Permission denied: cannot upload and delete images")
+    
+    deleted_count = event.delete_unready_images_in_upload(upload_id)
+    
+    return jsonify({
+        'success': True, 
+        'deleted_count': deleted_count,
+    })
+
 @upload_bp.route("/uploads/<int:upload_id>", methods=["DELETE"])
 @require_auth
 def delete_upload(event_id, upload_id):
@@ -356,23 +378,12 @@ def delete_upload(event_id, upload_id):
     if not event.models.is_accessible('uploads', upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
     
-    changes = []
-    # Get all images related to this upload
-    upload_images = event.models.get_upload_images(upload_id)
-    not_ready_image_ids = [img['image_id'] for img in upload_images if img['status'] != 'READY']
-    if not_ready_image_ids:
-        event.delete_images(not_ready_image_ids)
-        changes.append({
-            'type': 'REMOVE',
-                'entity': 'image',
-            'ids': not_ready_image_ids
-        })
-
+    event.delete_unready_images_in_upload(upload_id)
     event.models.delete('uploads', upload_id)
-    changes.append({
+    changes = [{
         'type': 'REMOVE',
         'entity': 'upload',
         'ids': [upload_id]
-    })
+    }]
     
     return jsonify({'success': True, 'deleted_ids': [upload_id], 'changes': changes})

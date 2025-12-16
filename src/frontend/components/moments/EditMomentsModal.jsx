@@ -376,20 +376,58 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   };
 
   // Convert datetime-local format (YYYY-MM-DDTHH:mm) to backend format (YYYY-MM-DD HH:mm)
+  // Also handles GMT format and other date formats from the store
   const convertToBackendFormat = (value) => {
     if (!value) return null;
-    // If already in backend format (has space instead of T), return as is
-    if (value.includes(' ')) return value;
+    
+    // Convert to string if needed
+    const strValue = String(value).trim();
+    if (!strValue) return null;
+    
+    // If already in backend format (YYYY-MM-DD HH:mm or YYYY-MM-DD HH:mm:ss), validate and return
+    if (strValue.includes(' ') && !strValue.includes('T') && !strValue.includes('GMT')) {
+      const backendMatch = strValue.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})(?::\d{2})?/);
+      if (backendMatch) {
+        return `${backendMatch[1]} ${backendMatch[2]}`;
+      }
+    }
+    
     // Convert from datetime-local format (YYYY-MM-DDTHH:mm) to backend format (YYYY-MM-DD HH:mm)
-    return value.replace('T', ' ');
+    if (strValue.includes('T') && !strValue.includes('GMT')) {
+      const dtMatch = strValue.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+      if (dtMatch) {
+        return `${dtMatch[1]} ${dtMatch[2]}`;
+      }
+      // Fallback: simple replace
+      return strValue.replace('T', ' ').slice(0, 16);
+    }
+    
+    // Handle GMT format or other formats using parseDatabaseTimestamp
+    // This handles formats like "Sun, 08 Jun 2025 18:36:43 GMT" or "Sun, 08 Jun 2025"
+    const date = parseDatabaseTimestamp(strValue);
+    if (date && !Number.isNaN(date.getTime())) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
+    
+    // If we can't parse it, return null (will be removed from the save payload)
+    console.warn('Could not convert date to backend format:', strValue);
+    return null;
   };
 
   // Convert backend format (YYYY-MM-DD HH:mm or GMT format) to datetime-local format (YYYY-MM-DDTHH:mm)
   const convertToInputFormat = (value) => {
     if (!value) return '';
-    // If already in datetime-local format (has T), return as is
+    
+    // If already in datetime-local format (has T and no GMT), return as is (truncate to HH:mm)
     if (value.includes('T') && !value.includes('GMT')) {
-      return value.slice(0, 16);
+      // Extract just YYYY-MM-DDTHH:mm (datetime-local format)
+      const match = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+      return match ? match[1] : value.slice(0, 16);
     }
     
     // Parse GMT format or other backend formats using parseDatabaseTimestamp
@@ -406,6 +444,11 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     
     // Fallback: try to convert from backend format (YYYY-MM-DD HH:mm) to datetime-local format
     if (value.includes(' ')) {
+      // Match YYYY-MM-DD HH:mm or YYYY-MM-DD HH:mm:ss
+      const match = value.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/);
+      if (match) {
+        return `${match[1]}T${match[2]}`;
+      }
       return value.replace(' ', 'T').slice(0, 16);
     }
     
@@ -428,15 +471,12 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   };
 
   const updateMoment = (moment_id, updates) => {
-    // Convert datetime-local format to backend format for date fields
+    // Keep date values in datetime-local format during editing (don't convert to backend format yet)
+    // Only convert to backend format when saving
     const normalizedUpdates = { ...updates };
-    if (normalizedUpdates.start_date !== undefined) {
-      normalizedUpdates.start_date = convertToBackendFormat(normalizedUpdates.start_date);
-    }
-    if (normalizedUpdates.end_date !== undefined) {
-      normalizedUpdates.end_date = convertToBackendFormat(normalizedUpdates.end_date);
-    }
     
+    // Store the raw datetime-local values as-is for editing
+    // We'll convert to backend format only when saving
     setEditingMoments(prev => prev.map(m => {
       if ((m.id || m.moment_id) === moment_id) {
         const updated = { ...m, ...normalizedUpdates, id: m.id || m.moment_id };
@@ -467,25 +507,44 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   };
 
   // Normalize moment data before saving - convert start/end to start_date/end_date and format dates
+  // Normalize all date fields, omit if normalization fails
   const normalizeMomentForSave = (moment) => {
     const normalized = { ...moment };
     
     // Convert start/end to start_date/end_date if they exist
     if (normalized.start !== undefined) {
-      normalized.start_date = convertToBackendFormat(normalized.start);
+      const converted = convertToBackendFormat(normalized.start);
+      if (converted) {
+        normalized.start_date = converted;
+      }
       delete normalized.start;
     }
     if (normalized.end !== undefined) {
-      normalized.end_date = convertToBackendFormat(normalized.end);
+      const converted = convertToBackendFormat(normalized.end);
+      if (converted) {
+        normalized.end_date = converted;
+      }
       delete normalized.end;
     }
     
-    // Ensure start_date and end_date are in backend format
-    if (normalized.start_date) {
-      normalized.start_date = convertToBackendFormat(normalized.start_date);
+    // Normalize all start_date and end_date fields
+    if (normalized.start_date !== undefined) {
+      const converted = convertToBackendFormat(normalized.start_date);
+      if (converted) {
+        normalized.start_date = converted;
+      } else {
+        // Omit if normalization fails
+        delete normalized.start_date;
+      }
     }
-    if (normalized.end_date) {
-      normalized.end_date = convertToBackendFormat(normalized.end_date);
+    if (normalized.end_date !== undefined) {
+      const converted = convertToBackendFormat(normalized.end_date);
+      if (converted) {
+        normalized.end_date = converted;
+      } else {
+        // Omit if normalization fails
+        delete normalized.end_date;
+      }
     }
     
     return normalized;
@@ -569,6 +628,126 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
       }
     };
   }, [handleWheel]);
+
+  // Refs to store latest state values for keyboard handler
+  const editingMomentsRef = useRef(editingMoments);
+  const changedMomentsRef = useRef(changedMoments);
+  const internalMomentsRef = useRef(internalMoments);
+  const editingTitleRef = useRef(editingTitle);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    editingMomentsRef.current = editingMoments;
+  }, [editingMoments]);
+  
+  useEffect(() => {
+    changedMomentsRef.current = changedMoments;
+  }, [changedMoments]);
+  
+  useEffect(() => {
+    internalMomentsRef.current = internalMoments;
+  }, [internalMoments]);
+  
+  useEffect(() => {
+    editingTitleRef.current = editingTitle;
+  }, [editingTitle]);
+
+  // Handle keyboard shortcuts: Enter to save, Escape to discard (for the moment being edited)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Get latest values from refs
+      const editingTitle = editingTitleRef.current;
+      const editingMoments = editingMomentsRef.current;
+      const changedMoments = changedMomentsRef.current;
+      const internalMoments = internalMomentsRef.current;
+      
+      // If editing title, let the title input handle it
+      if (editingTitle) {
+        return;
+      }
+      
+      const activeElement = document.activeElement;
+      
+      // Find which moment the focused element belongs to
+      let focusedMoment = null;
+      if (activeElement) {
+        const momentIdMatch = activeElement.getAttribute('moment_id') || activeElement.getAttribute('name') || '';
+        const momentIdMatchResult = momentIdMatch.match(/moment-(?:start|end|description)-(.+)/);
+        if (momentIdMatchResult) {
+          const momentId = momentIdMatchResult[1];
+          focusedMoment = editingMoments.find(m => (m.id || m.moment_id) === momentId);
+        }
+      }
+      
+      // If no focused moment, try to find first moment with changes
+      if (!focusedMoment && changedMoments.size > 0) {
+        const firstChangedId = Array.from(changedMoments)[0];
+        focusedMoment = editingMoments.find(m => (m.id || m.moment_id) === firstChangedId);
+      }
+      
+      if (e.key === 'Enter' && focusedMoment && changedMoments.has(focusedMoment.id || focusedMoment.moment_id)) {
+        // Enter: Save the moment
+        // In textarea, allow normal Enter for new lines, but Ctrl/Cmd+Enter saves
+        if (activeElement?.tagName === 'TEXTAREA') {
+          if (e.ctrlKey || e.metaKey) {
+            // Ctrl+Enter or Cmd+Enter: Save
+            e.preventDefault();
+            e.stopPropagation();
+            handleSaveMoment(focusedMoment);
+          }
+          // Otherwise, let Enter create a new line in textarea
+        } else {
+          // Not in textarea: Enter saves
+          e.preventDefault();
+          e.stopPropagation();
+          handleSaveMoment(focusedMoment);
+        }
+      } else if (e.key === 'Escape' && focusedMoment && changedMoments.has(focusedMoment.id || focusedMoment.moment_id)) {
+        // Escape: Discard changes for the moment (don't close modal)
+        e.preventDefault();
+        e.stopPropagation();
+        const momentId = focusedMoment.id || focusedMoment.moment_id;
+        if (String(momentId).startsWith('temp-')) {
+          // Remove temporary moment completely
+          setEditingMoments(prev => prev.filter(m => (m.id || m.moment_id) !== momentId));
+          setChangedMoments(prev => {
+            const next = new Set(prev);
+            next.delete(momentId);
+            return next;
+          });
+          setNameConflicts(prev => {
+            const next = new Map(prev);
+            next.delete(momentId);
+            return next;
+          });
+        } else {
+          // Reset to original for existing moment
+          const originalMoment = internalMoments.find(m => (m.id || m.moment_id) === momentId);
+          if (originalMoment) {
+            setEditingMoments(prev => prev.map(m => 
+              (m.id || m.moment_id) === momentId ? originalMoment : m
+            ));
+            setChangedMoments(prev => {
+              const next = new Set(prev);
+              next.delete(momentId);
+              return next;
+            });
+            setNameConflicts(prev => {
+              const next = new Map(prev);
+              next.delete(momentId);
+              return next;
+            });
+          }
+        }
+      }
+    };
+    
+    // Attach to document to catch keyboard events regardless of focus
+    document.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, []); // Empty deps - only attach once, use refs for state
 
   return (
     <AnimatePresence>
@@ -765,10 +944,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                       </>
                     )}
                     <button
-                      onClick={() => setEditingImagesForMoment(moment)}
-                      className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
-                      title={t('moments.editPhotos')}
-                      aria-label={t('moments.editPhotos')}
+                      onClick={() => changedMoments.size > 0 ? null : setEditingImagesForMoment(moment)}
+                      disabled={changedMoments.size > 0}
+                      className={`w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center ${
+                        changedMoments.size > 0
+                          ? 'opacity-50 cursor-default text-gray-400'
+                          : 'hover:bg-primary-100 text-primary-700'
+                      }`}
+                      title={changedMoments.size > 0 ? t('moments.saveOrDiscardBeforeEditingPhotos') : t('moments.editPhotos')}
+                      aria-label={changedMoments.size > 0 ? t('moments.saveOrDiscardBeforeEditingPhotos') : t('moments.editPhotos')}
                     >
                       <Image className="w-4 h-4" />
                     </button>
@@ -794,7 +978,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                     <textarea
                       moment_id={`moment-description-${moment.id || moment.moment_id}`}
                       name={`moment-description-${moment.id || moment.moment_id}`}
-                      value={moment.description}
+                      value={moment.description || ''}
                       onChange={(e) => updateMoment(moment.id || moment.moment_id, { description: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm resize-none"
                       rows="2"
@@ -810,8 +994,21 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-start-${moment.id || moment.moment_id}`}
                         name={`moment-start-${moment.id || moment.moment_id}`}
-                        value={convertToInputFormat(moment.start_date || moment.start)}
-                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { start_date: e.target.value })}
+                        value={(() => {
+                          // If moment has start_date in editing state, check if it's already in datetime-local format
+                          const startValue = moment.start_date || moment.start;
+                          if (!startValue) return '';
+                          // If it's already in datetime-local format (from editing), use it directly
+                          if (startValue.includes('T') && !startValue.includes('GMT')) {
+                            return startValue.slice(0, 16);
+                          }
+                          // Otherwise convert from backend format
+                          return convertToInputFormat(startValue);
+                        })()}
+                        onChange={(e) => {
+                          // Store the datetime-local value directly (don't convert yet)
+                          updateMoment(moment.id || moment.moment_id, { start_date: e.target.value });
+                        }}
                         className="w-full border rounded px-2 py-1 text-sm"
                         dir="ltr"
                       />
@@ -823,8 +1020,21 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         type="datetime-local"
                         moment_id={`moment-end-${moment.id || moment.moment_id}`}
                         name={`moment-end-${moment.id || moment.moment_id}`}
-                        value={convertToInputFormat(moment.end_date || moment.end)}
-                        onChange={(e) => updateMoment(moment.id || moment.moment_id, { end_date: e.target.value })}
+                        value={(() => {
+                          // If moment has end_date in editing state, check if it's already in datetime-local format
+                          const endValue = moment.end_date || moment.end;
+                          if (!endValue) return '';
+                          // If it's already in datetime-local format (from editing), use it directly
+                          if (endValue.includes('T') && !endValue.includes('GMT')) {
+                            return endValue.slice(0, 16);
+                          }
+                          // Otherwise convert from backend format
+                          return convertToInputFormat(endValue);
+                        })()}
+                        onChange={(e) => {
+                          // Store the datetime-local value directly (don't convert yet)
+                          updateMoment(moment.id || moment.moment_id, { end_date: e.target.value });
+                        }}
                         className="w-full border rounded px-2 py-1 text-sm"
                         dir="ltr"
                       />

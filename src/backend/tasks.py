@@ -140,6 +140,7 @@ def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id:
 def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
     """
     Cluster faces from all images in an upload and create/update groups.
+    Optionally assigns images to moments by time if assign_moments flag is set.
     
     Args:
         event_id: Event ID
@@ -158,6 +159,35 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
             # Cluster faces
             groups_created, groups_related, images_count = event._cluster_faces(face_ids)
         
+        # Check if assign_moments flag is set in Redis
+        assign_moments = False
+        try:
+            redis_client = get_redis_client()
+            assign_moments_key = f"upload:{upload_id}:assign_moments"
+            assign_moments_value = redis_client.get(assign_moments_key)
+            assign_moments = assign_moments_value == "true"
+        except Exception as e:
+            # If Redis is unavailable, log but continue without assigning moments
+            log_error(f"Redis unavailable when checking assign_moments flag: {str(e)}", "RedisConnectionError", "")
+        
+        # Assign moments by time if requested
+        upload_images = event.models.get_upload_images(upload_id)
+        moments_count = 0
+        if assign_moments:
+            try:
+                # Get all processed image IDs from the upload
+                processed_image_ids = [img['image_id'] for img in upload_images if img['status'] == 'READY']
+                
+                if processed_image_ids:
+                    assigned_moments = event.models.assign_moments_by_time(processed_image_ids)
+                    moments_count = len(assigned_moments.keys())
+                    logger.info(f"Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments for upload {upload_id}")
+            except Exception as e:
+                error_msg = f"Error assigning moments for upload {upload_id}: {str(e)}"
+                log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
+        
+        unready_images_count = len([img for img in upload_images if img['status'] != 'READY'])
+        errors = [] if unready_images_count == 0 else [f'{unready_images_count} images failed to process']
         # Update upload status
         faces_count = len(face_ids)
         event.models.edit('uploads', upload_id, {
@@ -165,11 +195,13 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
             'completed_at': datetime.now().isoformat(),
             'images_count': images_count,
             'faces_count': faces_count,
-            'clusters_count': groups_related
+            'clusters_count': groups_related,
+            'moments_count': moments_count,
+            'errors': errors
         })
         logger.info(f"completed cluster_faces_task for upload {upload_id}")
         
-        return {'upload_id': upload_id, 'groups_created': groups_created, 'faces_count': faces_count}
+        return {'upload_id': upload_id, 'groups_created': groups_created, 'faces_count': faces_count, 'moments_count': moments_count}
         
     except Exception as e:
         error_msg = f"Error clustering faces for upload {upload_id}: {str(e)}"

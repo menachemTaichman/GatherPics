@@ -1329,8 +1329,10 @@ steps = [
             UPDATE images SET
                 description = NEW.description,
                 moment_id = NEW.moment_id,
+                date_taken = NEW.date_taken,
                 width = NEW.width,
                 height = NEW.height,
+                file_size = NEW.file_size,
                 high_quality_file_size = NEW.high_quality_file_size,
                 display_file_size = NEW.display_file_size,
                 thumb_file_size = NEW.thumb_file_size,

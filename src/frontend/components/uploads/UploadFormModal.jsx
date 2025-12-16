@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Loader2, Check, AlertCircle, Trash2, Image as ImageIcon } from 'lucide-react';
+import { X, Upload, Loader2, Check, AlertCircle, Trash2, Image as ImageIcon, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -11,6 +11,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useEventGeneralById } from '../../utils/dataManager';
 import { formatDuration } from '../../utils/dateUtils';
+import ConfirmDelete from '../modals/ConfirmDelete';
 
 export default function UploadFormModal({ 
   isOpen, 
@@ -32,6 +33,11 @@ export default function UploadFormModal({
   const [existingUploadImages, setExistingUploadImages] = useState([]); // Images from existing upload
   const [existingUploadStatus, setExistingUploadStatus] = useState(null);
   const [loadingExistingUpload, setLoadingExistingUpload] = useState(false);
+  const [deletingUnreadyImages, setDeletingUnreadyImages] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [allImagesUploaded, setAllImagesUploaded] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(null); // null = all, or specific status
+  const allImagesUploadedRef = useRef(false); // Ref to track upload completion for poll function
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
   const timeUpdateIntervalRef = useRef(null);
@@ -79,7 +85,7 @@ export default function UploadFormModal({
     }
     // Prevent ESC during file upload, allow after files are uploaded (during processing)
     if (e.key === 'Escape') {
-      if (uploadProgress?.step === 'uploading') {
+      if (uploading && !allImagesUploaded) {
         e.preventDefault();
         return true; // Prevent closing during upload
       }
@@ -203,6 +209,53 @@ export default function UploadFormModal({
     }
   }, [isOpen, existingUploadId, eventUrl, showToast]);
 
+  // Check if all images are uploaded (fallback check - primary is set via callback from uploadWithProgress)
+  useEffect(() => {
+    if (!uploading) {
+      // Only set to true if we're not uploading AND we don't have any upload in progress
+      // This prevents setting it to true when modal first opens
+      if (!uploadProgress) {
+        setAllImagesUploaded(true);
+        allImagesUploadedRef.current = true;
+      }
+      return;
+    }
+    
+    // If we already set allImagesUploaded via callback, don't override it
+    // This is just a fallback check in case the callback didn't fire
+    if (allImagesUploadedRef.current) {
+      return;
+    }
+    
+    // Fallback: If uploadProgress.step is 'processing' or beyond, uploads are done
+    // (Primary check is via callback from uploadWithProgress)
+    const isStillUploading = uploadProgress?.step === 'uploading' || uploadProgress?.step === 'preparing';
+    
+    if (!isStillUploading && uploadProgress?.step) {
+      setAllImagesUploaded(true);
+      allImagesUploadedRef.current = true;
+    }
+  }, [existingUploadImages, imageStatuses, uploading, uploadProgress, allImagesUploaded]);
+
+  // Add beforeunload handler to warn about refresh during upload
+  useEffect(() => {
+    if (!isOpen || !uploading || allImagesUploaded) {
+      return;
+    }
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = t('upload.pleaseWaitUntilFilesAreUploaded');
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isOpen, uploading, allImagesUploaded, t]);
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -217,6 +270,11 @@ export default function UploadFormModal({
       setExistingUploadImages([]);
       setExistingUploadStatus(null);
       setLoadingExistingUpload(false);
+      setDeletingUnreadyImages(false);
+      setShowDeleteConfirmModal(false);
+      setAllImagesUploaded(false);
+      setStatusFilter(null);
+      allImagesUploadedRef.current = false;
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
@@ -392,6 +450,9 @@ export default function UploadFormModal({
     const startTime = Date.now();
     setUploadStartTime(startTime);
     setUploading(true);
+    // Reset upload completion status when starting new upload
+    setAllImagesUploaded(false);
+    allImagesUploadedRef.current = false;
     setUploadProgress({ 
       step: 'preparing', 
       current: 0, 
@@ -433,7 +494,44 @@ export default function UploadFormModal({
         estimatedTimeRemaining: null
       });
       
-      const result = await imagesAPI.uploadWithProgress(files, assignMoments, eventUrl);
+      // Track when all S3 uploads are complete
+      let allS3UploadsComplete = false;
+      
+      const result = await imagesAPI.uploadWithProgress(
+        files, 
+        assignMoments, 
+        eventUrl,
+        (progress) => {
+          if (progress.phase === 'uploading') {
+            // Update progress during upload
+            setUploadProgress({ 
+              step: 'uploading', 
+              current: progress.completed, 
+              total: progress.total, 
+              message: progress.message,
+              percentage: Math.min(12, 2 + (progress.completed / progress.total) * 10),
+              elapsedTime: Date.now() - startTime,
+              estimatedTimeRemaining: null
+            });
+          } else if (progress.phase === 'uploads_complete') {
+            // All S3 uploads are complete - safe to close modal now
+            allS3UploadsComplete = true;
+            allImagesUploadedRef.current = true;
+            setAllImagesUploaded(true);
+            
+            // Update progress to show we're moving to processing
+            setUploadProgress({ 
+              step: 'processing', 
+              current: progress.completed, 
+              total: progress.total, 
+              message: 'All files uploaded. Processing images...',
+              percentage: 12,
+              elapsedTime: Date.now() - startTime,
+              estimatedTimeRemaining: null
+            });
+          }
+        }
+      );
       
       setUploadId(result.upload_id);
       setFileToImageMap(result.file_to_image_map);
@@ -448,16 +546,10 @@ export default function UploadFormModal({
       });
       setImageStatuses(initialStatuses);
       
-      // Update progress to uploading
-      setUploadProgress({ 
-        step: 'uploading', 
-        current: 0, 
-        total: selectedFiles.length, 
-        message: `Uploading ${selectedFiles.length} image(s)...`,
-        percentage: 2,
-        elapsedTime: Date.now() - startTime,
-        estimatedTimeRemaining: null
-      });
+      // If uploads completed synchronously (shouldn't happen, but just in case)
+      if (allS3UploadsComplete) {
+        setAllImagesUploaded(true);
+      }
       
       // Start polling for progress
       if (pollIntervalRef.current) {
@@ -493,6 +585,8 @@ export default function UploadFormModal({
           let totalFailed = 0;
           let totalProcessing = 0;
           let totalQueued = 0;
+          let totalUploading = 0;
+          let totalPendingUpload = 0;
           
           images.forEach(img => {
             const status = img.status || 'PENDING_UPLOAD';
@@ -500,24 +594,46 @@ export default function UploadFormModal({
             else if (status === 'FAILED') totalFailed++;
             else if (status === 'PROCESSING') totalProcessing++;
             else if (status === 'QUEUED') totalQueued++;
+            else if (status === 'UPLOADING') totalUploading++;
+            else if (status === 'PENDING_UPLOAD') totalPendingUpload++;
           });
+          
+          // Determine the current step:
+          // - If uploadStatus is COMPLETED, we're in 'complete' step
+          // - If we know all S3 uploads are complete (from callback), we're in 'processing' step
+          // - Otherwise, if any images are still UPLOADING or PENDING_UPLOAD, we're still in 'uploading' step
+          // - Otherwise, we're in 'processing' step
+          const stillUploading = totalUploading > 0 || totalPendingUpload > 0;
+          let currentStep;
+          if (uploadStatus === 'COMPLETED') {
+            currentStep = 'complete';
+          } else if (allImagesUploadedRef.current) {
+            // We know S3 uploads are complete (from callback), so we're processing
+            currentStep = 'processing';
+          } else if (stillUploading) {
+            currentStep = 'uploading';
+          } else {
+            currentStep = 'processing';
+          }
           
           // Calculate overall progress
           const total = images.length;
           const processed = totalReady + totalFailed;
           const percentage = calculateOverallProgress({
-            step: uploadStatus === 'COMPLETED' ? 'complete' : 'processing',
+            step: currentStep,
             current: totalReady,
             total: total
           });
           
           // Update progress
           setUploadProgress({
-            step: uploadStatus === 'COMPLETED' ? 'complete' : uploadStatus === 'PROCESSING_IMAGES' ? 'processing' : 'uploading',
+            step: currentStep,
             current: totalReady,
             total: total,
             message: uploadStatus === 'COMPLETED' 
               ? `Processing complete: ${totalReady} images processed`
+              : stillUploading
+              ? `Uploading: ${totalUploading + totalPendingUpload} uploading, ${totalQueued + totalProcessing} queued/processing, ${totalReady} ready, ${totalFailed} failed`
               : `Processing: ${totalReady} ready, ${totalProcessing + totalQueued} processing, ${totalFailed} failed`,
             percentage: percentage,
             elapsedTime: Date.now() - startTime,
@@ -664,12 +780,102 @@ export default function UploadFormModal({
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  // Count failed images
+  const failedImagesCount = useMemo(() => {
+    return existingUploadImages.filter(img => {
+      const status = img.status || 'PENDING_UPLOAD';
+      return status === 'FAILED';
+    }).length;
+  }, [existingUploadImages]);
+
+  // Filter images by status
+  const filteredExistingUploadImages = useMemo(() => {
+    if (!statusFilter) return existingUploadImages;
+    return existingUploadImages.filter(img => {
+      const status = img.status || 'PENDING_UPLOAD';
+      return status === statusFilter;
+    });
+  }, [existingUploadImages, statusFilter]);
+
+  const filteredSelectedFiles = useMemo(() => {
+    if (!statusFilter) return selectedFiles;
+    return selectedFiles.filter((fileItem, index) => {
+      const imageId = fileToImageMap[index];
+      const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
+      return status === statusFilter;
+    });
+  }, [selectedFiles, fileToImageMap, imageStatuses, statusFilter, uploading]);
+
+  // Get available statuses from images
+  const availableStatuses = useMemo(() => {
+    const statusSet = new Set();
+    existingUploadImages.forEach(img => {
+      const status = img.status || 'PENDING_UPLOAD';
+      statusSet.add(status);
+    });
+    selectedFiles.forEach((fileItem, index) => {
+      const imageId = fileToImageMap[index];
+      const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
+      if (status) statusSet.add(status);
+    });
+    return Array.from(statusSet).sort();
+  }, [existingUploadImages, selectedFiles, fileToImageMap, imageStatuses, uploading]);
+
+  // Handle delete unready images confirmation
+  const handleDeleteUnreadyImagesClick = () => {
+    setShowDeleteConfirmModal(true);
+  };
+
+  // Handle delete unready images (called after confirmation)
+  const handleDeleteUnreadyImages = async () => {
+    const currentUploadId = existingUploadId || uploadId;
+    if (!currentUploadId || !eventUrl) return;
+
+    setDeletingUnreadyImages(true);
+    try {
+      await uploadsAPI.deleteUnreadyImages(currentUploadId, eventUrl);
+      
+      // Refresh upload progress to update the images list
+      const progress = await imagesAPI.getUploadProgress(currentUploadId, eventUrl);
+      setExistingUploadImages(progress.images || []);
+      setExistingUploadStatus(progress.upload_status);
+      
+      // Update image statuses
+      setImageStatuses(prev => {
+        const newStatuses = { ...prev };
+        (progress.images || []).forEach(img => {
+          newStatuses[img.image_id] = img.status || 'PENDING_UPLOAD';
+        });
+        return newStatuses;
+      });
+      
+      showToast(t('upload.failedImagesDeleted', { count: failedImagesCount }), 'success');
+      
+      // Refresh event data
+      try {
+        await eventsAPI.getById(eventUrl);
+      } catch (refreshError) {
+        console.error('Failed to refresh event data:', refreshError);
+      }
+    } catch (error) {
+      console.error('Failed to delete unready images:', error);
+      showToast(formatErrorMessage('delete failed images', error), 'error');
+    } finally {
+      setDeletingUnreadyImages(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
         <div 
+          key="upload-modal"
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={onClose}
+          onClick={(e) => {
+            if (!uploading || allImagesUploaded) {
+              onClose();
+            }
+          }}
         >
           <motion.div
             ref={modalRef}
@@ -693,18 +899,22 @@ export default function UploadFormModal({
                 </div>
               </div>
               <button
-                onClick={onClose}
-                disabled={uploadProgress?.step === 'uploading'}
+                onClick={() => {
+                  if (!uploading || allImagesUploaded) {
+                    onClose();
+                  }
+                }}
+                disabled={uploading && !allImagesUploaded}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
-                  uploadProgress?.step === 'uploading' 
+                  uploading && !allImagesUploaded
                     ? t('upload.pleaseWaitUntilFilesAreUploaded')
                     : uploading 
                       ? t('upload.closeProcessingWillContinue') 
                       : t('account.cancelEsc')
                 }
                 aria-label={
-                  uploadProgress?.step === 'uploading' 
+                  uploading && !allImagesUploaded
                     ? t('upload.pleaseWaitUntilFilesAreUploaded')
                     : uploading 
                       ? t('upload.closeProcessingWillContinue') 
@@ -719,6 +929,7 @@ export default function UploadFormModal({
             <AnimatePresence>
               {uploadProgress && (
                 <motion.div 
+                  key="upload-progress"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
@@ -779,7 +990,7 @@ export default function UploadFormModal({
                         {/* Info message about leaving */}
                         {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
                           <div className="mt-2 text-xs text-gray-500 italic">
-                            {uploadProgress.step === 'uploading' ? (
+                            {uploading && !allImagesUploaded ? (
                               t('upload.pleaseWaitUntilFilesAreUploaded')
                             ) : (
                               t('upload.youCanLeaveProcessingWillContinue')
@@ -866,31 +1077,91 @@ export default function UploadFormModal({
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-gray-900">
-                    {isViewingExistingUpload ? t('uploadDetail.uploadDetails') : t('upload.selectedFiles')} ({existingUploadImages.length + selectedFiles.length})
+                    {isViewingExistingUpload ? t('uploadDetail.uploadDetails') : t('upload.selectedFiles')} (
+                      {statusFilter 
+                        ? `${filteredExistingUploadImages.length + filteredSelectedFiles.length} / ${existingUploadImages.length + selectedFiles.length}`
+                        : existingUploadImages.length + selectedFiles.length
+                      })
                   </h3>
-                  {existingUploadStatus && (
-                    <span className={`text-xs font-medium px-2 py-1 rounded ${
-                      existingUploadStatus === 'COMPLETED' 
-                        ? 'bg-green-100 text-green-700'
-                        : existingUploadStatus === 'FAILED'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {existingUploadStatus === 'COMPLETED' ? t('upload.successfullyProcessed') : 
-                       existingUploadStatus === 'FAILED' ? t('upload.imageFailedToProcess') :
-                       t('upload.processing')}
-                    </span>
-                  )}
-                  {!isViewingExistingUpload && !uploading && selectedFiles.length > 0 && (
-                    <button
-                      onClick={() => setSelectedFiles([])}
-                      className="text-xs text-red-600 hover:text-red-700 font-medium"
-                      title={t('upload.clearAll')}
-                      aria-label={t('upload.clearAll')}
-                    >
-                      {t('upload.clearAll')}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Status filter dropdown */}
+                    {(existingUploadImages.length > 0 || selectedFiles.length > 0) && availableStatuses.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-gray-500" />
+                        <select
+                          value={statusFilter || 'all'}
+                          onChange={(e) => setStatusFilter(e.target.value === 'all' ? null : e.target.value)}
+                          className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          title={t('upload.filterByStatus')}
+                          aria-label={t('upload.filterByStatus')}
+                        >
+                          <option value="all">{t('upload.allStatuses')}</option>
+                          {availableStatuses.map(status => {
+                            const getStatusLabel = (s) => {
+                              switch (s) {
+                                case 'UPLOADING': return t('upload.uploading');
+                                case 'PENDING_UPLOAD': return t('upload.pending');
+                                case 'QUEUED': return t('upload.queued');
+                                case 'PROCESSING': return t('upload.processing');
+                                case 'READY': return t('upload.ready');
+                                case 'FAILED': return t('upload.failed');
+                                default: return s;
+                              }
+                            };
+                            return (
+                              <option key={status} value={status}>
+                                {getStatusLabel(status)}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+                    {existingUploadStatus && (
+                      <span className={`text-xs font-medium px-2 py-1 rounded ${
+                        existingUploadStatus === 'COMPLETED' 
+                          ? 'bg-green-100 text-green-700'
+                          : existingUploadStatus === 'FAILED'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {existingUploadStatus === 'COMPLETED' ? t('upload.successfullyProcessed') : 
+                         existingUploadStatus === 'FAILED' ? t('upload.imageFailedToProcess') :
+                         t('upload.processing')}
+                      </span>
+                    )}
+                    {isViewingExistingUpload && existingUploadStatus === 'COMPLETED' && failedImagesCount > 0 && (
+                      <button
+                        onClick={handleDeleteUnreadyImagesClick}
+                        disabled={deletingUnreadyImages}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        title={t('upload.deleteFailedImages', { count: failedImagesCount })}
+                        aria-label={t('upload.deleteFailedImages', { count: failedImagesCount })}
+                      >
+                        {deletingUnreadyImages ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>{t('upload.deleting')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3 h-3" />
+                            <span>{t('upload.deleteFailedImages', { count: failedImagesCount })}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {!isViewingExistingUpload && !uploading && selectedFiles.length > 0 && (
+                      <button
+                        onClick={() => setSelectedFiles([])}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium"
+                        title={t('upload.clearAll')}
+                        aria-label={t('upload.clearAll')}
+                      >
+                        {t('upload.clearAll')}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 {loadingExistingUpload && isViewingExistingUpload ? (
@@ -900,6 +1171,10 @@ export default function UploadFormModal({
                 ) : (existingUploadImages.length === 0 && selectedFiles.length === 0) ? (
                   <div className="border rounded-lg p-3 bg-gray-50">
                     <p className="text-sm text-gray-500 text-center py-4">{t('uploadDetail.noImagesInThisUpload')}</p>
+                  </div>
+                ) : (filteredExistingUploadImages.length === 0 && filteredSelectedFiles.length === 0) ? (
+                  <div className="border rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-500 text-center py-4">{t('upload.noImagesWithSelectedStatus')}</p>
                   </div>
                 ) : (
                   <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3 bg-gray-50">
@@ -927,7 +1202,7 @@ export default function UploadFormModal({
                         return (
                           <>
                             {/* Existing upload images */}
-                            {existingUploadImages.map((img) => {
+                            {filteredExistingUploadImages.map((img) => {
                               const status = img.status || 'PENDING_UPLOAD';
                               const statusInfo = getStatusInfo(status);
                               const StatusIcon = statusInfo.icon;
@@ -962,8 +1237,10 @@ export default function UploadFormModal({
                             })}
                             
                             {/* Newly selected files */}
-                            {selectedFiles.map((fileItem, index) => {
-                              const imageId = fileToImageMap[index];
+                            {filteredSelectedFiles.map((fileItem) => {
+                              // Find the original index in selectedFiles to get the correct imageId
+                              const originalIndex = selectedFiles.findIndex(f => f.id === fileItem.id);
+                              const imageId = originalIndex !== -1 ? fileToImageMap[originalIndex] : null;
                               const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
                               const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
                               const StatusIcon = statusInfo.icon;
@@ -1043,25 +1320,29 @@ export default function UploadFormModal({
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
               <button
-                onClick={onClose}
-                disabled={uploadProgress?.step === 'uploading'}
+                onClick={() => {
+                  if (!uploading || allImagesUploaded) {
+                    onClose();
+                  }
+                }}
+                disabled={uploading && !allImagesUploaded}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
-                  uploadProgress?.step === 'uploading' 
+                  uploading && !allImagesUploaded
                     ? t('upload.pleaseWaitUntilFilesAreUploaded')
                     : uploading 
                       ? t('upload.closeProcessingWillContinue') 
                       : t('account.cancelEsc')
                 }
                 aria-label={
-                  uploadProgress?.step === 'uploading' 
+                  uploading && !allImagesUploaded
                     ? t('upload.pleaseWaitUntilFilesAreUploaded')
                     : uploading 
                       ? t('upload.closeProcessingWillContinue') 
                       : t('account.cancelEsc')
                 }
               >
-                {uploadProgress?.step === 'uploading' 
+                {uploading && !allImagesUploaded
                   ? t('upload.pleaseWait')
                   : uploading 
                     ? t('account.close') 
@@ -1091,6 +1372,22 @@ export default function UploadFormModal({
             </div>
           </motion.div>
         </div>
+      )}
+      
+      {/* Confirm Delete Modal */}
+      {showDeleteConfirmModal && (
+        <ConfirmDelete
+          key="delete-confirm"
+          isOpen={showDeleteConfirmModal}
+          onClose={() => setShowDeleteConfirmModal(false)}
+          onConfirm={handleDeleteUnreadyImages}
+          title={t('upload.deleteFailedImagesTitle')}
+          message={t('upload.confirmDeleteFailedImages')}
+          itemName={t('upload.failedImagesCount', { count: failedImagesCount })}
+          confirmText={t('confirmDelete.delete')}
+          cancelText={t('confirmDelete.cancel')}
+          simpleMessage={false}
+        />
       )}
     </AnimatePresence>
   );

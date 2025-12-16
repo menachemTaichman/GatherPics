@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
 import { useModalFocus } from '../../hooks/useModalFocus';
@@ -40,6 +40,8 @@ function ConfirmDelete({
   const { t } = useTranslation();
   const { isRTL } = useRTL();
   const MODAL_ID = useState(() => `confirm-delete-${Math.random().toString(36).substr(2, 9)}`)[0];
+  const isConfirmingRef = useRef(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   
   // Use translations if default values are used
   const displayTitle = title === "Delete Confirmation" ? t('confirmDelete.deleteConfirmation') : title;
@@ -48,9 +50,29 @@ function ConfirmDelete({
   const displayConfirmText = confirmText === "Delete" ? t('confirmDelete.delete') : confirmText;
   const displayCancelText = cancelText === "Cancel" ? t('confirmDelete.cancel') : cancelText;
   
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
+  const handleConfirm = async () => {
+    // Prevent duplicate calls
+    if (isConfirmingRef.current || isConfirming) {
+      return;
+    }
+    
+    isConfirmingRef.current = true;
+    setIsConfirming(true);
+    try {
+      // Call onConfirm and wait for it to complete if it's async
+      const result = onConfirm();
+      if (result && typeof result.then === 'function') {
+        await result;
+      }
+    } catch (error) {
+      // If there's an error, we still want to close the modal
+      console.error('Error during delete confirmation:', error);
+    } finally {
+      // Always close the modal after delete operation completes
+      isConfirmingRef.current = false;
+      setIsConfirming(false);
+      onClose();
+    }
   };
   
   // Custom keyboard handler for Enter key
@@ -73,7 +95,12 @@ function ConfirmDelete({
 
   // Register modal with modal manager
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // Reset confirming state when modal closes
+      isConfirmingRef.current = false;
+      setIsConfirming(false);
+      return;
+    }
     
     const { registerModal, unregisterModal } = useModalStore.getState();
     try {
@@ -96,6 +123,9 @@ function ConfirmDelete({
         unregisterModal(MODAL_ID); 
       } catch {}
       window.removeEventListener('auth:logout', handleAuthLogout);
+      // Reset confirming state when modal unmounts
+      isConfirmingRef.current = false;
+      setIsConfirming(false);
     };
   }, [isOpen, MODAL_ID]);
 
@@ -198,7 +228,8 @@ function ConfirmDelete({
             </button>
             <button
               onClick={handleConfirm}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+              disabled={isConfirming}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               autoFocus
             >
               {displayConfirmText}

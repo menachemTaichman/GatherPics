@@ -351,6 +351,23 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+query = f"""
+    SELECT set_transaction_context('include_pending_images', 'true');
+"""
+db.execute_query(query)
+query = 'select * from images_ctx where upload_id = 68;'
+result = db.execute_query(query, return_format=ReturnFormat.LIST_DICTS)
+print(result)
+print('--------------------------------')
+result2 = event.models.get_childs('uploads', 68, 'images')
+print(result2)
+print('--------------------------------')
+result1 = event.models.get_upload_images(68)
+print(result1)
+print('--------------------------------')
+result2 = event.models.get_childs('uploads', 68, 'images')
+print(result2)
+print('--------------------------------')
 # result = event._process_single_image('b6ec7cb5-c1dc-451f-9df0-6f0b8133dec4')
 
 # result = find_incomplete_images(event_id)

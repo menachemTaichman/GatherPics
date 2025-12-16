@@ -383,6 +383,7 @@ class GeneralModels(BaseModels):
             SELECT set_transaction_context('temp_event_in_deletion', %s);
             DELETE FROM events_ctx WHERE event_id = %s
             RETURNING event_id;
+            SELECT set_transaction_context('temp_event_in_deletion', 'null');
         """
         self.db.execute_query(query, (event_id, event_id), return_format=ReturnFormat.LIST_VALUES)
         self.db.execute_query('ANALYZE;')
