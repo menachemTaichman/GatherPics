@@ -144,9 +144,9 @@ class Event():
             
             # Filename extension is already validated by the API validator
             filename = sanitize_filename(original_filename)
-            filepath = f"{self.to_process_dir}/{filename}"
             
-            # Create image record with PENDING_UPLOAD status
+            # Always store pending uploads in to_process using the generated image_id
+            # so processing can rely on a stable "{image_id}.jpg" naming convention.
             image_name, image_ext = os.path.splitext(filename)
             label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, separator='.', event_id=self.event_id)
             image_id = self.models.add('images', {
@@ -154,6 +154,8 @@ class Event():
                 'upload_id': upload_id,
                 'status': 'PENDING_UPLOAD',
             })
+            stored_filename = f"{image_id}.jpg"  # processing pipeline expects lowercase .jpg
+            filepath = f"{self.to_process_dir}/{stored_filename}"
             
             upload_info = self.file_helper.get_upload_url(
                 filepath, 
@@ -167,7 +169,8 @@ class Event():
             
             upload_urls.append({
                 "image_id": image_id,
-                "filename": filename,
+                "filename": filename,  # original filename for UI/display
+                "stored_filename": stored_filename,  # actual object name used in storage
                 "upload_url": upload_info['url'],
                 "upload_fields": upload_info.get('fields'),
                 "upload_method": upload_info.get('method', 'POST'),

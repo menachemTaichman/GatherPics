@@ -717,8 +717,6 @@ export const imagesAPI = {
           }
           
           const uploadMethod = (uploadInfo.upload_method || 'POST').toUpperCase();
-          // Always prefer uploading with the generated image_id as filename
-          const uploadFilename = uploadInfo.image_id ? `${uploadInfo.image_id}.jpg` : file.name;
           let uploadResponse;
 
           if (uploadMethod === 'PUT') {
@@ -746,7 +744,9 @@ export const imagesAPI = {
               formData.append('image_id', uploadInfo.image_id);
             }
             
-            // Use image_id-based filename so the object lands in to_process as {image_id}.jpg
+            // Let backend-provided filename drive the actual object name (falls back to local image_id or original)
+            const uploadFilename = uploadInfo.stored_filename
+              || (uploadInfo.image_id ? `${uploadInfo.image_id}.jpg` : file.name);
             formData.append('file', file, uploadFilename);
             
             uploadResponse = await fetch(uploadInfo.upload_url, {
