@@ -682,7 +682,9 @@ export const imagesAPI = {
 
   uploadWithProgress: async (files, assignMoments, eventUrl, onProgress = null) => {
     const eventId = await getEventIdForApi(eventUrl);
-    
+    // Set maximum concurrent uploads - 20 is a healthy and safe number
+    const MAX_CONCURRENT_UPLOADS = 20;
+
     try {
       // Step 1: Get presigned URLs
       const uploadUrlsResponse = await imagesAPI.getUploadUrls(files, eventUrl);
@@ -691,25 +693,25 @@ export const imagesAPI = {
       if (!upload_urls || upload_urls.length === 0) {
         throw new Error('No upload URLs received');
       }
-      
-      // Notify progress: starting uploads
+
       if (onProgress) {
-        onProgress({ 
-          phase: 'uploading', 
-          total: files.length, 
+        onProgress({
+          phase: 'init',
+          upload_id,
+          total: files.length,
           completed: 0,
-          message: 'Starting uploads...'
+          message: 'Upload initialized'
         });
       }
       
-      // Step 2: Upload files directly to S3 and notify backend
+      // Step 2: Upload files with Concurrency Limit
       let completedCount = 0;
-      const uploadResults = await Promise.allSettled(
-        upload_urls.map(async (uploadInfo, index) => {
+      const results = [];
+      
+      // Helper function that performs a single upload
+      const uploadSingleFile = async (uploadInfo, index) => {
           const file = files[index];
-          if (!file) {
-            throw new Error(`File not found for upload URL at index ${index}`);
-          }
+          if (!file) throw new Error(`File not found index ${index}`);
           
           // Validate required fields
           if (!uploadInfo.image_id) {
@@ -724,12 +726,12 @@ export const imagesAPI = {
             const headers = Object.assign(
               {},
               uploadInfo.upload_headers || {},
-              { 'Content-Type': file.type || 'image/jpeg' },
+              { 'Content-Type': file.type || 'image/jpeg' }
             );
             uploadResponse = await fetch(uploadInfo.upload_url, {
               method: 'PUT',
               headers,
-              body: file,
+              body: file
             });
           } else {
             // POST (either presigned POST fields or direct upload endpoint)
@@ -756,15 +758,11 @@ export const imagesAPI = {
           }
           
           if (!uploadResponse.ok) {
-            throw new Error(`Failed to upload ${file.name} to S3: ${uploadResponse.statusText}`);
+            throw new Error(`Failed to upload ${file.name}: ${uploadResponse.statusText}`);
           }
           
-          // Notify backend that image is ready
-          await imagesAPI.notifyImageReady(
-            upload_id,
-            uploadInfo.image_id,
-            eventUrl
-          );
+          // Notify backend
+          await imagesAPI.notifyImageReady(upload_id, uploadInfo.image_id, eventUrl);
           
           // Update progress
           completedCount++;
@@ -777,35 +775,66 @@ export const imagesAPI = {
             });
           }
           
-          return { 
-            image_id: uploadInfo.image_id, 
-            file_index: index
-          };
-        })
-      );
+          return { image_id: uploadInfo.image_id, file_index: index };
+      };
+
+      // --- Core: Queue Management ---
+      // We use a simple "sliding window" technique to avoid choking the browser
+      const executing = [];
       
-      // Check for upload failures
-      const failures = uploadResults.filter(r => r.status === 'rejected');
+      for (let i = 0; i < upload_urls.length; i++) {
+          const uploadInfo = upload_urls[i];
+          
+          // Create the upload promise
+          const p = uploadSingleFile(uploadInfo, i).then(
+              res => ({ status: 'fulfilled', value: res }),
+              err => {
+                console.error(`Upload failed for file at index ${i}:`, err);
+                return { status: 'rejected', reason: err };
+              }
+          );
+          
+          results.push(p); // Save the final result
+          
+          // Add to executing list, and remove when done
+          const e = p.then(() => {
+            const index = executing.indexOf(e);
+            if (index > -1) {
+              executing.splice(index, 1);
+            }
+          });
+          executing.push(e);
+          
+          // If we've reached the limit, wait for one to finish before starting the next
+          if (executing.length >= MAX_CONCURRENT_UPLOADS) {
+              await Promise.race(executing);
+          }
+      }
+      
+      // Wait for all remaining uploads to finish
+      const finalResults = await Promise.all(results);
+      
+      // Check failures
+      const failures = finalResults.filter(r => r.status === 'rejected');
       if (failures.length > 0) {
         console.warn('Some files failed to upload:', failures);
       }
       
-      // Notify progress: all uploads complete
+      // Final Finish Notification
       if (onProgress) {
         onProgress({ 
           phase: 'uploads_complete', 
           total: files.length, 
-          completed: files.length,
+          completed: files.length, 
           message: 'All files uploaded to S3'
         });
       }
       
-      // Step 3: Notify backend that all uploads are finished
       await imagesAPI.notifyUploadFinished(upload_id, assignMoments, eventUrl);
       
-      // Return upload_id and mapping of files to image_ids
+      // Map results
       const fileToImageMap = {};
-      uploadResults.forEach((result, index) => {
+      finalResults.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           fileToImageMap[index] = result.value.image_id;
         }
@@ -814,12 +843,9 @@ export const imagesAPI = {
       return {
         upload_id,
         file_to_image_map: fileToImageMap,
-        upload_urls: upload_urls.map((url, idx) => ({
-          ...url,
-          file_index: idx
-        }))
+        upload_urls: upload_urls.map((url, idx) => ({ ...url, file_index: idx }))
       };
-      
+
     } catch (error) {
       throw new Error(error.response?.data?.error || error.message || 'Failed to upload files');
     }

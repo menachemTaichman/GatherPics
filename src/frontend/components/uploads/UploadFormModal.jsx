@@ -496,74 +496,20 @@ export default function UploadFormModal({
       
       // Track when all S3 uploads are complete
       let allS3UploadsComplete = false;
+      let currentUploadId = null;
       
-      const result = await imagesAPI.uploadWithProgress(
-        files, 
-        assignMoments, 
-        eventUrl,
-        (progress) => {
-          if (progress.phase === 'uploading') {
-            // Update progress during upload
-            setUploadProgress({ 
-              step: 'uploading', 
-              current: progress.completed, 
-              total: progress.total, 
-              message: progress.message,
-              percentage: Math.min(12, 2 + (progress.completed / progress.total) * 10),
-              elapsedTime: Date.now() - startTime,
-              estimatedTimeRemaining: null
-            });
-          } else if (progress.phase === 'uploads_complete') {
-            // All S3 uploads are complete - safe to close modal now
-            allS3UploadsComplete = true;
-            allImagesUploadedRef.current = true;
-            setAllImagesUploaded(true);
-            
-            // Update progress to show we're moving to processing
-            setUploadProgress({ 
-              step: 'processing', 
-              current: progress.completed, 
-              total: progress.total, 
-              message: 'All files uploaded. Processing images...',
-              percentage: 12,
-              elapsedTime: Date.now() - startTime,
-              estimatedTimeRemaining: null
-            });
-          }
-        }
-      );
-      
-      setUploadId(result.upload_id);
-      setFileToImageMap(result.file_to_image_map);
-      
-      // Clear selected files since they're now part of the upload and will appear in existingUploadImages
-      setSelectedFiles([]);
-      
-      // Initialize image statuses - all start as UPLOADING since they're being uploaded
-      const initialStatuses = {};
-      Object.values(result.file_to_image_map).forEach(imageId => {
-        initialStatuses[imageId] = 'UPLOADING';
-      });
-      setImageStatuses(initialStatuses);
-      
-      // If uploads completed synchronously (shouldn't happen, but just in case)
-      if (allS3UploadsComplete) {
-        setAllImagesUploaded(true);
-      }
-      
-      // Start polling for progress
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      
+      // Define pollProgress function before starting upload so we can use it immediately
       const pollProgress = async () => {
         try {
-          if (!result.upload_id) return;
+          if (!currentUploadId) return;
           
           // Stop polling if upload has failed
           if (pollIntervalRef.current === null) return;
           
-          const progress = await imagesAPI.getUploadProgress(result.upload_id, eventUrl);
+          // Stop polling if upload has failed
+          if (pollIntervalRef.current === null) return;
+          
+          const progress = await imagesAPI.getUploadProgress(currentUploadId, eventUrl);
           const uploadStatus = progress.upload_status;
           const images = progress.images || [];
           
@@ -652,9 +598,9 @@ export default function UploadFormModal({
             }
             
             if (uploadStatus === 'COMPLETED') {
-              // Get final upload details
-              try {
-                const uploadDetails = await uploadsAPI.getById(result.upload_id, eventUrl);
+                // Get final upload details
+                try {
+                  const uploadDetails = await uploadsAPI.getById(currentUploadId, eventUrl);
                 
                 let facesCount = 0;
                 let clustersCount = 0;
@@ -705,8 +651,8 @@ export default function UploadFormModal({
                 }
                 
                 setTimeout(() => {
-                  if (onUploadSuccess && result.upload_id) {
-                    onUploadSuccess(result.upload_id);
+                  if (onUploadSuccess && currentUploadId) {
+                    onUploadSuccess(currentUploadId);
                   }
                   onClose();
                 }, 2000);
@@ -742,9 +688,82 @@ export default function UploadFormModal({
         }
       };
       
-      // Poll every 2 seconds
-      pollIntervalRef.current = setInterval(pollProgress, 2000);
-      pollProgress(); // Initial poll
+      // Start upload and get upload_id immediately to start polling
+      const result = await imagesAPI.uploadWithProgress(
+        files, 
+        assignMoments, 
+        eventUrl,
+        (progress) => {
+          // Store upload_id as soon as we get it from init phase
+          if (progress.phase === 'init' && progress.upload_id) {
+            currentUploadId = progress.upload_id;
+            setUploadId(progress.upload_id);
+            
+            // Start polling immediately when we have upload_id
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+            }
+            pollIntervalRef.current = setInterval(pollProgress, 2000);
+            pollProgress(); // Initial poll
+          } else if (progress.phase === 'uploading') {
+            // Update progress during upload
+            setUploadProgress({ 
+              step: 'uploading', 
+              current: progress.completed, 
+              total: progress.total, 
+              message: progress.message,
+              percentage: Math.min(12, 2 + (progress.completed / progress.total) * 10),
+              elapsedTime: Date.now() - startTime,
+              estimatedTimeRemaining: null
+            });
+          } else if (progress.phase === 'uploads_complete') {
+            // All S3 uploads are complete - safe to close modal now
+            allS3UploadsComplete = true;
+            allImagesUploadedRef.current = true;
+            setAllImagesUploaded(true);
+            
+            // Update progress to show we're moving to processing
+            setUploadProgress({ 
+              step: 'processing', 
+              current: progress.completed, 
+              total: progress.total, 
+              message: 'All files uploaded. Processing images...',
+              percentage: 12,
+              elapsedTime: Date.now() - startTime,
+              estimatedTimeRemaining: null
+            });
+          }
+        }
+      );
+      
+      // Ensure we have upload_id (fallback in case init phase didn't provide it)
+      if (!currentUploadId && result.upload_id) {
+        currentUploadId = result.upload_id;
+        setUploadId(result.upload_id);
+        
+        // Start polling if not already started
+        if (!pollIntervalRef.current) {
+          pollIntervalRef.current = setInterval(pollProgress, 2000);
+          pollProgress(); // Initial poll
+        }
+      }
+      
+      setFileToImageMap(result.file_to_image_map);
+      
+      // Clear selected files since they're now part of the upload and will appear in existingUploadImages
+      setSelectedFiles([]);
+      
+      // Initialize image statuses - all start as UPLOADING since they're being uploaded
+      const initialStatuses = {};
+      Object.values(result.file_to_image_map).forEach(imageId => {
+        initialStatuses[imageId] = 'UPLOADING';
+      });
+      setImageStatuses(initialStatuses);
+      
+      // If uploads completed synchronously (shouldn't happen, but just in case)
+      if (allS3UploadsComplete) {
+        setAllImagesUploaded(true);
+      }
 
     } catch (error) {
       console.error('Upload failed:', error);
@@ -927,7 +946,7 @@ export default function UploadFormModal({
 
             {/* Upload progress - moved to top */}
             <AnimatePresence>
-              {uploadProgress && (
+              {uploadProgress && uploading && (
                 <motion.div 
                   key="upload-progress"
                   initial={{ opacity: 0, height: 0 }}
@@ -960,22 +979,30 @@ export default function UploadFormModal({
                               ? 'text-red-700'
                               : 'text-blue-700'
                           }`}>
-                            {uploadProgress.message}
+                            {uploadProgress.message || 'Processing...'}
                           </p>
-                          {uploadProgress.percentage !== undefined && uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && (
-                            <span className="text-xs font-semibold text-blue-600 flex-shrink-0">
-                              {Math.round(uploadProgress.percentage)}%
-                            </span>
-                          )}
+                          <span className="text-xs font-semibold text-blue-600 flex-shrink-0 min-w-[3rem] text-right">
+                            {uploadProgress.step === 'complete' 
+                              ? '100%'
+                              : uploadProgress.step === 'error'
+                              ? '0%'
+                              : uploadProgress.percentage !== undefined
+                              ? `${Math.round(uploadProgress.percentage)}%`
+                              : '0%'}
+                          </span>
                         </div>
-                        {uploadProgress.step !== 'complete' && uploadProgress.step !== 'error' && uploadProgress.percentage !== undefined && (
-                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                            <div
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${uploadProgress.percentage || 0}%` }}
-                            />
-                          </div>
-                        )}
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              uploadProgress.step === 'complete'
+                                ? 'bg-green-600'
+                                : uploadProgress.step === 'error'
+                                ? 'bg-red-600'
+                                : 'bg-blue-600'
+                            }`}
+                            style={{ width: `${uploadProgress.step === 'complete' ? 100 : uploadProgress.percentage !== undefined ? (uploadProgress.percentage || 0) : 0}%` }}
+                          />
+                        </div>
                         {/* Time information */}
                         {(uploadProgress.elapsedTime !== undefined || uploadProgress.estimatedTimeRemaining !== undefined) && (
                           <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-2">

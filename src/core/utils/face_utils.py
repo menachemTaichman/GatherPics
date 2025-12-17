@@ -20,8 +20,13 @@ class AWSRekognitionHelper:
         self.storage = storage_backend
         
         try:
-            # Use custom mock client in development (moto doesn't support Rekognition collections)
-            if os.getenv('ENVIRONMENT') == 'DEVELOPMENT':
+            # Use custom mock client in development or when MOCK_REKOGNITION is set
+            # (moto doesn't support Rekognition collections)
+            use_mock = (
+                os.getenv('ENVIRONMENT') == 'DEVELOPMENT' or 
+                os.getenv('MOCK_REKOGNITION', '').lower() in ('true', '1', 'yes')
+            )
+            if use_mock:
                 # Import mock client from tests.mocks
                 import sys
                 from pathlib import Path
