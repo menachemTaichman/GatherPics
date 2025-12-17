@@ -332,8 +332,7 @@ class Event():
             self.models.add_rekognition_calls(1)
             logger.debug(f"Detecting faces in image: image_id={image_id}")
             detected_faces = self.face_utils.detect_faces(
-                image=high_quality_img, 
-                image_path=high_quality_path,
+                image=high_quality_img,
                 external_image_id=image_id
             )
             image_faces = []
@@ -760,8 +759,8 @@ class Event():
                     self.file_helper.write_stream(high_quality_path, hq_buffer, content_type='image/jpeg')
                     
                     # --- STAGE B: Face Detection & Cropping (use high quality for better results) ---
-                    # In dev (local storage), pass image directly; in prod (S3), image_path is used
-                    detected_faces = self.face_utils.detect_faces(image=high_quality_img, image_path=high_quality_path, external_image_id=image_id)
+                    # Rekognition now always receives raw bytes; image_path kept only for storage bookkeeping.
+                    detected_faces = self.face_utils.detect_faces(image=high_quality_img, external_image_id=image_id)
                     image_faces = []
                     for face_id, bbox in detected_faces:
                         # Use high_quality_img for better face cropping quality

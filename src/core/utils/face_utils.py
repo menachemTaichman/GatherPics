@@ -152,26 +152,18 @@ class FaceUtils:
             self._rek_helper = AWSRekognitionHelper(self.event_id, storage_backend=self.storage_backend)
         return self._rek_helper
 
-    def detect_faces(self, image: Image.Image = None, image_path: str = None, external_image_id: str = '') -> list[tuple[str, dict]]:
+    def detect_faces(self, image: Image.Image = None, external_image_id: str = '') -> list[tuple[str, dict]]:
         """
         Detects faces in an image and returns a list of tuples of AWSfaceId and face bounding box dicts.
         
         Args:
-            image: PIL Image object (already in memory) - used when image_path is not provided
-            image_path: Path to image file in storage (preferred for S3 storage to avoid data transfer)
+            image: PIL Image object (already in memory)
             external_image_id: External image identifier
         
         Returns:
             List of tuples: (face_id, bounding_box_dict)
         """
-        if image_path and self.storage_backend:
-            s3_ref = self.storage_backend.get_s3_reference(image_path)
-            if s3_ref and 'S3Object' in s3_ref:
-                face_details = self.rek_helper.index_faces(image_s3_object=s3_ref['S3Object'], external_image_id=external_image_id)
-                faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
-                return faces
-        
-        # Fallback: Convert PIL Image to JPEG bytes (for local storage or when image is in memory)
+        # R2 storage is not directly accessible by Rekognition; always send image bytes.
         if image is None:
             raise ValueError("Either image or image_path must be provided")
         
