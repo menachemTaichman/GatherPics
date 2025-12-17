@@ -308,19 +308,16 @@ steps = [
 
         CREATE OR REPLACE VIEW faces_eff AS
         SELECT
-            ep.event_id,
-            ep.profile_id,
+            ie.event_id,
+            ie.profile_id,
             f.face_id,
             (ie.is_accessible AND gd.is_accessible) AS is_accessible
         FROM faces f
-        INNER JOIN images i ON f.image_id = i.image_id
-        JOIN events_profiles ep ON i.event_id = ep.event_id
         INNER JOIN images_eff ie ON
-            i.image_id = ie.image_id
-            AND ie.profile_id = ep.profile_id
+            f.image_id = ie.image_id
         INNER JOIN groups_def gd ON
             f.group_id = gd.group_id
-            AND gd.profile_id = ep.profile_id;
+            AND gd.profile_id = ie.profile_id;
         
         CREATE OR REPLACE VIEW groups_eff AS
         SELECT
