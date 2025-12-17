@@ -449,7 +449,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const [albumsOpen, setAlbumsOpen] = useState(() => getPreference('ImageViewer.albumsOpen', false));
   const [facesOpen, setFacesOpen] = useState(() => getPreference('ImageViewer.facesOpen', false));
   const [albumsHeight, setAlbumsHeight] = useState(() => getPreference('ImageViewer.albumsHeight', 200));
-  
+
+
   // Drawer swipe logic
   const drawerTouchStartRef = useRef({ x: 0, y: 0 });
   const handleDrawerTouchStart = (e) => {
@@ -600,6 +601,42 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     entity,
     entityId: parent
   });
+
+  // Flag when any blocking modal is open
+  const blockingModalOpen = useMemo(
+    () =>
+      showTransferModal ||
+      showMoveToMomentModal ||
+      showManageAccessModal ||
+      imageActions.showDeleteConfirmModal,
+    [
+      showTransferModal,
+      showMoveToMomentModal,
+      showManageAccessModal,
+      imageActions.showDeleteConfirmModal
+    ]
+  );
+
+  // Drawer focus diagnostics: only log when blocked; avoid re-focusing to prevent loops with Vaul
+  useEffect(() => {
+    const node = drawerContentElement;
+    if (!node) return;
+
+    // Make drawer inert while a blocking modal is open so it cannot request focus
+    node.inert = !!blockingModalOpen;
+    node.setAttribute('aria-hidden', blockingModalOpen ? 'true' : 'false');
+    const handleFocusIn = (e) => {
+      if (!blockingModalOpen) return;
+      const active = document.activeElement;
+    };
+    node.addEventListener('focusin', handleFocusIn, true);
+
+    return () => {
+      node.inert = false;
+      node.removeAttribute('aria-hidden');
+      node.removeEventListener('focusin', handleFocusIn, true);
+    };
+  }, [drawerContentElement, blockingModalOpen, modalRef]);
 
   const [drawerDirection, setDrawerDirection] = useState('none');
   const [drawerContentKey, setDrawerContentKey] = useState(imageId);
@@ -2100,25 +2137,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         <Drawer.Root 
           open={drawerOpen} 
           direction={isMobile ? 'bottom' : (isRTL ? 'right' : 'left')}
-          onOpenChange={(open) => {
-            // Check if any modal is open - prevent closing drawer if modal is open
-            const anyModalOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal;
-            
-            // On desktop, only allow closing via info toggle (prevent auto-close)
-            // On mobile, allow normal drawer behavior but prevent closing if modal is open
-            if (isMobile) {
-              // Don't close drawer if a modal is open
-              if (!open && anyModalOpen) {
-                return; // Prevent closing
-              }
-              setDrawerOpen(open);
-            } else if (open) {
-              // Allow opening on desktop
-              setDrawerOpen(true);
-            }
-            // Prevent closing on desktop via onOpenChange (only via info toggle)
-          }} 
           modal={isMobile}
+          onOpenChange={(open) => {
+            // Respect explicit open/close but do not allow focus to fight with blocking modals
+            const anyModalOpen = showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal;
+            if (anyModalOpen && !open) {
+              // Block auto-close from outside clicks while a modal is open; allow manual toggles elsewhere
+              return;
+            }
+            setDrawerOpen(open);
+          }}
+          trapFocus={!(showTransferModal || showMoveToMomentModal || showManageAccessModal || imageActions.showDeleteConfirmModal)}
         >
           <Drawer.Portal>
             <Drawer.Overlay 

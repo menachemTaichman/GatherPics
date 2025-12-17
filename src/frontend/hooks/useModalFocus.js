@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useModalManager, useModalStore } from '../utils/modalManager';
 
+// Debug helper removed
+
 /**
  * Custom hook for modal focus management
  * Handles:
@@ -14,6 +16,7 @@ import { useModalManager, useModalStore } from '../utils/modalManager';
 export function useModalFocus(isOpen, onClose, options = {}) {
   const modalRef = useRef(null);
   const lastActiveElement = useRef(null);
+  const lastForcedFocusTargetRef = useRef(null);
   const [modalId] = useState(() => options?.modalId || `modal-${Math.random().toString(36).substr(2, 9)}`);
   const isPopup = options?.modalType === 'popup';
   const { isTopModal } = useModalManager();
@@ -21,14 +24,13 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   // Check if this modal is registered and is the topmost modal
   const isTopmostModal = useCallback(() => {
     try {
-      // If modal is not registered with modalManager, check if there are any registered modals
       const { stack } = useModalStore.getState();
       if (stack.length === 0) {
-        // No modals registered, this modal is topmost
         return true;
       }
-      // If this modal is registered, check if it's topmost
-      return isTopModal(modalId);
+      const topId = stack[stack.length - 1];
+      const result = isTopModal(modalId);
+      return result;
     } catch {
       // If modal is not registered, assume it's topmost (fallback for modals not using modalManager)
       return true;
@@ -132,12 +134,23 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   // Handle keyboard events
   const handleKeyDown = useCallback((e) => {
     if (!isOpen) return;
+    const topmost = isTopmostModal();
+    const inModal = modalRef.current && modalRef.current.contains(e.target);
+    const stackSnapshot = (() => {
+      try { return [...(useModalStore.getState().stack || [])]; } catch { return []; }
+    })();
+    // Only the topmost modal should react to keyboard events
+    if (!topmost) {
+      return;
+    }
     // Custom handler first
     if (customKeyHandler) {
       const handled = customKeyHandler(e);
-      if (handled) return;
+      if (handled) {
+        return;
+      }
     }
-    const isEventInsideModal = modalRef.current && modalRef.current.contains(e.target);
+    const isEventInsideModal = inModal;
     if (e.key === 'Escape') {
       // Only handle ESC if this modal is the topmost modal
       if (isTopmostModal()) {
@@ -263,9 +276,46 @@ export function useModalFocus(isOpen, onClose, options = {}) {
   // Handle click outside
   const handleClick = useCallback((e) => {
     if (!isOpen || !modalRef.current) return;
-    // Only handle click outside if this modal is the topmost modal
     if (!isTopmostModal()) return;
-    if (!modalRef.current.contains(e.target)) {
+    const stackSnapshot = (() => {
+      try { return [...(useModalStore.getState().stack || [])]; } catch { return []; }
+    })();
+    const inModal = modalRef.current.contains(e.target);
+
+    // If click is inside this (topmost) modal, ensure the target gets focus when appropriate
+    const maybeFocusTarget = () => {
+      const t = e.target;
+      if (!t || !(t instanceof HTMLElement)) return;
+      const tag = t.tagName;
+      const isFocusableTag = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const hasTabIndex = typeof t.tabIndex === 'number' && t.tabIndex >= 0;
+      const isContentEditable = t.isContentEditable;
+      const shouldForce = isFocusableTag || hasTabIndex || isContentEditable;
+
+      if (!shouldForce) return;
+
+      // Prevent default to stop other listeners from stealing focus (e.g., PhotoSwipe/UI buttons)
+      e.preventDefault();
+      e.stopPropagation();
+
+      const focusAttempts = [0, 10, 30, 60, 120];
+      lastForcedFocusTargetRef.current = t;
+      focusAttempts.forEach((delay) => {
+        setTimeout(() => {
+          const active = document.activeElement;
+          if (active !== t && document.contains(t)) {
+            try {
+              t.focus({ preventScroll: true });
+            } catch {
+              try { t.focus(); } catch {}
+            }
+          } else {
+          }
+        }, delay);
+      });
+    };
+
+    if (!inModal) {
       // Check if click is on PhotoSwipe elements (PhotoSwipe appends to document.body, outside modalRef)
       const pswpElement = e.target.closest('.pswp');
       if (pswpElement) {
@@ -282,8 +332,19 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         target = target.parentElement;
       }
       onClose();
+    } else {
+      maybeFocusTarget();
     }
   }, [isOpen, onClose, modalId, isTopmostModal]);
+
+  // Pointer down logging to track who is consuming the click before focus
+  const handlePointerDown = useCallback((e) => {
+    if (!isOpen || !modalRef.current) return;
+    if (!isTopmostModal()) return;
+    const stackSnapshot = (() => {
+      try { return [...(useModalStore.getState().stack || [])]; } catch { return []; }
+    })();
+  }, [isOpen, modalId, isTopmostModal]);
 
   // Add event listeners
   useEffect(() => {
@@ -291,20 +352,57 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('mousemove', updateMousePosition);
     document.addEventListener('wheel', handleWheel, { passive: false, capture: false });
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    const handleFocusIn = (e) => {
+      if (!isTopmostModal()) return;
+      const stackSnapshot = (() => {
+        try { return [...(useModalStore.getState().stack || [])]; } catch { return []; }
+      })();
+      const inModal = modalRef.current ? modalRef.current.contains(e.target) : false;
+      // Post-focus snapshot to see where focus landed after other handlers
+      setTimeout(() => {
+        const active = document.activeElement;
+      }, 0);
+      // If topmost but focus landed outside, try a single redirect to the last forced target
+      if (!inModal && modalRef.current && lastForcedFocusTargetRef.current) {
+        const target = modalRef.current.contains(lastForcedFocusTargetRef.current) ? lastForcedFocusTargetRef.current : null;
+        lastForcedFocusTargetRef.current = null; // only once
+        if (target) {
+          setTimeout(() => {
+            if (!document.contains(target)) return;
+            try {
+              target.focus({ preventScroll: true });
+            } catch {
+              try { target.focus(); } catch {}
+            }
+          }, 0);
+        }
+      }
+    };
+    const handleFocusOut = (e) => {
+      if (!isTopmostModal()) return;
+      setTimeout(() => {
+        const active = document.activeElement;
+      }, 0);
+    };
+    document.addEventListener('focusin', handleFocusIn, true);
+    document.addEventListener('focusout', handleFocusOut, true);
     
     // Delay click handler registration to prevent catching the opening click
     const clickTimeout = setTimeout(() => {
       document.addEventListener('click', handleClick, true);
     }, 100);
-    
     return () => {
       clearTimeout(clickTimeout);
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('click', handleClick, true);
       document.removeEventListener('mousemove', updateMousePosition);
       document.removeEventListener('wheel', handleWheel, false);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('focusin', handleFocusIn, true);
+      document.removeEventListener('focusout', handleFocusOut, true);
     };
-  }, [isOpen, handleKeyDown, handleWheel, handleClick, updateMousePosition]);
+  }, [isOpen, handleKeyDown, handleWheel, handleClick, updateMousePosition, handlePointerDown]);
 
   // Handle browser back button to close modal on mobile
   // Only handle for topmost modal to prevent conflicts
