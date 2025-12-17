@@ -287,10 +287,11 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       const t = e.target;
       if (!t || !(t instanceof HTMLElement)) return;
       const tag = t.tagName;
-      const isFocusableTag = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const isFormInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      // Allow normal clicks on buttons/links; only force focus for actual inputs/content-editable fields.
       const hasTabIndex = typeof t.tabIndex === 'number' && t.tabIndex >= 0;
       const isContentEditable = t.isContentEditable;
-      const shouldForce = isFocusableTag || hasTabIndex || isContentEditable;
+      const shouldForce = isFormInput || isContentEditable || (hasTabIndex && tag !== 'BUTTON' && tag !== 'A');
 
       if (!shouldForce) return;
 

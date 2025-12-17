@@ -76,7 +76,6 @@ services:
       celery -A src.backend.celery_worker.celery worker
       --loglevel=DEBUG
       --concurrency=2
-      --no-color
       --without-gossip
       --without-mingle
       --without-heartbeat
