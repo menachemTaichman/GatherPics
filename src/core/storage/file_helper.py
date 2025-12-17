@@ -7,9 +7,8 @@ Routes and core services should use this instead of accessing storage directly.
 
 import os
 from typing import Optional, BinaryIO
-from io import BytesIO
 import urllib.parse
-from flask import send_file, redirect, Response, stream_with_context
+from flask import send_file, redirect
 
 from .storage_backend import get_storage_backend, StorageBackend
 
@@ -99,7 +98,11 @@ class FileHelper:
             expires_in: URL expiration in seconds (for S3 presigned URLs)
             
         Returns:
-            Dict with 'url' and 'fields' for POST upload (S3) or None (local storage)
+            Dict with:
+              - 'url': upload target
+              - 'fields': optional fields for POST uploads (None for PUT)
+              - 'method': HTTP verb ('PUT' for R2/S3, 'POST' for local/direct)
+              - 'headers': optional headers for upload
         """
         return self.storage.get_upload_url(path, content_type=content_type, max_size=max_size, expires_in=expires_in)
     
@@ -119,8 +122,7 @@ class FileHelper:
         """
         Serve file via Flask response.
         
-        For downloads (as_attachment=True): returns presigned URL redirect for direct S3 access.
-        For viewing (as_attachment=False): proxies file through Flask server.
+        For S3/R2: always return a presigned URL redirect (302) for both view and download.
         For local storage: always serves file directly through Flask.
         
         Args:
@@ -130,7 +132,7 @@ class FileHelper:
             download_name: Download filename
             
         Returns:
-            Flask response (send_file for local/proxy, redirect for S3 downloads)
+            Flask response (send_file for local, redirect for S3/R2)
         """
         # Local storage - serve file directly
         if self.is_local:
@@ -141,45 +143,24 @@ class FileHelper:
                 as_attachment=as_attachment,
                 download_name=download_name
             )
-        else:
-            # S3 storage
-            if as_attachment:
-                # Download: return presigned URL for direct S3 access
-                presigned_url = self.get_url(path, expires_in=3600)
-                if not presigned_url:
-                    raise FileNotFoundError(f"Could not generate presigned URL for: {path}")
-                
-                # Add Content-Disposition header if needed for downloads
-                # Note: We can't set headers on redirect, but S3 presigned URLs support response-content-disposition parameter
-                if download_name:
-                    # Add response-content-disposition parameter to presigned URL
-                    parsed = urllib.parse.urlparse(presigned_url)
-                    params = urllib.parse.parse_qs(parsed.query)
-                    params['response-content-disposition'] = [f'attachment; filename="{download_name}"']
-                    new_query = urllib.parse.urlencode(params, doseq=True)
-                    presigned_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
-                
-                return redirect(presigned_url, code=302)
-            else:
-                # Viewing: stream through Flask server
-                if hasattr(self.storage, 'get_object_stream'):
-                    # S3 Storage - Streaming Proxy
-                    s3_response = self.storage.get_object_stream(path)
-                    return Response(
-                        stream_with_context(s3_response['Body']),
-                        mimetype=mimetype,
-                        direct_passthrough=True
-                    )
-                else:
-                    # Local storage or fallback - read into memory
-                    file_data = self.read(path)
-                    file_stream = BytesIO(file_data)
-                    return send_file(
-                        file_stream,
-                        mimetype=mimetype,
-                        as_attachment=False,
-                        download_name=download_name
-                    )
+        
+        # Remote storage (S3/R2) - always redirect to presigned URL
+        presigned_url = self.get_url(path, expires_in=3600)
+        if not presigned_url:
+            raise FileNotFoundError(f"Could not generate presigned URL for: {path}")
+        
+        # Add Content-Disposition header when a filename is provided or download requested
+        if as_attachment or download_name:
+            parsed = urllib.parse.urlparse(presigned_url)
+            params = urllib.parse.parse_qs(parsed.query)
+            disposition = 'attachment' if as_attachment else 'inline'
+            if download_name:
+                disposition = f'{disposition}; filename="{download_name}"'
+            params['response-content-disposition'] = [disposition]
+            new_query = urllib.parse.urlencode(params, doseq=True)
+            presigned_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
+        
+        return redirect(presigned_url, code=302)
     
     def get_file_size(self, path: str) -> int:
         """

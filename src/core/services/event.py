@@ -169,7 +169,9 @@ class Event():
                 "image_id": image_id,
                 "filename": filename,
                 "upload_url": upload_info['url'],
-                "upload_fields": upload_info['fields'],
+                "upload_fields": upload_info.get('fields'),
+                "upload_method": upload_info.get('method', 'POST'),
+                "upload_headers": upload_info.get('headers'),
                 "filepath": filepath
             })
         

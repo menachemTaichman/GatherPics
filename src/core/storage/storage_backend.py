@@ -188,7 +188,8 @@ class LocalStorageBackend(StorageBackend):
     def get_upload_url(self, path: str, content_type: Optional[str] = None, max_size: Optional[int] = None, expires_in: int = 3600) -> Optional[dict]:
         """
         Path format: {event_id}/to_process/{filename}
-        Returns: dict with 'url' pointing to /api/events/{event_id}/upload/direct and 'fields' as None
+        Returns: dict with 'url' pointing to /api/events/{event_id}/upload/direct and
+        'fields' as None. Includes 'method' to indicate HTTP verb (POST for local).
         """
         # Extract event_id from path: {event_id}/to_process/{filename}
         parts = path.split('/')
@@ -198,7 +199,9 @@ class LocalStorageBackend(StorageBackend):
         event_id = parts[0]
         return {
             'url': f"/api/events/{event_id}/upload/direct",
-            'fields': None
+            'fields': None,
+            'method': 'POST',
+            'headers': None
         }
     
     def get_file_size(self, path: str) -> int:
@@ -369,7 +372,7 @@ class S3StorageBackend(StorageBackend):
             return None
     
     def get_upload_url(self, path: str, content_type: Optional[str] = None, max_size: Optional[int] = None, expires_in: int = 3600) -> Optional[dict]:
-        """Get presigned POST URL for uploading file with conditions.
+        """Get presigned URL for uploading file (PUT for R2/S3).
         
         Args:
             path: File path
@@ -378,33 +381,28 @@ class S3StorageBackend(StorageBackend):
             expires_in: URL expiration in seconds
             
         Returns:
-            Dict with 'url' and 'fields' for POST upload, or None on error
+            Dict with 'url', 'method', optional 'headers', and 'fields' (unused for PUT)
         """
         try:
-            conditions = []
-            
-            # Content-Type condition (required if specified)
+            extra_headers = {}
             if content_type:
-                conditions.append({'Content-Type': content_type})
-            
-            # File size range condition
-            min_size = 100  # Minimum 100 bytes
-            if not max_size:
-                max_size = 20 * 1024 * 1024 # 20 MB default
-            
-            conditions.append(['content-length-range', min_size, max_size])
-            
-            # Generate presigned POST URL with conditions
-            response = self.s3_client.generate_presigned_post(
-                Bucket=self.bucket_name,
-                Key=self._get_key(path),
-                Conditions=conditions,
-                ExpiresIn=expires_in
+                extra_headers['Content-Type'] = content_type
+
+            presigned_url = self.s3_client.generate_presigned_url(
+                ClientMethod="put_object",
+                Params={
+                    "Bucket": self.bucket_name,
+                    "Key": self._get_key(path),
+                    **({"ContentType": content_type} if content_type else {}),
+                },
+                ExpiresIn=expires_in,
             )
-            
+
             return {
-                'url': response['url'],
-                'fields': response['fields']
+                'url': presigned_url,
+                'fields': None,
+                'method': 'PUT',
+                'headers': extra_headers or None,
             }
         except ClientError:
             return None

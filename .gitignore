@@ -15,6 +15,9 @@ build/
 # Environment variables
 .env
 
+# Production database
+LightsailDefaultKey-eu-central-1.pem
+
 # IDE
 .vscode/settings.json
 

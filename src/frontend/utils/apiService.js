@@ -716,28 +716,41 @@ export const imagesAPI = {
             throw new Error(`Missing image_id for file ${file.name}`);
           }
           
-          // Upload to S3 using presigned POST URL (or direct upload endpoint)
-          const formData = new FormData();
-          formData.append('Content-Type', 'image/jpeg');
-          
-          // Add all fields from upload_fields (for S3 presigned POST)
-          if (uploadInfo.upload_fields) {
-            Object.keys(uploadInfo.upload_fields).forEach(key => {
-              formData.append(key, uploadInfo.upload_fields[key]);
+          const uploadMethod = (uploadInfo.upload_method || 'POST').toUpperCase();
+          let uploadResponse;
+
+          if (uploadMethod === 'PUT') {
+            // PUT to presigned URL (R2/S3)
+            const headers = Object.assign(
+              {},
+              uploadInfo.upload_headers || {},
+              { 'Content-Type': file.type || 'image/jpeg' },
+            );
+            uploadResponse = await fetch(uploadInfo.upload_url, {
+              method: 'PUT',
+              headers,
+              body: file,
             });
           } else {
-            // For direct upload endpoint, only image_id is needed (filename is generated from image_id)
-            formData.append('image_id', uploadInfo.image_id);
+            // POST (either presigned POST fields or direct upload endpoint)
+            const formData = new FormData();
+            formData.append('Content-Type', 'image/jpeg');
+            
+            if (uploadInfo.upload_fields) {
+              Object.keys(uploadInfo.upload_fields).forEach(key => {
+                formData.append(key, uploadInfo.upload_fields[key]);
+              });
+            } else {
+              formData.append('image_id', uploadInfo.image_id);
+            }
+            
+            formData.append('file', file);
+            
+            uploadResponse = await fetch(uploadInfo.upload_url, {
+              method: 'POST',
+              body: formData
+            });
           }
-          
-          // Add file last (required by S3 and direct upload)
-          formData.append('file', file);
-          
-          // Upload to S3 or direct upload endpoint
-          const uploadResponse = await fetch(uploadInfo.upload_url, {
-            method: 'POST',
-            body: formData
-          });
           
           if (!uploadResponse.ok) {
             throw new Error(`Failed to upload ${file.name} to S3: ${uploadResponse.statusText}`);
