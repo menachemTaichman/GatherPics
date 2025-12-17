@@ -1,8 +1,6 @@
 import os
 import logging
 from uuid import uuid4
-import urllib.request
-import urllib.error
 
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
@@ -338,84 +336,6 @@ def add_preference(preference_group: str, preference_key: str, value_type: str, 
     params = [preference_group, preference_key, value]
     db.execute_query(query, params)
 
-def test_presigned_upload_to_r2(event_id: str, filename: str | None = None):
-    """
-    Quick connectivity test to R2 using a presigned PUT upload.
-    Forces production storage, generates a presigned URL with PUT, uploads a
-    small file, and verifies existence.
-    """
-    original_env = os.environ.get('ENVIRONMENT')
-    try:
-        os.environ['ENVIRONMENT'] = 'PRODUCTION'
-        # Reset cached helper so it picks up production storage settings
-        import src.core.storage.file_helper as file_helper_module
-        file_helper_module._file_helper = None
-
-        file_helper = get_file_helper()
-        filename = filename or f"r2-presigned-test-{uuid4().hex}.txt"
-        path = f"{event_id}/to_process/{filename}"
-
-        storage = file_helper.storage
-        if not hasattr(storage, "s3_client"):
-            return {"status": "error", "detail": "storage backend is not S3/R2", "path": path}
-
-        try:
-            presigned_url = storage.s3_client.generate_presigned_url(
-                ClientMethod="put_object",
-                Params={
-                    "Bucket": storage.bucket_name,
-                    "Key": storage._get_key(path),  # type: ignore[attr-defined]
-                    "ContentType": "text/plain",
-                },
-                ExpiresIn=3600,
-            )
-        except Exception as e:
-            return {"status": "error", "detail": f"failed to presign: {e}", "path": path}
-
-        payload = b"A" * 256  # must be >= 100 bytes because of content-length-range condition
-        request = urllib.request.Request(
-            presigned_url,
-            data=payload,
-            method="PUT",
-            headers={"Content-Type": "text/plain"},
-        )
-
-        try:
-            with urllib.request.urlopen(request, timeout=15) as resp:
-                http_status = resp.getcode()
-                response_body = resp.read(200)
-                status = "ok" if 200 <= http_status < 300 else "failed"
-        except urllib.error.HTTPError as e:
-            http_status = e.code
-            response_body = e.read(200)
-            status = "failed"
-        except Exception as e:
-            http_status = None
-            response_body = str(e).encode()
-            status = "failed"
-
-        try:
-            exists_after = file_helper.exists(path)
-        except Exception as e:
-            exists_after = f"exists check failed: {e}"
-
-        return {
-            "status": status,
-            "http_status": http_status,
-            "path": path,
-            "exists_after": exists_after,
-            "response_snippet": response_body.decode(errors="ignore"),
-        }
-    finally:
-        if original_env is not None:
-            os.environ['ENVIRONMENT'] = original_env
-        elif 'ENVIRONMENT' in os.environ:
-            del os.environ['ENVIRONMENT']
-
-        # Reset helper back to the default environment
-        import src.core.storage.file_helper as file_helper_module
-        file_helper_module._file_helper = None
-
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
     ('images', 'albums'),
@@ -434,14 +354,15 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+result = event._cluster_faces([])
+print(result)
+print('--------------------------------')
+
 event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
 # result = find_incomplete_images(event_id, test_prod=True)
 # print(result)
 # print('--------------------------------')
-r2_upload = test_presigned_upload_to_r2(event_id=event_id)
-print('R2 presigned upload result:', r2_upload)
-print('--------------------------------')
 # general_models.process_new_images(event_id=event_id)
 
 # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)

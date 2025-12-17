@@ -407,7 +407,7 @@ class Event():
         minimal_group_size: int = 2,
         cluster_threshold: int = 90,
         max_matches_faces: int = 100,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int]:
         """
         Cluster faces and create/update groups.
         
@@ -418,7 +418,7 @@ class Event():
             max_matches_faces: Maximum number of faces to match for clustering
             
         Returns:
-            Number of groups created, Number of groups related, Number of images in the upload
+            Number of groups created, Number of groups related
         """        
         logger.info(f"Starting face clustering: face_ids_count={len(face_ids)}, cluster_threshold={cluster_threshold}, minimal_group_size={minimal_group_size}")
         
@@ -474,9 +474,7 @@ class Event():
 
         logger.info(f"Face clustering completed: groups_created={groups_created}")
 
-        # assign moments by time
-        image_ids = self.models.get_parents('faces', face_ids, 'images')
-        return groups_created, groups_related, len(image_ids)
+        return groups_created, groups_related
 
     def delete_unready_images_in_upload(self, upload_id: int) -> int:
         """Delete unready images in an upload.

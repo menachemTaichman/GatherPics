@@ -149,15 +149,15 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
     """
     try:
         # Create Event instance
-        event = Event(event_id, profile_id=profile_id)        
+        event = Event(event_id, profile_id=profile_id)
+        images = event.models.get_upload_images(upload_id)
+        ready_images = [image['image_id'] for image in images if image['status'] == 'READY']
+        images_count = len(ready_images)
+        if images_count == 0:
+            raise Exception('No ready images found')
+        
         face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
-        if len(face_ids) == 0:
-            images = event.models.get_upload_images(upload_id)
-            if len(images) > 0:
-                raise Exception('All images failed to process')
-        else:
-            # Cluster faces
-            groups_created, groups_related, images_count = event._cluster_faces(face_ids)
+        groups_created, groups_related = event._cluster_faces(face_ids)
         
         # Check if assign_moments flag is set in Redis
         assign_moments = False
