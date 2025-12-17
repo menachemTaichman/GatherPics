@@ -1,5 +1,5 @@
 """
-Storage backend abstraction - local filesystem for dev, S3 for production.
+Storage backend abstraction - local filesystem for dev, S3-compatible storage (R2/AWS) for production.
 
 Similar pattern to mock_rekognition.py for consistency.
 """
@@ -240,9 +240,10 @@ class S3StorageBackend(StorageBackend):
         self.base_prefix = base_prefix.rstrip('/')
         self.s3_client = boto3.client(
             's3',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=region or os.getenv('AWS_REGION', 'us-east-1')
+            aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('R2_REGION'),
+            endpoint_url=os.getenv('R2_ENDPOINT')
         )
     
     def _get_key(self, path: str) -> str:
@@ -465,16 +466,16 @@ def get_storage_backend() -> StorageBackend:
     Factory function to get appropriate storage backend.
     
     Returns:
-        LocalStorageBackend if ENVIRONMENT=DEVELOPMENT or S3 not configured
-        S3StorageBackend if S3_BUCKET is set
+        LocalStorageBackend if ENVIRONMENT=DEVELOPMENT or object storage not configured
+        S3StorageBackend if R2_BUCKET is set
     """
     environment = os.getenv('ENVIRONMENT', 'DEVELOPMENT')
-    s3_bucket = os.getenv('S3_BUCKET')
+    s3_bucket = os.getenv('R2_BUCKET')
     
     # Use S3 in production if bucket is configured
     if environment == 'PRODUCTION' and s3_bucket:
         base_prefix = os.getenv('S3_BASE_PREFIX', '')
-        region = os.getenv('AWS_REGION', 'us-east-1')
+        region = os.getenv('R2_REGION')
         return S3StorageBackend(bucket_name=s3_bucket, base_prefix=base_prefix, region=region)
     
     # Default to local storage

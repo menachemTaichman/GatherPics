@@ -54,9 +54,9 @@ COPY --from=frontend-builder /app/dist ./dist
 # Note: The following environment variables must be provided at runtime:
 # - JWT_SECRET_KEY (required)
 # - DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME (required for database)
-# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (if using AWS services)
-# - AWS_REGION, S3_BUCKET_NAME (if using S3)
-ENV S3_BUCKET=gather-pics-bucket
+# - R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET (object storage)
+# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION (if using AWS services like SES/Rekognition)
+ENV R2_BUCKET=gather-pics-bucket
 ENV ENVIRONMENT=PRODUCTION
 ENV DIST_DIR=/app/dist
 ENV FLASK_HOST=0.0.0.0

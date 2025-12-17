@@ -215,7 +215,7 @@ face-recognition-website/
 - **Flask** - Web framework
 - **PostgreSQL** - Database
 - **AWS Rekognition** - Face recognition
-- **AWS S3** - File storage (via boto3)
+- **Cloudflare R2 (S3-compatible)** - File storage (via boto3)
 - **JWT** - Authentication (flask-jwt-extended)
 - **Yoyo Migrations** - Database migrations
 - **Pillow/Pillow-SIMD** - Image processing
@@ -386,11 +386,17 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
-# AWS
+# AWS (Rekognition/SES)
 AWS_ACCESS_KEY_ID=your_key
 AWS_SECRET_ACCESS_KEY=your_secret
 AWS_REGION=us-east-1
-AWS_S3_BUCKET=your-bucket-name
+
+# R2 object storage (S3-compatible)
+R2_ACCESS_KEY_ID=your_r2_key
+R2_SECRET_ACCESS_KEY=your_r2_secret
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_BUCKET=your-bucket-name
+S3_BASE_PREFIX=optional/prefix
 
 # JWT
 JWT_SECRET_KEY=your-secret-key-change-in-production
