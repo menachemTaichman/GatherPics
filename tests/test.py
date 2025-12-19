@@ -354,11 +354,11 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = event._cluster_faces([])
+result = event.models.get_childs('albums', '0aeef84e-0a30-4193-b555-55c5ae672765', 'images')
 print(result)
 print('--------------------------------')
 
-event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+# event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
 # result = find_incomplete_images(event_id, test_prod=True)
 # print(result)

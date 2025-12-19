@@ -175,10 +175,11 @@ class BaseModels(ABC):
             else:
                 where_clause = f'(c.{id_field} <> %s OR c.{id_field} IS NULL)'
         else:
-            join_clause = f' LEFT JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
             if within:
-                where_clause = f'r.{child_id_field} IS NOT NULL'
+                join_clause = f' INNER JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
+                where_clause = '1=1' 
             else:
+                join_clause = f' LEFT JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
                 where_clause = f'r.{child_id_field} IS NULL'
 
         if child_ids is not None:

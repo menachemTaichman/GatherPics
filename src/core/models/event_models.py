@@ -235,6 +235,7 @@ class EventModels(BaseModels):
             updated_moments = self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
             if updated_moments:
                 updated_uploads_to_moments.setdefault(upload_id, []).extend(updated_moments)
+            # TODO: maybe remove within and use other method
             removed_moments = self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
             if removed_moments:
                 removed_uploads_to_moments.setdefault(upload_id, []).extend(removed_moments)
@@ -284,6 +285,7 @@ class EventModels(BaseModels):
             updated_moments = self.get_childs('uploads', upload_id, 'moments', moments, return_ids=True)
             if updated_moments:
                 updated_uploads_to_moments.setdefault(upload_id, []).extend(updated_moments)
+            # TODO: maybe remove within and use other method
             removed_moments = self.get_childs('uploads', upload_id, 'moments', moments, within=False, return_ids=True)
             if removed_moments:
                 removed_uploads_to_moments.setdefault(upload_id, []).extend(removed_moments)
@@ -398,6 +400,7 @@ class EventModels(BaseModels):
             detached_images = []
             for detached_face in detached_faces:
                 images = self.get_parents('faces', detached_face, 'images')
+                # TODO: maybe remove within and use other method
                 detached_images.extend(self.get_childs('groups', group_id, 'images', images, within=False, return_ids=True))
             
             detached_groups_images[group_id] = list(set(detached_images))
@@ -414,6 +417,7 @@ class EventModels(BaseModels):
             updated_groups = self.get_childs('uploads', upload_id, 'groups', groups, return_ids=True)
             if updated_groups:
                 updated_uploads_to_groups.setdefault(upload_id, []).extend(updated_groups)
+            # TODO: maybe remove within and use other method
             removed_groups = self.get_childs('uploads', upload_id, 'groups', groups, within=False, return_ids=True)
             if removed_groups:
                 removed_uploads_to_groups.setdefault(upload_id, []).extend(removed_groups)

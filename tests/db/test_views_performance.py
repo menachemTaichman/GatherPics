@@ -11,13 +11,18 @@ import os
 from datetime import datetime
 import sys
 
-def get_event_and_db(event_id: str = None, profile_id: str = None):
+def get_event_and_db(event_id: str = None, profile_id: str = None, test_prod: bool = True):
     """Get event and db instances. If not provided, use defaults."""
+    if test_prod:
+        os.environ['ENVIRONMENT'] = 'PRODUCTION'
+        os.environ['DB_PORT'] = '9000'
+        DB._connection_pool = None
     if event_id is None:
-        event_id = '75cb6635-879d-4386-b023-366444dc0fb2'
+        event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0' #'b03392ea-8a12-5b70-bda3-e94c1dcc5dd1' # '75cb6635-879d-4386-b023-366444dc0fb2'
     if profile_id is None:
         profile_id = "89cb4967-0eba-48af-99cc-5e87407fb639"
     event = Event(event_id, profile_id=profile_id)
+    event.models.db.execute_query('ANALYZE;')
     return event, event.models.db
 
 # Default values for backward compatibility
