@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function Toast({ toast }) {
+export default function Toast({ toast, hideToast }) {
   if (!toast.show) return null;
 
   return (
@@ -9,13 +9,14 @@ export default function Toast({ toast }) {
         initial={{ opacity: 0, y: -50, scale: 0.9, x: '-50%' }}
         animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
         exit={{ opacity: 0, y: -50, scale: 0.9, x: '-50%' }}
+        onClick={hideToast}
         style={{ 
           // on top of photo swipe (100000), vaul drawer (100001), and modals within drawer (100002)
           zIndex: 100020,
           position: 'fixed',
           top: '1rem',
           left: '50%',
-          pointerEvents: 'none'
+          cursor: 'pointer'
         }}
         className={`px-6 py-3 rounded-lg shadow-lg text-white font-medium ${
           toast.type === 'success' 

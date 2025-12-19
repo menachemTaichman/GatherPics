@@ -294,12 +294,15 @@ export default function TransferFacesModal({
               href={link} 
               className="underline hover:text-gray-100" 
               onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  navigate(link, {
-                    state: highlightState
-                  });
+                // Allow default for modifier keys and middle/right click
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                  return; // Let browser handle
                 }
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(link, {
+                  state: highlightState
+                });
               }}
             >{targetGroupName}</a>
           </span>,

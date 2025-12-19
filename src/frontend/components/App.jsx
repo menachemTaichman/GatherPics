@@ -43,8 +43,8 @@ function AppContentWrapper() {
 }
 
 function ToastOutlet() {
-  const { toast } = useToast();
-  return <Toast toast={toast} />;
+  const { toast, hideToast } = useToast();
+  return <Toast toast={toast} hideToast={hideToast} />;
 }
 
 // Public access page component

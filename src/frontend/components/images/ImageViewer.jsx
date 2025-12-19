@@ -569,10 +569,25 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       // Changes are automatically applied by apiService interceptor
       
       const count = result?.len_added ?? 1;
+      const albumLink = `/${eventUrl}/albums/${encodeURIComponent(album.label)}`;
       showToast(
         <span>
           {t('imageViewer.removedFromAlbum', { count })} {' '}
-          <a href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`} className="underline hover:text-gray-100">{album.label}</a>
+          <a 
+            href={albumLink}
+            onClick={(e) => {
+              // Allow default for modifier keys and middle/right click
+              if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                return; // Let browser handle
+              }
+              e.preventDefault();
+              e.stopPropagation();
+              navigate(albumLink, {
+                state: { highlightImages: [storeImageInfo.id] }
+              });
+            }}
+            className="underline hover:text-gray-100"
+          >{album.label}</a>
         </span>,
         'success'
       );

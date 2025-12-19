@@ -168,12 +168,15 @@ export default function AlbumQuickAddButton({
             {t('albumQuickAdd.addedToAlbumCount', { count: added })} <a 
               href={`/${eventUrl}/albums/${encodeURIComponent(album.label)}`}
               onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, {
-                    state: { highlightImages: images.slice(0, 10) }
-                  });
+                // Allow default for modifier keys and middle/right click
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                  return; // Let browser handle
                 }
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(`/${eventUrl}/albums/${encodeURIComponent(album.label)}`, {
+                  state: { highlightImages: images.slice(0, 10) }
+                });
               }}
               className="underline hover:text-gray-100"
             >{album.label}</a>
@@ -224,12 +227,15 @@ export default function AlbumQuickAddButton({
             {t('albumQuickAdd.addedToNewAlbumCount', { count: imagesToAdd.length, imageText })} <a
               href={`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`}
               onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  navigate(`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`, {
-                    state: { highlightImages: imagesToAdd.slice(0, 10) }
-                  });
+                // Allow default for modifier keys and middle/right click
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                  return; // Let browser handle
                 }
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(`/${eventUrl}/albums/${encodeURIComponent(trimmedName)}`, {
+                  state: { highlightImages: imagesToAdd.slice(0, 10) }
+                });
               }}
               className="underline hover:text-gray-100"
             >{trimmedName}</a>

@@ -6,6 +6,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { useState } from 'react';
 import { useEventId } from '../../utils/storeUtils';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Shared ImageActions hook that handles all image-related actions
@@ -27,6 +28,7 @@ export default function useImageActions({
   const { showToast } = useToast();
   const { addImages, removeFromQueue, queue, open } = useBucketStore();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   
   // State for face selection modal
   const [showFaceSelectionModal, setShowFaceSelectionModal] = useState(false);
@@ -88,7 +90,21 @@ export default function useImageActions({
         showToast(
           <span>
             {countText} {action}{' '}
-            <a href={favoritesHref} className="underline hover:text-gray-100">{t('imageActions.Favorites')}</a>
+            <a 
+              href={favoritesHref}
+              onClick={(e) => {
+                // Allow default for modifier keys and middle/right click
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                  return; // Let browser handle
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(favoritesHref, {
+                  state: { highlightImages: imageIdsArray.slice(0, 10) }
+                });
+              }}
+              className="underline hover:text-gray-100"
+            >{t('imageActions.Favorites')}</a>
           </span>,
           'success'
         );
@@ -125,7 +141,21 @@ export default function useImageActions({
         showToast(
           <span>
             {countText} {action}{' '}
-            <a href={archiveHref} className="underline hover:text-gray-100">{t('imageActions.Archive')}</a>
+            <a 
+              href={archiveHref}
+              onClick={(e) => {
+                // Allow default for modifier keys and middle/right click
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button === 1 || (e.detail && e.detail > 1)) {
+                  return; // Let browser handle
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(archiveHref, {
+                  state: { highlightImages: imageIdsArray.slice(0, 10) }
+                });
+              }}
+              className="underline hover:text-gray-100"
+            >{t('imageActions.Archive')}</a>
           </span>,
           'success'
         );

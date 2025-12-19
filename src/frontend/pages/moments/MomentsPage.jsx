@@ -99,7 +99,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const carouselVisible = usePreference('Moments.carouselExpanded', true);
   const setCarouselVisible = (value) => setPreference('Moments.carouselExpanded', value);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
-  const { toast, showToast } = useToast();
+  const { toast, showToast, hideToast } = useToast();
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
     showToast: showToast,
@@ -554,7 +554,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   return (
     <div className="w-full bg-gray-50 min-h-screen" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Toast Notifications */}
-      <Toast toast={toast} />
+      <Toast toast={toast} hideToast={hideToast} />
 
       <div className="h-[4rem]"></div>
       {/* Header */}
