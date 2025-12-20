@@ -581,3 +581,149 @@ class BaseModels(ABC):
             next_num = max_num + 1
         
         return f'{base_prefix}{str_mid_prefix}{next_num}{str_mid_suffix}{full_suffix}'
+
+    def get_unique_labels(
+        self,
+        table: str,
+        prefixes: list[str],
+        suffix: str = '',
+        *,
+        separator: str = '',
+        brackets: bool = False,
+        exclude_ids: list[str] = None,
+        event_id: str = None,
+        start_from: int = 2,
+        suffixes: list[str] = None
+    ) -> list[str]:
+        """Get multiple unique labels by appending counters if needed.
+        This is optimized for bulk operations - fetches all existing labels once
+        and generates unique labels in Python.
+        
+        Args:
+            table: table name
+            prefixes: list of prefixes for the labels
+            suffix: suffix for the label (e.g., file extension like '.jpg') - used if suffixes is None
+            separator: separator between the prefix and the suffix
+            brackets: if True, use format ' (2)', if False, use format ' 2'
+            exclude_ids: list of entity ids to exclude from uniqueness check (for updates)
+            event_id: event id for event-scoped tables (optional)
+            start_from: starting number for the counter
+            suffixes: optional list of suffixes (one per prefix). If provided, overrides suffix parameter
+        Returns:
+            list of unique labels with counters appended if needed
+        """
+        if not prefixes:
+            return []
+        
+        # If suffixes provided, use them; otherwise use single suffix for all
+        if suffixes is not None:
+            if len(suffixes) != len(prefixes):
+                raise ValueError("suffixes list must have same length as prefixes list")
+            prefix_suffix_pairs = list(zip(prefixes, suffixes))
+        else:
+            prefix_suffix_pairs = [(prefix, suffix) for prefix in prefixes]
+        
+        original_table = self.db.get_original_table(table)
+        id_field = self.db.get_id_field(table)
+
+        if brackets:
+            str_mid_prefix = ' ('
+            str_mid_suffix = f'){separator}'
+            
+            re_mid_prefix = ' \\('  
+            re_mid_suffix = f'\\){re.escape(separator)}'
+            
+            # Pattern to match counter at the end
+            counter_pattern = re.compile(r' \(\d+\)' + (re.escape(separator) if separator else '') + r'?$')
+        else:
+            str_mid_prefix = ' '
+            str_mid_suffix = separator 
+            
+            re_mid_prefix = ' '
+            re_mid_suffix = re.escape(separator)
+            
+            counter_pattern = re.compile(r' \d+' + (re.escape(separator) if separator else '') + r'?$')
+        
+        # Fetch all existing labels for this event once
+        query = f"""
+            SELECT label
+            FROM {original_table}
+            WHERE 1=1
+        """
+        
+        params = []
+        
+        if exclude_ids:
+            query += f' AND {id_field} NOT IN ({",".join(["%s"] * len(exclude_ids))})'
+            params.extend(exclude_ids)
+
+        if event_id:
+            query += f' AND event_id = %s'
+            params.append(event_id)
+        
+        query += ';'
+
+        results = self.db.execute_query(query, params, return_format=ReturnFormat.LIST_TUPLES)
+        existing_labels = {row[0] for row in results} if results else set()
+        
+        # Generate unique labels for each prefix-suffix pair
+        unique_labels = []
+        used_labels = set()  # Track labels we're generating in this batch
+        
+        for prefix, current_suffix in prefix_suffix_pairs:
+            full_suffix = f'{current_suffix}' if current_suffix else ''
+            
+            base_prefix = prefix
+            # Strip any existing counter from the prefix
+            while True:
+                new_prefix = counter_pattern.sub('', base_prefix)
+                if new_prefix == base_prefix:
+                    break
+                base_prefix = new_prefix
+            
+            # Find the next available number
+            base_label = f'{base_prefix}{separator}{full_suffix}'
+            
+            # Check if base label (without number) exists
+            base_exists = base_label in existing_labels or base_label in used_labels
+            
+            if not base_exists:
+                # Use base label without number
+                unique_labels.append(base_label)
+                used_labels.add(base_label)
+                continue
+            
+            # Find all matching labels and extract their numbers
+            numbers = []
+            safe_base_prefix = re.escape(base_prefix)
+            pattern = re.compile(
+                f'^{safe_base_prefix}{re_mid_prefix}(\\d+){re_mid_suffix}{re.escape(full_suffix)}$'
+            )
+            
+            # Check existing labels
+            for label in existing_labels:
+                match = pattern.match(label)
+                if match:
+                    numbers.append(int(match.group(1)))
+            
+            # Check labels we're generating in this batch
+            for label in used_labels:
+                match = pattern.match(label)
+                if match:
+                    numbers.append(int(match.group(1)))
+            
+            # Determine next number
+            if not numbers:
+                next_num = start_from
+            else:
+                max_num = max(numbers)
+                if max_num == 0:
+                    next_num = start_from
+                else:
+                    next_num = max_num + 1
+            
+            unique_label = f'{base_prefix}{str_mid_prefix}{next_num}{str_mid_suffix}{full_suffix}'
+            unique_labels.append(unique_label)
+            used_labels.add(unique_label)
+        
+        return unique_labels

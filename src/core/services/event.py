@@ -136,7 +136,11 @@ class Event():
             'requested_images_count': len(files_data),
         })
         
-        upload_urls = []
+        # Prepare all filenames and generate unique labels in bulk (optimized for large batches)
+        filenames = []
+        image_names = []
+        image_exts = []
+        file_sizes = []
         
         for file_info in files_data:
             original_filename = file_info['filename']
@@ -144,11 +148,33 @@ class Event():
             
             # Filename extension is already validated by the API validator
             filename = sanitize_filename(original_filename)
+            image_name, image_ext = os.path.splitext(filename)
+            
+            filenames.append(filename)
+            image_names.append(image_name)
+            image_exts.append(image_ext)
+            file_sizes.append(file_size)
+        
+        # Generate all unique labels at once (single DB query instead of N queries)
+        labels = self.models.get_unique_labels(
+            'images', 
+            image_names, 
+            suffix='',  # Not used when suffixes is provided
+            brackets=True, 
+            separator='.', 
+            event_id=self.event_id,
+            suffixes=image_exts  # Each file can have different extension
+        )
+        
+        upload_urls = []
+        
+        for i, file_info in enumerate(files_data):
+            filename = filenames[i]
+            file_size = file_sizes[i]
+            label = labels[i]
             
             # Always store pending uploads in to_process using the generated image_id
             # so processing can rely on a stable "{image_id}.jpg" naming convention.
-            image_name, image_ext = os.path.splitext(filename)
-            label = self.models.get_unique_label('images', image_name, image_ext, brackets=True, separator='.', event_id=self.event_id)
             image_id = self.models.add('images', {
                 'label': label,
                 'upload_id': upload_id,
@@ -161,11 +187,11 @@ class Event():
                 filepath, 
                 content_type='image/jpeg', 
                 max_size=file_size,
-                expires_in=3600
+                expires_in=3600 * 3
             )
             
             if not upload_info:
-                raise ValueError(f"Failed to generate upload URL for {original_filename}")
+                raise ValueError(f"Failed to generate upload URL for {file_info['filename']}")
             
             upload_urls.append({
                 "image_id": image_id,
