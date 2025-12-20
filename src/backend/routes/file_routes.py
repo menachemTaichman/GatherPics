@@ -12,7 +12,9 @@ def _add_cache_headers(resp):
     """Add cache headers to response, handling redirects, streaming, and regular responses."""
     if hasattr(resp, 'status_code') and resp.status_code in (301, 302, 303, 307, 308):
         # Redirect response (S3 presigned URL)
-        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        # Presigned URLs expire in 3600 seconds (1 hour), so cache for less than that
+        # Use 3000 seconds (50 minutes) to ensure cache expires before URL expires
+        resp.headers['Cache-Control'] = 'public, max-age=3000'
         return resp
     elif hasattr(resp, 'direct_passthrough') and resp.direct_passthrough:
         # Streaming response (S3 proxy)
