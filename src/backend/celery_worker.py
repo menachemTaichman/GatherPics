@@ -5,6 +5,7 @@ Uses Redis as both broker and result backend.
 
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 # Load environment variables from .env file if it exists (development only)
 if os.path.exists('.env'):
@@ -37,6 +38,13 @@ celery.conf.update(
     task_soft_time_limit=240,  # 4 minutes soft limit
     worker_prefetch_multiplier=1,  # Process one task at a time per worker
     worker_max_tasks_per_child=50,  # Restart worker after 50 tasks to prevent memory leaks
+    beat_schedule={
+        # Run once per day at 2 AM to check for expired upload URLs
+        'expire-pending-uploads': {
+            'task': 'expire_pending_uploads_task',
+            'schedule': crontab(hour=2, minute=0),  # Run daily at 2 AM
+        },
+    },
 )
 
 if __name__ == '__main__':

@@ -6,13 +6,17 @@ Uses Redis-backed atomic counter/set mechanism to track upload progress.
 import traceback
 
 from celery.utils.log import get_task_logger
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from src.backend.celery_worker import celery
 from src.backend.redis_client import get_redis_client
 from src.core.services.event import Event
 from src.core.errors import log_error
+from src.core.database.db import DB, ReturnFormat
 
 logger = get_task_logger(__name__)
+
+# Upload URL expiration time in seconds (matches the expires_in value in prepare_upload_urls)
+UPLOAD_URL_EXPIRATION_SECONDS = 3600 * 3  # 3 hours
 
 def try_trigger_cluster(upload_id: int, event_id: str, profile_id: str) -> bool:
     """
@@ -218,3 +222,61 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
             log_error(f"Error updating upload status to FAILED: {str(e)}", "ClusteringError", traceback.format_exc())
         
         return None
+
+@celery.task(name='expire_pending_uploads_task')
+def expire_pending_uploads_task():
+    """
+    Periodic task to expire pending images efficiently using SQL.
+    Marks images with status 'PENDING_UPLOAD' as 'FAILED' if the upload URL has expired.
+    
+    Upload URLs expire after UPLOAD_URL_EXPIRATION_SECONDS (3 hours).
+    This task runs once per day via Celery Beat.
+    
+    Returns:
+        dict with count of expired images
+    """
+    try:
+        # Create a DB instance without event/profile context for system-level queries
+        db = DB()
+        
+        # Calculate expiration threshold: now minus 3 hours (plus 5 minutes buffer for safety)
+        expiration_threshold = datetime.now(timezone.utc) - timedelta(seconds=UPLOAD_URL_EXPIRATION_SECONDS + 300)
+        
+        # Single efficient UPDATE query that updates all relevant images at once
+        # The JOIN ensures we check the upload start time
+        # Note: This updates directly on the 'images' table to bypass permission checks
+        # which is appropriate for system-level cleanup tasks
+        query = """
+            UPDATE images i
+            SET status = 'FAILED'
+            FROM uploads u
+            WHERE i.upload_id = u.upload_id
+              AND i.status = 'PENDING_UPLOAD'
+              AND u.started_at < %s
+            RETURNING i.image_id;
+        """
+        
+        # Execute the query and get the affected rows
+        result = db.execute_query(
+            query, 
+            (expiration_threshold,), 
+            return_format=ReturnFormat.LIST_DICTS
+        )
+        
+        expired_count = len(result) if result else 0
+        
+        if expired_count > 0:
+            logger.info(f"Cleanup: Marked {expired_count} expired pending images as FAILED.")
+            log_error(f"Cleanup: Marked {expired_count} expired pending images as FAILED.", "UploadExpirationError", "")
+        else:
+            logger.debug("Cleanup: No expired pending images found.")
+        
+        return {'expired_image_count': expired_count}
+        
+    except Exception as e:
+        error_msg = f"Error in expire_pending_uploads_task: {str(e)}"
+        log_error(error_msg, "UploadExpirationError", traceback.format_exc())
+        return {
+            'expired_image_count': 0,
+            'error': str(e)
+        }
