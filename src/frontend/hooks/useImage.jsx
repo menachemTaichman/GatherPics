@@ -1,5 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Image as ImageIcon, User } from 'lucide-react';
+
+// Lazy loading configuration: how far before viewport to start loading images
+const LAZY_LOAD_ROOT_MARGIN = '500px';
 
 /**
  * Question mark placeholder component for real errors
@@ -58,6 +61,7 @@ function ImageIconPlaceholder({
 
 /**
  * Universal hook for handling image loading with automatic placeholder fallback
+ * Uses Intersection Observer for true lazy loading - images only load when near viewport
  * @param {string|null} src - Image source URL
  * @param {object} options - Configuration options
  * @returns {object} - { imageSrc, isLoaded, isError, ImageComponent }
@@ -78,13 +82,77 @@ export function useImage(src, options = {}) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isError, setIsError] = useState(false);
   const [isNoContent, setIsNoContent] = useState(false);
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const imgRef = useRef(null);
+  const observerRef = useRef(null);
 
   // Reset state when the src changes to avoid stale placeholders persisting
   useEffect(() => {
     setIsLoaded(false);
     setIsError(false);
     setIsNoContent(false);
+    setShouldLoad(false);
+    // Disconnect old observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
   }, [src]);
+
+  // Callback ref to set up observer when element is attached
+  const setImgRef = useCallback((element) => {
+    imgRef.current = element;
+    
+    if (!element || !src || shouldLoad) {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+      return;
+    }
+
+    // For 'eager' loading, load immediately
+    if (loading === 'eager') {
+      setShouldLoad(true);
+      return;
+    }
+
+    // Disconnect any existing observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    // Create Intersection Observer with rootMargin to start loading slightly before viewport
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setShouldLoad(true);
+            if (observerRef.current) {
+              observerRef.current.disconnect();
+              observerRef.current = null;
+            }
+          }
+        });
+      },
+      {
+        rootMargin: LAZY_LOAD_ROOT_MARGIN,
+        threshold: 0.01
+      }
+    );
+
+    observerRef.current.observe(element);
+  }, [src, shouldLoad, loading]);
+
+  // Cleanup observer when dependencies change
+  useEffect(() => {
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [src, shouldLoad, loading]);
 
   const handleLoad = useCallback((e) => {
     setIsLoaded(true);
@@ -165,21 +233,26 @@ export function useImage(src, options = {}) {
   }
 
   // Return the actual image component
+  // Use data-src instead of src until shouldLoad is true to prevent eager loading
   const { key, ...restImgProps } = imgProps;
+  const imageSrc = shouldLoad ? src : undefined;
+  
   return {
-    imageSrc: src,
+    imageSrc: shouldLoad ? src : null,
     isLoaded,
     isError: false,
     isNoContent: false,
     ImageComponent: () => (
       <img
+        ref={setImgRef}
         key={key}
-        src={src}
+        data-src={src}
+        src={imageSrc}
         alt={alt}
         className={className}
         width={width}
         height={height}
-        loading={loading}
+        loading={loading === 'eager' ? 'eager' : 'lazy'}
         onLoad={handleLoad}
         onError={handleError}
         {...restImgProps}
@@ -202,10 +275,14 @@ export function useImageComponent(src, options = {}) {
 /**
  * React component that handles image loading with error fallback
  * This is a proper React component that can manage state for error handling
+ * Uses Intersection Observer for true lazy loading
  */
 function ImageWithErrorFallback({ src, options = {} }) {
   const [hasError, setHasError] = React.useState(false);
   const [isNoContent, setIsNoContent] = React.useState(false);
+  const [shouldLoad, setShouldLoad] = React.useState(false);
+  const imgRef = React.useRef(null);
+  const observerRef = React.useRef(null);
   
   const {
     width = 200,
@@ -222,7 +299,67 @@ function ImageWithErrorFallback({ src, options = {} }) {
   React.useEffect(() => {
     setHasError(false);
     setIsNoContent(false);
+    setShouldLoad(false);
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
   }, [src]);
+
+  // Callback ref to set up observer when element is attached
+  const setImgRef = React.useCallback((element) => {
+    imgRef.current = element;
+    
+    if (!element || !src || shouldLoad) {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+      return;
+    }
+
+    // For 'eager' loading, load immediately
+    if (loading === 'eager') {
+      setShouldLoad(true);
+      return;
+    }
+
+    // Disconnect any existing observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    // Create Intersection Observer with rootMargin to start loading slightly before viewport
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setShouldLoad(true);
+            if (observerRef.current) {
+              observerRef.current.disconnect();
+              observerRef.current = null;
+            }
+          }
+        });
+      },
+      {
+        rootMargin: LAZY_LOAD_ROOT_MARGIN,
+        threshold: 0.01
+      }
+    );
+
+    observerRef.current.observe(element);
+  }, [src, shouldLoad, loading]);
+
+  // Cleanup observer when dependencies change
+  React.useEffect(() => {
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [src, shouldLoad, loading]);
 
   // If no src, show image icon (no representative)
   if (!src) {
@@ -288,15 +425,20 @@ function ImageWithErrorFallback({ src, options = {} }) {
   };
 
   // Return the actual image component
+  // Use data-src instead of src until shouldLoad is true to prevent eager loading
+  const imageSrc = shouldLoad ? src : undefined;
+
   return (
     <img
+      ref={setImgRef}
       key={key}
-      src={src}
+      data-src={src}
+      src={imageSrc}
       alt={alt}
       className={className}
       width={width}
       height={height}
-      loading={loading}
+      loading={loading === 'eager' ? 'eager' : 'lazy'}
       onError={handleError}
       {...restImgProps}
     />
