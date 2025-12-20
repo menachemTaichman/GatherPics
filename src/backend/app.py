@@ -12,7 +12,7 @@ if os.path.exists('.env'):
     load_dotenv()
 
 logging.basicConfig(
-    level=logging.INFO if os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION' else logging.DEBUG,
+    level=logging.INFO if os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION' or True else logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 

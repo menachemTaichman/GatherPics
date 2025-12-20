@@ -23,6 +23,8 @@ class DB:
     
     # Class-level connection pool (shared across all instances)
     _connection_pool = None
+    # Cache for developer_id (rarely changes, queried frequently)
+    _developer_id_cache = None
     
     @classmethod
     def _get_connection_pool(cls):
@@ -743,8 +745,11 @@ class DB:
                         self.profile_context[field] = val
                 
                 # Compute is_developer field (O(1) access in SQL)
-                settings = self.execute_query('SELECT developer_id FROM settings WHERE id = 1 LIMIT 1', (), return_format=ReturnFormat.DICT)
-                developer_id = settings.get('developer_id') if settings else None
+                # Cache developer_id since it rarely changes but is queried frequently
+                if DB._developer_id_cache is None:
+                    settings = self.execute_query('SELECT developer_id FROM settings WHERE id = 1 LIMIT 1', (), return_format=ReturnFormat.DICT)
+                    DB._developer_id_cache = settings.get('developer_id') if settings else None
+                developer_id = DB._developer_id_cache
                 self.profile_context['is_developer'] = (developer_id == profile_id) if developer_id else False
             
             if self.event_id:

@@ -1,6 +1,5 @@
 import os
 import logging
-from uuid import uuid4
 
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
@@ -386,6 +385,10 @@ with Timeit('create general models instance'):
 with Timeit('get_childs'):
     result = event.models.get_childs('groups', '4573c4a0-ba12-4fa0-b3d8-db26be68221d', 'images')
     # print(result)
+
+with Timeit('get_image'):
+    result = event.models.get_entities('images', 'affd55e9-6563-4a66-ac2c-5584dd9de888')
+
 print('--------------------------------')
 
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
