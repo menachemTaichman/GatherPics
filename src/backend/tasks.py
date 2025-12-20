@@ -200,6 +200,10 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
             'errors': errors
         })
         logger.info(f"completed cluster_faces_task for upload {upload_id}")
+
+        logger.info("Running final DB optimization (ANALYZE) after upload...")
+        analyze_query = "ANALYZE images; ANALYZE faces; ANALYZE groups;"
+        event.models.db.execute_query(analyze_query)
         
         return {'upload_id': upload_id, 'groups_created': groups_created, 'faces_count': faces_count, 'moments_count': moments_count}
         
