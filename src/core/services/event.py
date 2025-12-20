@@ -168,19 +168,21 @@ class Event():
         
         upload_urls = []
         
+        values = []
+        for label in labels:
+            values.extend([self.event_id, label, upload_id])
+        query = f"""
+            INSERT INTO images (event_id, label, upload_id)
+            VALUES {','.join(['(%s, %s, %s)'] * len(labels))}
+            RETURNING image_id;
+        """
+        image_ids = self.models.db.execute_query(query, values, return_format=ReturnFormat.LIST_VALUES)
         for i, file_info in enumerate(files_data):
             filename = filenames[i]
             file_size = file_sizes[i]
             label = labels[i]
             
-            # Always store pending uploads in to_process using the generated image_id
-            # so processing can rely on a stable "{image_id}.jpg" naming convention.
-            image_id = self.models.add('images', {
-                'label': label,
-                'upload_id': upload_id,
-                'status': 'PENDING_UPLOAD',
-            })
-            stored_filename = f"{image_id}.jpg"  # processing pipeline expects lowercase .jpg
+            stored_filename = f"{image_ids[i]}.jpg"  # processing pipeline expects lowercase .jpg
             filepath = f"{self.to_process_dir}/{stored_filename}"
             
             upload_info = self.file_helper.get_upload_url(
@@ -194,7 +196,7 @@ class Event():
                 raise ValueError(f"Failed to generate upload URL for {file_info['filename']}")
             
             upload_urls.append({
-                "image_id": image_id,
+                "image_id": image_ids[i],
                 "filename": filename,  # original filename for UI/display
                 "stored_filename": stored_filename,  # actual object name used in storage
                 "upload_url": upload_info['url'],
@@ -209,7 +211,7 @@ class Event():
             "upload_urls": upload_urls
         }
 
-    def _process_face_crop(self, source_img, bbox, face_id, image_id, unassociated_group_id):
+    def _process_face_crop(self, source_img, bbox, face_id) -> tuple[str, int]:
         """
         Process a single face: crop, resize, save.
         
@@ -217,13 +219,10 @@ class Event():
             source_img: PIL Image to crop from
             bbox: Bounding box dict with width, height, left, top
             face_id: UUID for the face
-            image_id: UUID of the parent image
-            unassociated_group_id: Group ID for unassociated faces
             
         Returns:
-            dict with face data
+            tuple: (face_id, file_size)
         """
-        logger.debug(f"Processing face crop: face_id={face_id}, image_id={image_id}")
         
         # Crop face with padding
         crop_img = crop_image(source_img, bbox, padding_width_percent=0.3, padding_height_percent=0.2)
@@ -231,28 +230,15 @@ class Event():
         # Resize to max 150x150
         crop_img.thumbnail((150, 150), PILImage.Resampling.LANCZOS)
         
-        # Save to buffer then upload via stream
+        # Save to storage
         crop_path = f"{self.faces_dir}/{face_id}.webp"
-        face_buffer = BytesIO()
-        crop_img.save(face_buffer, format='WEBP', quality=70, optimize=True)
-        face_file_size = face_buffer.tell()
-        face_buffer.seek(0)
-        self.file_helper.write_stream(crop_path, face_buffer, content_type='image/webp')
+        face_file_size = self.file_helper.save_image(crop_img, crop_path, 'WEBP', 70, True)
         
-        logger.debug(f"Face crop saved: face_id={face_id}, file_size={face_file_size} bytes")
+        logger.verbose(f"Face crop saved: face_id={face_id}, file_size={face_file_size} bytes")
         
         del crop_img
         
-        return {
-            "image_id": image_id,
-            "face_width": bbox['width'],
-            "face_height": bbox['height'],
-            "face_left": bbox['left'],
-            "face_top": bbox['top'],
-            "face_id": face_id,
-            "group_id": unassociated_group_id,
-            "file_size": face_file_size
-        }
+        return (face_id, face_file_size)
 
     def _process_single_image(
         self,
@@ -272,45 +258,15 @@ class Event():
             dict with face_ids list, or None on failure
         """
         logger.info(f"Starting to process image: image_id={image_id}")
-        
-        def _save_image_to_storage(
-            image: PILImage.Image,
-            path: str,
-            format: str,
-            quality: int,
-            optimize: bool,
-            exif_bytes: bytes | None = None
-            ) -> int:
-            """Save image to storage and return file size"""
-            content_type_dict = {
-                'JPEG': 'image/jpeg',
-                'WEBP': 'image/webp',
-                'PNG': 'image/png'
-            }
-            content_type = content_type_dict[format]
-            buffer = BytesIO()
-            # Only pass exif parameter if it's not None and format supports it (JPEG)
-            save_kwargs = {
-                'format': format,
-                'quality': quality,
-                'optimize': optimize
-            }
-            if exif_bytes is not None and format == 'JPEG':
-                save_kwargs['exif'] = exif_bytes
-            image.save(buffer, **save_kwargs)
-            file_size = buffer.tell()
-            buffer.seek(0)
-            self.file_helper.write_stream(path, buffer, content_type=content_type)
-            return file_size
 
         try:
             # Read image from storage
             image_path = f"{self.to_process_dir}/{image_id}.jpg"
-            logger.debug(f"Reading image from storage: {image_path}")
+            logger.verbose(f"Reading image from storage: {image_path}")
             image_bytes = self.file_helper.read(image_path)
             image_stream = BytesIO(image_bytes)
             file_size = len(image_bytes)
-            logger.debug(f"Image read: file_size={file_size} bytes")
+            logger.verbose(f"Image read: file_size={file_size} bytes")
             
             # TODO: see if exif_bytes is enough for date_taken
             # Extract metadata
@@ -321,33 +277,33 @@ class Event():
             with PILImage.open(image_stream) as original_img:
                 width, height = original_img.size
                 date_taken = metadata.get('date_taken')
-                logger.debug(f"Image dimensions: {width}x{height}, date_taken={date_taken}")
+                logger.verbose(f"Image dimensions: {width}x{height}, date_taken={date_taken}")
                 
                 # Extract EXIF for high quality version
                 exif_bytes = original_img.getexif().tobytes() if original_img.getexif() else b''
                 
                 # Display (WebP)
-                logger.debug("Creating display image...")
+                logger.verbose("Creating display image...")
                 display_img = resize_image(original_img, display_size)
                 display_path = f"{self.display_dir}/{image_id}.webp"
-                display_file_size = _save_image_to_storage(display_img, display_path, 'WEBP', 90, True)
-                logger.debug(f"Display image saved: {display_file_size} bytes")
+                display_file_size = self.file_helper.save_image(display_img, display_path, 'WEBP', 90, True)
+                logger.verbose(f"Display image saved: {display_file_size} bytes")
                 del display_img
                 
                 # Thumb (WebP)
-                logger.debug("Creating thumbnail image...")
+                logger.verbose("Creating thumbnail image...")
                 thumb_img = resize_image(original_img, thumb_size)
                 thumb_path = f"{self.thumb_dir}/{image_id}.webp"
-                thumb_file_size = _save_image_to_storage(thumb_img, thumb_path, 'WEBP', 80, True)
-                logger.debug(f"Thumbnail image saved: {thumb_file_size} bytes")
+                thumb_file_size = self.file_helper.save_image(thumb_img, thumb_path, 'WEBP', 80, True)
+                logger.verbose(f"Thumbnail image saved: {thumb_file_size} bytes")
                 del thumb_img
 
                 # High Quality (JPEG)
-                logger.debug("Creating high quality image...")
+                logger.verbose("Creating high quality image...")
                 high_quality_img = resize_image(original_img, 4096)
                 high_quality_path = f"{self.high_quality_dir}/{image_id}.jpg"
-                high_quality_file_size = _save_image_to_storage(high_quality_img, high_quality_path, 'JPEG', 95, True, exif_bytes)
-                logger.debug(f"High quality image saved: {high_quality_file_size} bytes")
+                high_quality_file_size = self.file_helper.save_image(high_quality_img, high_quality_path, 'JPEG', 95, True, exif_bytes)
+                logger.verbose(f"High quality image saved: {high_quality_file_size} bytes")
                 
             event_data = self.models.get_entities('events', self.event_id, include_details=True)
             unassociated_group_id = event_data['unassociated_group_id']
@@ -356,32 +312,57 @@ class Event():
             if rekognition_calls_used + 1 > rekognition_calls_limit:
                 raise PolicyError(f"Processing image would exceed rekognition calls limit. Current: {rekognition_calls_used}, Limit: {rekognition_calls_limit}, Attempting to add: {1}")
             self.models.add_rekognition_calls(1)
-            logger.debug(f"Detecting faces in image: image_id={image_id}")
+            logger.verbose(f"Detecting faces in image: image_id={image_id}")
             detected_faces = self.face_utils.detect_faces(
                 image=high_quality_img,
                 external_image_id=image_id
             )
-            image_faces = []
             
-            logger.debug(f"Detected {len(detected_faces)} faces in image: image_id={image_id}")
-            for face_id, bbox in detected_faces:
-                face_data = self._process_face_crop(high_quality_img, bbox, face_id, image_id, unassociated_group_id)
-                image_faces.append(face_data)
+            faces_count = len(detected_faces)
+            logger.verbose(f"Detected {faces_count} faces in image: image_id={image_id}")
+
+            if faces_count > 0:
+                # Batch insert all face records (without file_size initially)
+                faces_values = []
+                for face_id, bbox in detected_faces:
+                    faces_values.extend([face_id, image_id, bbox['width'], bbox['height'], bbox['left'], bbox['top'], unassociated_group_id])
+                
+                query = f"""
+                    INSERT INTO faces (face_id, image_id, face_width, face_height, face_left, face_top, group_id)
+                    VALUES {','.join(['(%s, %s, %s, %s, %s, %s, %s)'] * faces_count)}
+                """
+                self.models.db.execute_query(query, faces_values)
+                
+                # Process all faces (saves files)
+                face_file_sizes_values = []
+                for face_id, bbox in detected_faces:                
+                    logger.verbose(f"Processing face crop: face_id={face_id}, image_id={image_id}")
+                    face_id, file_size = self._process_face_crop(high_quality_img, bbox, face_id)
+                    face_file_sizes_values.extend([face_id, file_size])
+                
+                # Batch update file_size for all faces in a single query
+                logger.verbose(f"Batch updating file_size for {faces_count} faces...")
+                query = f"""
+                    UPDATE faces f
+                    SET file_size = v.file_size
+                    FROM (VALUES {','.join(['(%s, %s)'] * faces_count)}) AS v(face_id, file_size)
+                    WHERE f.face_id = v.face_id::uuid
+                """
+                self.models.db.execute_query(query, face_file_sizes_values)
             
             # Free high quality image from memory
             del high_quality_img
             
             # Move original image to original directory and delete from to_process directory
-            logger.debug("Moving original image to original directory...")
+            logger.verbose("Moving original image to original directory...")
             original_path = f"{self.original_dir}/{image_id}.jpg"
             self.file_helper.copy(image_path, original_path, content_type='image/jpeg')
             self.file_helper.delete(image_path)
 
             # Update DB record with data
-            logger.debug("Updating database record...")
+            logger.verbose("Updating database record...")
             query = f"""
-                SELECT set_transaction_context('include_pending_images', 'true');
-                UPDATE images_ctx SET
+                UPDATE images SET
                     date_taken = %s,
                     file_size = %s,
                     width = %s,
@@ -391,34 +372,10 @@ class Event():
                     thumb_file_size = %s
                 WHERE image_id = %s;
             """
-            self.models.db.execute_query(query, (date_taken, file_size, width, height, high_quality_file_size, display_file_size, thumb_file_size, image_id))                
-
-            # Add faces to database
-            if image_faces:
-                logger.debug(f"Adding {len(image_faces)} faces to database for image: image_id={image_id}")
-                all_faces_values = [[
-                    face['face_id'], 
-                    face['image_id'], 
-                    face['face_width'], 
-                    face['face_height'], 
-                    face['face_left'], 
-                    face['face_top'], 
-                    face['group_id'], 
-                    face['file_size']
-                ] for face in image_faces]
-                self.models.add_many('faces', [
-                    'face_id', 'image_id', 'face_width', 'face_height', 
-                    'face_left', 'face_top', 'group_id', 'file_size'
-                ], all_faces_values)
-
-            query = f"""
-                SELECT set_transaction_context('include_pending_images', 'false');
-            """
-            self.models.db.execute_query(query)
-
+            self.models.db.execute_query(query, (date_taken, file_size, width, height, high_quality_file_size, display_file_size, thumb_file_size, image_id))
             # Cleanup
             gc.collect()
-            logger.info(f"Completed processing image: image_id={image_id}, faces_detected={len(image_faces)}")
+            logger.info(f"Completed processing image: image_id={image_id}, faces_detected={faces_count}")
             return True
 
         except Exception as e:
@@ -448,32 +405,35 @@ class Event():
         logger.info(f"Starting face clustering: face_ids_count={len(face_ids)}, cluster_threshold={cluster_threshold}, minimal_group_size={minimal_group_size}")
         
         # Get unassociated group ID
-        event_data = self.models.get_entities('events', self.event_id, include_details=True)
-        unassociated_group_id = event_data['unassociated_group_id']
-        rekognition_calls_used = event_data['rekognition_calls_used']
-        rekognition_calls_limit = event_data['rekognition_calls_limit']
+        query = f"""
+            SELECT unassociated_group_id, rekognition_calls_used, rekognition_calls_limit FROM events WHERE event_id = %s;
+        """
+        unassociated_group_id, rekognition_calls_used, rekognition_calls_limit = self.models.db.execute_query(query, (self.event_id,), return_format=ReturnFormat.TUPLE)
         if rekognition_calls_used + len(face_ids) > rekognition_calls_limit:
             raise PolicyError(f"Clustering would exceed rekognition calls limit. Current: {rekognition_calls_used}, Limit: {rekognition_calls_limit}, Attempting to add: {len(face_ids)}")
 
         self.models.add_rekognition_calls(len(face_ids))
-        logger.debug(f"Clustering {len(face_ids)} faces using rekognition...")
+        logger.verbose(f"Clustering {len(face_ids)} faces using rekognition...")
         clusters = self.face_utils.cluster_faces(
             face_ids, 
             threshold_similarity=cluster_threshold, 
             max_matches_faces=max_matches_faces
         )
-        logger.debug(f"Face clustering completed: found {len(clusters)} clusters")
+        logger.verbose(f"Face clustering completed: found {len(clusters)} clusters")
         groups_created = 0
         groups_related = 1 if len(face_ids) > 0 else 0
 
         for new_faces, existing_faces in clusters:
             if len(new_faces) + len(existing_faces) < minimal_group_size:
-                logger.debug(f"Skipping cluster: new_faces={len(new_faces)}, existing_faces={len(existing_faces)}, below minimal_group_size={minimal_group_size}")
+                logger.verbose(f"Skipping cluster: new_faces={len(new_faces)}, existing_faces={len(existing_faces)}, below minimal_group_size={minimal_group_size}")
                 continue
 
             partition = {}
             for existing_face_id in existing_faces:
-                group_id = self.models.get_entities('faces', existing_face_id).get('group_id')
+                query = f"""
+                    SELECT group_id FROM faces WHERE face_id = %s;
+                """
+                group_id = self.models.db.execute_query(query, (existing_face_id,), return_format=ReturnFormat.VALUE)
                 partition.setdefault(group_id, []).append(existing_face_id)
 
             # Find the largest non-unassociated group to assign faces to
@@ -488,13 +448,22 @@ class Event():
             if len(add_faces) >= minimal_group_size:
                 if largest_group_id is None or largest_group_id == unassociated_group_id:
                     group_label = self.models.get_unique_label('groups', 'Person', '', brackets=False, event_id=self.event_id)
-                    largest_group_id = self.models.add('groups', {'label': group_label})
+                    query = f"""
+                        INSERT INTO groups (event_id, label) VALUES (%s, %s) RETURNING group_id;
+                    """
+                    largest_group_id = self.models.db.execute_query(query, (self.event_id, group_label), return_format=ReturnFormat.VALUE)
                     groups_created += 1
-                    logger.debug(f"Created new group: group_id={largest_group_id}, label={group_label}, faces_count={len(add_faces)}")
+                    logger.verbose(f"Created new group: group_id={largest_group_id}, label={group_label}, faces_count={len(add_faces)}")
                 else:
-                    logger.debug(f"Updating existing group: group_id={largest_group_id}, adding {len(add_faces)} faces")
+                    logger.verbose(f"Updating existing group: group_id={largest_group_id}, adding {len(add_faces)} faces")
                 
-                self.models.edit_childs('groups', largest_group_id, 'faces', add_faces, operation=ChildOperation.ADD)
+                # Update faces directly in upload pipeline
+                face_placeholders = ','.join(['%s'] * len(add_faces))
+                query = f"""
+                    UPDATE faces SET group_id = %s
+                    WHERE face_id IN ({face_placeholders})
+                """
+                self.models.db.execute_query(query, [largest_group_id] + add_faces)
                 groups_related += 1
 
         logger.info(f"Face clustering completed: groups_created={groups_created}")
@@ -523,22 +492,15 @@ class Event():
             number of failed images
         """
         query = f"""
-            SELECT set_transaction_context('include_pending_images', 'true');
-            UPDATE images_ctx SET status = 'FAILED' WHERE upload_id = %s AND status = 'PENDING_UPLOAD';
-            SELECT set_transaction_context('include_pending_images', 'false');
+            UPDATE images SET status = 'FAILED' WHERE upload_id = %s AND status = 'PENDING_UPLOAD';
         """
         self.models.db.execute_query(query, (upload_id,))
 
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
-        # TODO: dont access db
         if not self.models.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
-        query = f"""
-            SELECT set_transaction_context('include_pending_images', 'true');
-        """
-        self.models.db.execute_query(query)
         if not self.models.is_accessible('images', image_ids):
             raise Forbidden(f"Some of the images are not accessible to the profile")
 
@@ -549,19 +511,28 @@ class Event():
         
         # Get image info for audit logging
         query = f"""
-            SELECT set_transaction_context('include_pending_images', 'true');
             SELECT image_id, label, status
-            FROM images_ctx
+            FROM images
             WHERE image_id IN ({','.join(['%s'] * len(image_ids))});
         """
         images_details = self.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
 
         for image_id, label, status in images_details:
             image_parents = self.models.get_parents('images', image_id)
-
-            face_ids = self.models.get_childs('images', image_id, 'faces', return_ids=True)
-            self.models.delete('faces', face_ids)
-            self.models.delete('images', image_id)
+            query = f"""
+                SELECT face_id FROM faces WHERE image_id = %s;
+            """
+            face_ids = self.models.db.execute_query(query, (image_id,), return_format=ReturnFormat.LIST_VALUES)
+            print(f'face_ids: {face_ids}')
+            if face_ids:
+                query = f"""
+                    DELETE FROM faces WHERE face_id IN ({','.join(['%s'] * len(face_ids))});
+                """
+                self.models.db.execute_query(query, face_ids)
+            query = f"""
+                DELETE FROM images WHERE image_id = %s;
+            """
+            self.models.db.execute_query(query, (image_id,))
             self.face_utils.rek_helper.delete_faces(face_ids)
             for face_id in face_ids:
                 face_path = f"{self.faces_dir}/{face_id}.webp"

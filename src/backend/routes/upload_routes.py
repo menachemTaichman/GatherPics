@@ -265,8 +265,11 @@ def get_upload_progress(event_id, upload_id):
     upload_id = validate_path_param('upload_id', upload_id)
     event = get_event(event_id)
     
+    images = []
     upload_status = event.models.get_entities('uploads', upload_id).get('status')
-    images = event.models.get_upload_images(upload_id)
+    if upload_status is not None:
+        images = event.models.get_upload_images(upload_id)
+        
     return jsonify({
         "success": True,   
         "upload_status": upload_status,

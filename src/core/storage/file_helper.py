@@ -9,6 +9,7 @@ import os
 from typing import Optional, BinaryIO
 import urllib.parse
 from flask import send_file, redirect
+from io import BytesIO
 
 from .storage_backend import get_storage_backend, StorageBackend
 
@@ -197,6 +198,52 @@ class FileHelper:
             List of file paths (relative to storage root)
         """
         return self.storage.list_files(prefix, suffix)
+    
+    def save_image(
+        self,
+        image,
+        path: str,
+        format: str = 'JPEG',
+        quality: int = 80,
+        optimize: bool = True,
+        exif_bytes: Optional[bytes] = None
+    ) -> int:
+        """
+        Save PIL Image to storage and return file size.
+        
+        Args:
+            image: PIL Image to save
+            path: Output file path (relative to storage root)
+            format: Output format ('JPEG', 'WEBP', 'PNG')
+            quality: Quality setting (default 80)
+            optimize: Use optimization (default True)
+            exif_bytes: Optional EXIF bytes to embed (JPEG only)
+            
+        Returns:
+            File size in bytes
+        """
+        content_type_dict = {
+            'JPEG': 'image/jpeg',
+            'WEBP': 'image/webp',
+            'PNG': 'image/png'
+        }
+        content_type = content_type_dict.get(format.upper(), 'application/octet-stream')
+        
+        buffer = BytesIO()
+        # Only pass exif parameter if it's not None and format supports it (JPEG)
+        save_kwargs = {
+            'format': format,
+            'quality': quality,
+            'optimize': optimize
+        }
+        if exif_bytes is not None and format.upper() == 'JPEG':
+            save_kwargs['exif'] = exif_bytes
+        
+        image.save(buffer, **save_kwargs)
+        file_size = buffer.tell()
+        buffer.seek(0)
+        self.write_stream(path, buffer, content_type=content_type)
+        return file_size
 
 
 # Global instance for convenience

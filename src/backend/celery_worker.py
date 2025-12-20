@@ -4,6 +4,7 @@ Uses Redis as both broker and result backend.
 """
 
 import os
+import logging
 from celery import Celery
 from celery.schedules import crontab
 
@@ -11,6 +12,53 @@ from celery.schedules import crontab
 if os.path.exists('.env'):
     from dotenv import load_dotenv
     load_dotenv()
+
+# Define VERBOSE logging level (15) between DEBUG (10) and INFO (20)
+VERBOSE = 15
+logging.addLevelName(VERBOSE, "VERBOSE")
+
+# Add verbose() method to Logger class
+def verbose(self, message, *args, **kwargs):
+    if self.isEnabledFor(VERBOSE):
+        self._log(VERBOSE, message, args, **kwargs)
+
+logging.Logger.verbose = verbose
+
+# Filter to block exifread DEBUG spam and other unwanted DEBUG messages
+class ExifreadDebugFilter(logging.Filter):
+    def filter(self, record):
+        # Block DEBUG messages that look like exifread output
+        if record.levelno == logging.DEBUG:
+            message = str(record.getMessage())
+            # Filter out exifread tag messages
+            if any(pattern in message for pattern in [
+                'tag: ',
+                'Tag ',
+                'save: ',
+                'type: ',
+                'value: ',
+                'Tag Location:',
+                'Data Location:',
+            ]):
+                return False
+        return True
+
+# Configure logging for Celery workers using Celery's logging system
+# Use VERBOSE level to filter out exifread DEBUG spam while keeping your verbose logs
+log_level = logging.INFO if os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION' else VERBOSE
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+# Apply filter to root logger to block exifread DEBUG spam
+logging.getLogger().addFilter(ExifreadDebugFilter())
+
+# Set common third-party loggers to INFO to suppress their DEBUG spam
+logging.getLogger('exifread').setLevel(logging.INFO)
+# Also set any other loggers that might be used by exifread
+for logger_name in ['exifread', 'PIL', 'Pillow']:
+    logging.getLogger(logger_name).setLevel(logging.INFO)
 
 # Get Redis URL from environment (defaults to localhost for development)
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis')

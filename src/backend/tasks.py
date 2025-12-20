@@ -269,7 +269,7 @@ def expire_pending_uploads_task():
             logger.info(f"Cleanup: Marked {expired_count} expired pending images as FAILED.")
             log_error(f"Cleanup: Marked {expired_count} expired pending images as FAILED.", "UploadExpirationError", "")
         else:
-            logger.debug("Cleanup: No expired pending images found.")
+            logger.verbose("Cleanup: No expired pending images found.")
         
         return {'expired_image_count': expired_count}
         

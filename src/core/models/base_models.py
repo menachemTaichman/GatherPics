@@ -73,8 +73,15 @@ class BaseModels(ABC):
         id_field = self.db.get_id_field(table)
         if not isinstance(entity_ids, list):
             entity_ids = [entity_ids]
-        query = f"SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})"
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'true');
+            SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})
+            """
         results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.VALUE)
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'false');
+            """
+        self.db.execute_query(query)
         return results == len(entity_ids)
 
     def get_entities(self, table: str, entity_ids: List[str | int] | str | int | None = None, *, include_details: bool = False) -> dict[str, Dict[str, Any]] | Dict[str, Any]:

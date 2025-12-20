@@ -151,58 +151,6 @@ class EventModels(BaseModels):
         """
         return self.db.execute_query(query, return_format=ReturnFormat.DICT_DICTS)
 
-    def assign_moments_by_time(self, image_ids: list[str]) -> dict[str, list[str]]:
-        """Assign images to moments based on their date_taken falling within moment time ranges.
-        Args:
-            image_ids: list of image ids to assign
-        Returns:
-            dict of moment ids as keys and list of assigned image ids as values
-        """
-        if not image_ids:
-            return {}
-
-        ctx_moments = 'moments_ctx'
-        ctx_images = 'images_ctx'
-
-        placeholders = ','.join('%s' for _ in image_ids)
-        query = f"""
-            WITH matched AS (
-                SELECT i.image_id, m.moment_id
-                FROM {ctx_images} AS i
-                JOIN {ctx_moments} AS m
-                ON i.date_taken BETWEEN m.start_date AND m.end_date
-                WHERE i.image_id IN ({placeholders})
-            )
-            UPDATE {ctx_images}
-            SET moment_id = (
-                SELECT m.moment_id
-                FROM matched AS m
-                WHERE m.image_id = {ctx_images}.image_id
-                LIMIT 1
-            )
-            WHERE image_id IN ({placeholders})
-            AND moment_id IS NULL
-        """
-
-        params = image_ids + image_ids
-        self.db.execute_query(query, params)
-
-        result_query = f"""
-            SELECT image_id, moment_id
-            FROM {ctx_images}
-            WHERE image_id IN ({placeholders})
-            AND moment_id IS NOT NULL
-        """
-        rows = self.db.execute_query(result_query, image_ids, return_format=ReturnFormat.LIST_DICTS)
-
-        assigned = {}
-        for row in rows:
-            assigned.setdefault(row['moment_id'], []).append(row['image_id'])
-
-        for moment_id in assigned.keys():
-            self.ensure_representative('moments', moment_id)
-
-        return assigned
 
     def remove_images_from_moments(self, image_ids: list[str]) -> Dict:
         """Remove images from moments.
@@ -299,7 +247,11 @@ class EventModels(BaseModels):
 
     # -------- Images helpers --------
     def get_images_count(self) -> int:
-        """Get the number of images in the event."""
+        """Get the number of images in the event.
+        
+        WARNING: This method queries the raw 'images' table directly and is NOT protected
+        by the ctx/ext views layer. It bypasses accessibility checks.
+        """
         return self.db.execute_query('SELECT COUNT(*) FROM images WHERE event_id = %s', (self.db.event_id,), return_format=ReturnFormat.VALUE)
 
     # -------- Groups helpers --------
@@ -437,22 +389,21 @@ class EventModels(BaseModels):
     # -------- Images processing helpers --------
     def get_upload_images(self, upload_id: int) -> list[dict]:
         """Get upload images.
+        
+        WARNING: This method queries the raw 'images' table directly and is NOT protected
+        by the ctx/ext views layer. It bypasses accessibility checks.
+        
         Args:
             upload_id: upload id
         Returns:
             list of images dicts with image id, label and status
         """
         query = f"""
-            SELECT set_transaction_context('include_pending_images', 'true');
             SELECT image_id, label, status
-            FROM images_ctx
+            FROM images
             WHERE upload_id = %s;
         """
         result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_DICTS)
-        query = f"""
-            SELECT set_transaction_context('include_pending_images', 'false');
-        """
-        self.db.execute_query(query)
         return result
 
     def update_image_status(self, image_id: str, status: str):
@@ -462,34 +413,85 @@ class EventModels(BaseModels):
             status: new status (PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED)
         """
         query = f"""
-            SELECT set_transaction_context('include_pending_images', 'true');
-            UPDATE images_ctx SET status = %s WHERE image_id = %s;
-            SELECT set_transaction_context('include_pending_images', 'false');
+            UPDATE images SET status = %s WHERE image_id = %s;
         """
         self.db.execute_query(query, (status, image_id))
     
     def get_ready_face_ids_in_upload(self, upload_id: int) -> list[str]:
         """Get ready face ids from images in an upload.
+        
+        WARNING: This method queries raw tables ('faces', 'images') directly
+        and is NOT protected by the ctx/ext views layer. It bypasses accessibility checks.
+        
         Args:
             upload_id: upload id
         Returns:
             list of face ids
         """
         query = """
-            SELECT set_transaction_context('include_pending_images', 'true');
-            SELECT ufc.face_id
-            FROM uploads_faces_ctx ufc
-            INNER JOIN faces f ON ufc.face_id = f.face_id
-            INNER JOIN images i ON f.image_id = i.image_id
-            WHERE ufc.upload_id = %s
+            SELECT f.face_id
+            FROM images i
+            INNER JOIN faces f ON i.image_id = f.image_id
+            WHERE i.upload_id = %s
             AND i.status = 'READY';
         """
         result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_VALUES)
-        query = f"""
-            SELECT set_transaction_context('include_pending_images', 'false');
-        """
-        self.db.execute_query(query)
         return result
+    
+    def assign_moments_by_time(self, image_ids: list[str]) -> dict[str, list[str]]:
+        """Assign images to moments based on their date_taken falling within moment time ranges.
+        
+        WARNING: This method queries raw tables ('images', 'moments') directly
+        and is NOT protected by the ctx/ext views layer. It bypasses accessibility checks.
+        
+        Args:
+            image_ids: list of image ids to assign
+        Returns:
+            dict of moment ids as keys and list of assigned image ids as values
+        """
+        if not image_ids:
+            return {}
+
+        placeholders = ','.join('%s' for _ in image_ids)
+        query = f"""
+            WITH matched AS (
+                SELECT i.image_id, m.moment_id
+                FROM images AS i
+                JOIN moments AS m
+                ON i.event_id = m.event_id
+                AND i.date_taken BETWEEN m.start_date AND m.end_date
+                WHERE i.image_id IN ({placeholders})
+            )
+            UPDATE images
+            SET moment_id = (
+                SELECT m.moment_id
+                FROM matched AS m
+                WHERE m.image_id = images.image_id
+                LIMIT 1
+            )
+            WHERE image_id IN ({placeholders})
+            AND moment_id IS NULL
+        """
+
+        params = image_ids + image_ids
+        self.db.execute_query(query, params)
+
+        result_query = f"""
+            SELECT image_id, moment_id
+            FROM images
+            WHERE image_id IN ({placeholders})
+            AND moment_id IS NOT NULL
+        """
+        rows = self.db.execute_query(result_query, image_ids, return_format=ReturnFormat.LIST_DICTS)
+
+        assigned = {}
+        for row in rows:
+            assigned.setdefault(row['moment_id'], []).append(row['image_id'])
+
+        for moment_id in assigned.keys():
+            self.ensure_representative('moments', moment_id)
+
+        return assigned
     
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
