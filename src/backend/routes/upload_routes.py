@@ -230,6 +230,7 @@ def upload_finished(event_id, upload_id):
         # Get assign_moments from query parameter (default False)
         assign_moments = request.args.get('assign_moments', 'false').lower() == 'true'
         
+        event.fail_pending_images(upload_id)
         # Set upload_finished flag to True
         upload_finished_key = f"upload:{upload_id}:upload_finished"
         redis_client.set(upload_finished_key, "true")

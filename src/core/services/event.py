@@ -515,6 +515,20 @@ class Event():
 
         return len(unready_image_ids)
 
+    def fail_pending_images(self, upload_id: int) -> int:
+        """Fail pending images in an upload.
+        Args:
+            upload_id: upload id
+        Returns:
+            number of failed images
+        """
+        query = f"""
+            SELECT set_transaction_context('include_pending_images', 'true');
+            UPDATE images_ctx SET status = 'FAILED' WHERE upload_id = %s AND status = 'PENDING_UPLOAD';
+            SELECT set_transaction_context('include_pending_images', 'false');
+        """
+        self.models.db.execute_query(query, (upload_id,))
+
     def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
         """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
         # TODO: dont access db
