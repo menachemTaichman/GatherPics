@@ -354,8 +354,37 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-result = event.models.get_childs('albums', '0aeef84e-0a30-4193-b555-55c5ae672765', 'images')
-print(result)
+import time
+class Timeit:
+    def __init__(self, name: str):
+        self.name = name
+    
+    def __enter__(self):
+        self.start = time.time()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end = time.time()
+        self.elapsed = self.end - self.start
+        print(f'{self.name} took {self.elapsed} seconds')
+        return False
+
+event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+# create db instance
+with Timeit('create db instance'):
+    db = DB(profile_id=dev_profile_id, event_id=event_id)
+
+# create event instance
+with Timeit('create event instance'):
+    event = Event(event_id, profile_id=dev_profile_id)
+
+# create general models instance
+with Timeit('create general models instance'):
+    general_models = GeneralModels(profile_id=dev_profile_id)
+
+with Timeit('get_childs'):
+    result = event.models.get_childs('groups', '4573c4a0-ba12-4fa0-b3d8-db26be68221d', 'images')
+    # print(result)
 print('--------------------------------')
 
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'

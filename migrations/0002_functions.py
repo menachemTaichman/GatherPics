@@ -16,7 +16,7 @@ steps = [
         BEGIN
             PERFORM set_config('app.profile_context.' || key, COALESCE(value, ''), false);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS set_profile_context(TEXT, TEXT)"
     ),
@@ -24,38 +24,10 @@ steps = [
         """
         -- Function to get profile context (used in views)
         CREATE OR REPLACE FUNCTION cur_profile(key TEXT) RETURNS TEXT AS $$
-        DECLARE
-            profile_id_val TEXT;
-            result_val TEXT;
         BEGIN
-            profile_id_val := current_setting('app.profile_context.profile_id', true);
-            
-            IF profile_id_val IS NULL OR profile_id_val = '' THEN
-                RETURN NULL;
-            END IF;
-            
-            IF key = 'profile_id' THEN
-                RETURN profile_id_val;
-            END IF;
-            
-            -- Special computed field: is_current_developer
-            IF key = 'is_developer' THEN
-                IF profile_id_val::UUID = (SELECT developer_id FROM settings WHERE id = 1 LIMIT 1) THEN
-                    RETURN 'true';
-                ELSE
-                    RETURN 'false';
-                END IF;
-            END IF;
-            
-            BEGIN
-                EXECUTE format('SELECT %I::TEXT FROM profiles WHERE profile_id = $1::UUID', key)
-                INTO result_val
-                USING profile_id_val;
-            END;
-            
-            RETURN result_val;
+            RETURN current_setting('app.profile_context.' || key, true);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile(TEXT)"
     ),
@@ -66,7 +38,7 @@ steps = [
         BEGIN
             PERFORM set_config('app.event_profile_context.' || key, COALESCE(value, ''), false);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS set_event_profile_context(TEXT, TEXT)"
     ),
@@ -74,31 +46,10 @@ steps = [
         """
         -- Function to get event profile context (used in views)
         CREATE OR REPLACE FUNCTION cur_event_profile(key TEXT) RETURNS TEXT AS $$
-        DECLARE
-            event_id_val TEXT;
-            profile_id_val TEXT;
-            result_val TEXT;
         BEGIN
-            event_id_val := current_setting('app.event_profile_context.event_id', true);
-            profile_id_val := current_setting('app.profile_context.profile_id', true);
-            
-            IF event_id_val IS NULL OR event_id_val = '' OR profile_id_val IS NULL OR profile_id_val = '' THEN
-                RETURN NULL;
-            END IF;
-            
-            IF key = 'event_id' THEN
-                RETURN event_id_val;
-            END IF;
-            
-            BEGIN
-                EXECUTE format('SELECT %I::TEXT FROM events_profiles WHERE event_id = $1::UUID AND profile_id = $2::UUID', key)
-                INTO result_val
-                USING event_id_val, profile_id_val;
-            END;
-            
-            RETURN result_val;
+            RETURN current_setting('app.event_profile_context.' || key, true);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile(TEXT)"
     ),
@@ -109,7 +60,7 @@ steps = [
         BEGIN
             RETURN cur_profile(key);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_text(TEXT)"
     ),
@@ -126,7 +77,7 @@ steps = [
             END IF;
             RETURN val::INTEGER;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_int(TEXT)"
     ),
@@ -143,7 +94,7 @@ steps = [
             END IF;
             RETURN LOWER(val)::BOOLEAN;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_bool(TEXT)"
     ),
@@ -160,7 +111,7 @@ steps = [
             END IF;
             RETURN val::UUID;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_profile_uuid(TEXT)"
     ),
@@ -171,7 +122,7 @@ steps = [
         BEGIN
             RETURN cur_event_profile(key);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_text(TEXT)"
     ),
@@ -188,7 +139,7 @@ steps = [
             END IF;
             RETURN val::INTEGER;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_int(TEXT)"
     ),
@@ -205,7 +156,7 @@ steps = [
             END IF;
             RETURN LOWER(val)::BOOLEAN;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_bool(TEXT)"
     ),
@@ -222,7 +173,7 @@ steps = [
             END IF;
             RETURN val::UUID;
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_event_profile_uuid(TEXT)"
     ),
@@ -233,7 +184,7 @@ steps = [
         BEGIN
             PERFORM set_config('app.transaction_context.' || key, COALESCE(value, ''), false);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS set_transaction_context(TEXT, TEXT)"
     ),
@@ -244,7 +195,7 @@ steps = [
         BEGIN
             RETURN current_setting('app.transaction_context.' || key, true);
         END;
-        $$ LANGUAGE plpgsql STABLE;
+        $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
         """,
         "DROP FUNCTION IF EXISTS cur_transaction(TEXT)"
     ),

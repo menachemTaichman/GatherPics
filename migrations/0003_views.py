@@ -244,49 +244,101 @@ steps = [
             i.event_id,
             ep.profile_id,
             i.image_id,
-            (
-                (ep.all_images AND pi.image_id IS NULL)
-                OR (NOT ep.all_images AND pi.image_id IS NOT NULL)
-            ) AS is_accessible
+            pi.image_id IS NULL AS is_accessible
         FROM images i
         JOIN events_profiles ep ON i.event_id = ep.event_id
         LEFT JOIN profiles_images pi ON 
             i.image_id = pi.image_id 
-            AND ep.profile_id = pi.profile_id;
+            AND ep.profile_id = pi.profile_id
+        WHERE ep.all_images
+        UNION ALL
+        SELECT
+            i.event_id,
+            ep.profile_id,
+            i.image_id,
+            pi.image_id IS NOT NULL AS is_accessible
+        FROM images i
+        JOIN events_profiles ep ON i.event_id = ep.event_id
+        INNER JOIN profiles_images pi ON 
+            i.image_id = pi.image_id 
+            AND ep.profile_id = pi.profile_id
+        WHERE NOT ep.all_images;
 
         CREATE OR REPLACE VIEW groups_def AS
         SELECT
             g.event_id,
             ep.profile_id,
             g.group_id,
-            (
-                (
-                    (ep.all_groups AND pg.group_id IS NULL)
-                    OR (NOT ep.all_groups AND pg.group_id IS NOT NULL)
-                )
-                AND (ep.can_edit OR g.group_id <> e.unassociated_group_id)
-            ) AS is_accessible
+            (pg.group_id IS NULL AND ep.can_edit) AS is_accessible
+        FROM groups g
+        JOIN events_profiles ep ON g.event_id = ep.event_id
+        LEFT JOIN profiles_groups pg ON 
+            g.group_id = pg.group_id 
+            AND ep.profile_id = pg.profile_id
+        WHERE ep.all_groups
+        UNION ALL
+        SELECT
+            g.event_id,
+            ep.profile_id,
+            g.group_id,
+            (pg.group_id IS NULL AND g.group_id <> e.unassociated_group_id) AS is_accessible
         FROM groups g
         JOIN events e ON g.event_id = e.event_id
         JOIN events_profiles ep ON g.event_id = ep.event_id
         LEFT JOIN profiles_groups pg ON 
             g.group_id = pg.group_id 
-            AND ep.profile_id = pg.profile_id;
+            AND ep.profile_id = pg.profile_id
+        WHERE ep.all_groups
+        UNION ALL
+        SELECT
+            g.event_id,
+            ep.profile_id,
+            g.group_id,
+            (pg.group_id IS NOT NULL AND ep.can_edit) AS is_accessible
+        FROM groups g
+        JOIN events_profiles ep ON g.event_id = ep.event_id
+        LEFT JOIN profiles_groups pg ON 
+            g.group_id = pg.group_id 
+            AND ep.profile_id = pg.profile_id
+        WHERE NOT ep.all_groups
+        UNION ALL
+        SELECT
+            g.event_id,
+            ep.profile_id,
+            g.group_id,
+            (pg.group_id IS NOT NULL AND g.group_id <> e.unassociated_group_id) AS is_accessible
+        FROM groups g
+        JOIN events e ON g.event_id = e.event_id
+        JOIN events_profiles ep ON g.event_id = ep.event_id
+        LEFT JOIN profiles_groups pg ON 
+            g.group_id = pg.group_id 
+            AND ep.profile_id = pg.profile_id
+        WHERE NOT ep.all_groups;
 
         CREATE OR REPLACE VIEW albums_def AS
         SELECT
             a.event_id,
             ep.profile_id,
             a.album_id,
-            (
-                (ep.all_albums AND pa.album_id IS NULL)
-                OR (NOT ep.all_albums AND pa.album_id IS NOT NULL)
-            ) AS is_accessible
+            pa.album_id IS NULL AS is_accessible
         FROM albums a
         JOIN events_profiles ep ON a.event_id = ep.event_id
         LEFT JOIN profiles_albums pa ON 
             a.album_id = pa.album_id 
-            AND ep.profile_id = pa.profile_id;
+            AND ep.profile_id = pa.profile_id
+        WHERE ep.all_albums
+        UNION ALL
+        SELECT
+            a.event_id,
+            ep.profile_id,
+            a.album_id,
+            pa.album_id IS NOT NULL AS is_accessible
+        FROM albums a
+        JOIN events_profiles ep ON a.event_id = ep.event_id
+        INNER JOIN profiles_albums pa ON 
+            a.album_id = pa.album_id 
+            AND ep.profile_id = pa.profile_id
+        WHERE NOT ep.all_albums;
 
         -- effective permissions
         

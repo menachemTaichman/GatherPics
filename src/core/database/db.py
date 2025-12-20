@@ -741,6 +741,11 @@ class DB:
                     if field != 'profile_id':  # Already set above
                         val = profile.get(field, default_val)
                         self.profile_context[field] = val
+                
+                # Compute is_developer field (O(1) access in SQL)
+                settings = self.execute_query('SELECT developer_id FROM settings WHERE id = 1 LIMIT 1', (), return_format=ReturnFormat.DICT)
+                developer_id = settings.get('developer_id') if settings else None
+                self.profile_context['is_developer'] = (developer_id == profile_id) if developer_id else False
             
             if self.event_id:
                 event_profile = self.execute_query('SELECT * FROM events_profiles WHERE event_id = %s AND profile_id = %s', (self.event_id, profile_id), return_format=ReturnFormat.DICT)
@@ -752,27 +757,35 @@ class DB:
 
     @contextmanager
     def get_connection(self):
-        """Context manager for database connections with profile context."""
+        """Context manager for database connections with optimized profile context setting."""
         conn = self.connection_pool.getconn()
         try:
-            # Set only profile_id and event_id in session variables
-            # All other fields are automatically queried from the database tables
             with conn.cursor() as cursor:
-                # Set profile_id
-                profile_id = self.profile_context.get('profile_id')
-                if profile_id:
-                    cursor.execute("SELECT set_profile_context(%s, %s)", ('profile_id', str(profile_id)))
+                sql_commands = []
+                params = []
+
+                for key, value in self.profile_context.items():
+                    val_str = str(value) if value is not None else ''
+                    sql_commands.append("SELECT set_profile_context(%s, %s);")
+                    params.extend([key, val_str])
+
+                for key, value in self.event_profile_context.items():
+                    val_str = str(value) if value is not None else ''
+                    sql_commands.append("SELECT set_event_profile_context(%s, %s);")
+                    params.extend([key, val_str])
+
+                if self.event_id and 'event_id' not in self.event_profile_context:
+                    sql_commands.append("SELECT set_event_profile_context(%s, %s);")
+                    params.extend(['event_id', str(self.event_id)])
+
+                if sql_commands:
+                    full_query = "\n".join(sql_commands)
+                    cursor.execute(full_query, params)
                 
-                # Set event_id (if provided, otherwise NULL)
-                event_id = self.event_profile_context.get('event_id') or self.event_id
-                if event_id:
-                    cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', str(event_id)))
-                else:
-                    cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', ''))
-                
-                conn.commit()
             yield conn
         finally:
+            # Connection pool automatically rolls back uncommitted transactions on putconn
+            # Session variables are overwritten on every connection use, so no explicit cleanup needed
             self.connection_pool.putconn(conn)
 
     def execute_query(self, query: str, params: tuple | list = (), return_format: ReturnFormat | None = None) -> Any:
