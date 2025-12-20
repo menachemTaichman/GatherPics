@@ -46,6 +46,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source
 COPY src ./src
 COPY migrations ./migrations
+# Copy mocks directory for production use (when MOCK_REKOGNITION is enabled)
+COPY tests/__init__.py ./tests/__init__.py
+COPY tests/mocks ./tests/mocks
 
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/dist ./dist

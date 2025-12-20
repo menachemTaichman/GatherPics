@@ -40,7 +40,11 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-tests/
+# Exclude test files but include mocks directory and __init__.py
+tests/test.py
+tests/check_celery_tasks.py
+tests/db/
+# Keep tests/__init__.py and tests/mocks/ directory for production use
 
 # Documentation
 docs/
