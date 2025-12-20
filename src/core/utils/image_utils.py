@@ -52,18 +52,6 @@ def validate_image(pil_img: PILImage.Image) -> bool:
     except Exception:
         return False
 
-
-def get_image_metadata(pil_img: PILImage.Image) -> dict:
-    """Returns metadata (mode, size, format) for the given PIL image."""
-    try:
-        width, height = pil_img.size
-        mode = pil_img.mode
-        fmt = pil_img.format
-        return {"width": width, "height": height, "mode": mode, "format": fmt}
-    except Exception:
-        return {}
-
-
 def extract_metadata_from_bytes(image_bytes: bytes) -> dict:
     """Extract metadata including accurate date_taken using exifread from bytes.
     
@@ -133,53 +121,3 @@ def extract_all_metadata(image_path: str) -> dict:
         metadata['date_taken'] = date_taken
 
     return metadata
-
-
-def save_image(
-    pil_img: PILImage.Image,
-    path: str,
-    exif: bytes = b'',
-    format: str = 'JPEG',
-    quality: int = 80,
-    optimize: bool = True,
-    extra_metadata: dict = {},
-    storage_backend=None,
-) -> None:
-    """
-    Save a PIL image to disk or S3 with options for EXIF, format, quality, optimization, and extra metadata.
-    Args:
-        pil_img: PIL image to save
-        path: Output file path (relative to storage backend root)
-        exif: EXIF bytes to embed (optional, default b'')
-        format: Output format (e.g., 'JPEG', 'WEBP')
-        quality: Quality (default 80)
-        optimize: Use optimization (default True)
-        extra_metadata: Dict of additional metadata to embed (not all formats support this, default empty dict)
-        storage_backend: Optional storage backend (if None, uses local filesystem)
-    """
-    save_kwargs = {'format': format, 'quality': quality, 'optimize': optimize}
-    if exif and format.upper() == 'JPEG':
-        save_kwargs['exif'] = exif
-    if extra_metadata and format.upper() == 'WEBP':
-        for k, v in extra_metadata.items():
-            save_kwargs[k] = v
-    
-    # If storage backend is provided and it's S3, save to bytes first then upload
-    if storage_backend and hasattr(storage_backend, 'write'):
-        buffer = BytesIO()
-        pil_img.save(buffer, **save_kwargs)
-        buffer.seek(0)
-        image_bytes = buffer.read()
-        
-        # Determine content type
-        content_type_map = {
-            'JPEG': 'image/jpeg',
-            'WEBP': 'image/webp',
-            'PNG': 'image/png'
-        }
-        content_type = content_type_map.get(format.upper(), 'application/octet-stream')
-        
-        storage_backend.write(path, image_bytes, content_type=content_type)
-    else:
-        # Local filesystem - save directly
-        pil_img.save(path, **save_kwargs)
