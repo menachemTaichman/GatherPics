@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify
 
 from src.backend.middleware.auth import require_auth
-from src.backend.helpers import get_event, Timeit
+from src.backend.helpers import get_event
 from src.backend.validators import get_input, get_multiple_inputs, validate_path_param
 
 image_bp = Blueprint('images', __name__, url_prefix='/api/events/<event_id>')
@@ -24,62 +24,50 @@ def get_images(event_id):
 @require_auth
 def get_image(event_id, image_id):
     """Get a specific image's details as changes."""
-    with Timeit('get_image'):
-        with Timeit('validate_path_param'):
-            event_id = validate_path_param('event_id', event_id)
-            image_id = validate_path_param('image_id', image_id)
-        
-        with Timeit('get_event'):
-            event = get_event(event_id)
-        
-        with Timeit('is_accessible'):
-            if not event.models.is_accessible('images', image_id):
-                return jsonify({"error": f"Image {image_id} not found or not accessible"}), 404
+    
+    event_id = validate_path_param('event_id', event_id)
+    image_id = validate_path_param('image_id', image_id)
+    event = get_event(event_id)
+    if not event.models.is_accessible('images', image_id):
+        return jsonify({"error": f"Image {image_id} not found or not accessible"}), 404
 
-        with Timeit('get_entities'):
-            image = event.models.get_entities('images', [image_id], include_details=True)
-        
-        with Timeit('get_childs'):
-            albums = event.models.get_childs('images', image_id, 'albums')
-            faces = event.models.get_childs('images', image_id, 'faces')
-            groups = event.models.get_childs('images', image_id, 'groups')
-        
-        with Timeit('changes'):
-            changes = [{
-                'type': 'UPSERT',
-                'entity': 'image',
-                'items': image
-            }]
-            changes.append({
-                'type': 'RELATION_SET',
-                'relation': 'image.albums',
-                'parentId': image_id,
-                'entities': albums
-            })
-            changes.append({
-                'type': 'RELATION_SET',
-                'relation': 'image.faces',
-                'parentId': image_id,
-                'entities': faces
-            })
-            changes.append({
-                'type': 'RELATION_SET',
-                'relation': 'image.groups',
-                'parentId': image_id,
-                'entities': groups
-            })
-        
-        with Timeit('moments'):
-            moments = image.get(image_id, {}).get('moment_id')
-            if moments:
-                moments = event.models.get_entities('moments', [moments])
-                changes.append({
-                    'type': 'RELATION_SET',
-                    'relation': 'image.moments',
-                    'parentId': image_id,
-                    'entities': moments
-                })
-        return jsonify({ 'changes': changes })
+    image = event.models.get_entities('images', [image_id], include_details=True)
+    albums = event.models.get_childs('images', image_id, 'albums')
+    faces = event.models.get_childs('images', image_id, 'faces')
+    groups = event.models.get_childs('images', image_id, 'groups')
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'image',
+        'items': image
+    }]
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.albums',
+        'parentId': image_id,
+        'entities': albums
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.faces',
+        'parentId': image_id,
+        'entities': faces
+    })
+    changes.append({
+        'type': 'RELATION_SET',
+        'relation': 'image.groups',
+        'parentId': image_id,
+        'entities': groups
+    })
+    moments = image.get(image_id, {}).get('moment_id')
+    if moments:
+        moments = event.models.get_entities('moments', [moments])
+        changes.append({
+            'type': 'RELATION_SET',
+            'relation': 'image.moments',
+            'parentId': image_id,
+            'entities': moments
+        })
+    return jsonify({ 'changes': changes })
 
 @image_bp.route("/images/<image_id>", methods=["PATCH"])
 @require_auth
