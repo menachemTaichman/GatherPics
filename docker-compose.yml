@@ -38,6 +38,7 @@ services:
 
   db:
     image: postgres:15
+    command: postgres -c shared_buffers=256MB -c max_connections=50
     restart: always
     env_file: .env
     environment:
@@ -76,6 +77,7 @@ services:
       celery -A src.backend.celery_worker.celery worker
       --loglevel=INFO
       --concurrency=2
+      --max-tasks-per-child=50
       --without-gossip
       --without-mingle
       --without-heartbeat
