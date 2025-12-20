@@ -392,11 +392,13 @@ AWS_SECRET_ACCESS_KEY=your_secret
 AWS_REGION=us-east-1
 
 # R2 object storage (S3-compatible)
+USE_R2=true  # Dev only: Set to 'true' to enable R2 storage in development (not needed in production)
 R2_ACCESS_KEY_ID=your_r2_key
 R2_SECRET_ACCESS_KEY=your_r2_secret
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=your-bucket-name
-S3_BASE_PREFIX=optional/prefix
+R2_REGION=auto  # Optional: region for R2 (default: auto)
+S3_BASE_PREFIX=optional/prefix  # Optional: prefix for all files
 
 # JWT
 JWT_SECRET_KEY=your-secret-key-change-in-production

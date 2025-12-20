@@ -464,14 +464,20 @@ def get_storage_backend() -> StorageBackend:
     Factory function to get appropriate storage backend.
     
     Returns:
-        LocalStorageBackend if ENVIRONMENT=DEVELOPMENT or object storage not configured
-        S3StorageBackend if R2_BUCKET is set
+        LocalStorageBackend if R2_BUCKET is not configured or (in dev) USE_R2 is not enabled
+        S3StorageBackend if:
+            - ENVIRONMENT=PRODUCTION and R2_BUCKET is set, OR
+            - ENVIRONMENT=DEVELOPMENT and USE_R2=true and R2_BUCKET is set
     """
     environment = os.getenv('ENVIRONMENT', 'DEVELOPMENT')
+    use_r2 = os.getenv('USE_R2', '').lower() in ('true', '1', 'yes', 'on')
     s3_bucket = os.getenv('R2_BUCKET')
     
-    # Use S3 in production if bucket is configured
-    if environment == 'PRODUCTION' and s3_bucket:
+    # In production: use R2 if bucket is configured (no USE_R2 needed)
+    # In dev: use R2 only if explicitly enabled with USE_R2=true
+    should_use_r2 = (environment == 'PRODUCTION' and s3_bucket) or (environment == 'DEVELOPMENT' and use_r2 and s3_bucket)
+    
+    if should_use_r2:
         base_prefix = os.getenv('S3_BASE_PREFIX', '')
         region = os.getenv('R2_REGION')
         return S3StorageBackend(bucket_name=s3_bucket, base_prefix=base_prefix, region=region)
