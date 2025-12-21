@@ -239,13 +239,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         )}
       </div>
 
-      {/* Hover overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center rounded-lg">
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white">
-          <svg viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-          <span className="text-sm">{t('singleImageTile.clickToView')}</span>
-        </div>
-      </div>
+      {/* Hover overlay - darkens image on hover */}
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-lg pointer-events-none"></div>
 
       {/* Date overlay - bottom-left in LTR, bottom-right in RTL */}
       {showDate && (dateLabel || image?.date_taken) && (
