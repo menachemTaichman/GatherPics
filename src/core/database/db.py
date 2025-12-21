@@ -2,6 +2,7 @@ from psycopg2 import errors as psycopg2_errors
 from psycopg2 import pool
 from typing import Any
 import json
+import ast
 from contextlib import contextmanager
 import os
 from enum import Enum
@@ -576,7 +577,18 @@ class DB:
                 return value
             # Only parse JSON if value is a string
             if isinstance(value, str):
-                return json.loads(value)
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    # Fallback: try to parse as Python literal (e.g., "[1, 2, 3]")
+                    try:
+                        parsed = ast.literal_eval(value)
+                        if isinstance(parsed, list):
+                            return parsed
+                    except (ValueError, SyntaxError):
+                        pass
+                    # If all parsing fails, return empty list
+                    return []
             # Fallback: try to convert to list
             return list(value) if value else []
         elif value_type == dict:
@@ -585,7 +597,18 @@ class DB:
                 return value
             # Only parse JSON if value is a string
             if isinstance(value, str):
-                return json.loads(value)
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    # Fallback: try to parse as Python literal (e.g., "{'key': 'value'}")
+                    try:
+                        parsed = ast.literal_eval(value)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except (ValueError, SyntaxError):
+                        pass
+                    # If all parsing fails, return empty dict
+                    return {}
             # Fallback
             return {}
         else:  # str
