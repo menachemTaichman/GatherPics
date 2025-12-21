@@ -840,17 +840,17 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             </p>
           </motion.div>
         ) : (
-          <motion.div
-            ref={setGridContainerRef}
-            className="w-full photo-gallery-grid"
-            style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
-              gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
-            }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
+          <div ref={setGridContainerRef} className="w-full">
+            <motion.div
+              className="w-full photo-gallery-grid"
+              style={{
+                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
+                gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
             {sortedImages.map((image, index) => (
               <motion.div
                 key={image.id || `unknown-${index}`}
@@ -887,7 +887,8 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 />
               </motion.div>
             ))}
-          </motion.div>
+            </motion.div>
+          </div>
         )}
       </div>
 
