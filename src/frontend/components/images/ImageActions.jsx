@@ -59,7 +59,9 @@ export default function useImageActions({
   );
   
   // Check if images are in bucket
-  const imagesInBucket = imageIdsArray.filter(id => queue.includes(id));
+  // Ensure queue is an array (safety check in case it's corrupted in storage)
+  const queueArray = Array.isArray(queue) ? queue : [];
+  const imagesInBucket = imageIdsArray.filter(id => queueArray.includes(id));
   const allInBucket = imagesInBucket.length === imageIdsArray.length;
   const someInBucket = imagesInBucket.length > 0;
 

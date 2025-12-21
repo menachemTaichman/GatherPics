@@ -10,10 +10,10 @@ export const useBucketStore = create((set, get) => ({
   excludeAlready: getPreference('BucketDrawer.excludeAlready') ?? true,
   lastPulseTs: 0,
   // downloaded/uploaded history lists (ordered by last action, newest first)
-  downloaded: getPreference('BucketDrawer.alreadyDownloaded') ?? [], // array of image ids
-  uploaded: getPreference('BucketDrawer.alreadyUploaded') ?? [],
+  downloaded: Array.isArray(getPreference('BucketDrawer.alreadyDownloaded')) ? getPreference('BucketDrawer.alreadyDownloaded') : [], // array of image ids
+  uploaded: Array.isArray(getPreference('BucketDrawer.alreadyUploaded')) ? getPreference('BucketDrawer.alreadyUploaded') : [],
   // current bucket queue (image ids to act on)
-  queue: getPreference('BucketDrawer.queue') ?? [],
+  queue: Array.isArray(getPreference('BucketDrawer.queue')) ? getPreference('BucketDrawer.queue') : [],
 
   // UI helpers
   open: () => set({ isOpen: true }),
@@ -34,32 +34,36 @@ export const useBucketStore = create((set, get) => ({
   },
 
   addToQueue: (imageIds) => {
-    const existing = new Set(get().queue);
-    let list = [...get().queue];
+    const currentQueue = Array.isArray(get().queue) ? get().queue : [];
+    const existing = new Set(currentQueue);
+    let list = [...currentQueue];
     imageIds.forEach(id => { if (!existing.has(id)) list.push(id); });
     setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
   addImages: (imageIds) => {
-    const existing = new Set(get().queue);
+    const currentQueue = Array.isArray(get().queue) ? get().queue : [];
+    const existing = new Set(currentQueue);
     const filtered = imageIds.filter(id => !existing.has(id));
     if (filtered.length === 0) {
       set({ lastPulseTs: Date.now() });
       return 0;
     }
-    const list = [...get().queue, ...filtered];
+    const list = [...currentQueue, ...filtered];
     setPreference('BucketDrawer.queue', list);
     set({ queue: list, lastPulseTs: Date.now() });
     return filtered.length;
   },
   removeFromQueue: (imageId) => {
-    const list = get().queue.filter(id => id !== imageId);
+    const currentQueue = Array.isArray(get().queue) ? get().queue : [];
+    const list = currentQueue.filter(id => id !== imageId);
     setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
   removeManyFromQueue: (imageIds) => {
+    const currentQueue = Array.isArray(get().queue) ? get().queue : [];
     const removeSet = new Set(imageIds);
-    const list = get().queue.filter(id => !removeSet.has(id));
+    const list = currentQueue.filter(id => !removeSet.has(id));
     setPreference('BucketDrawer.queue', list);
     set({ queue: list });
   },
