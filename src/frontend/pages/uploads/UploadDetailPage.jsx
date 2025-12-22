@@ -14,6 +14,7 @@ import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { SingleImageTile, ImageViewer } from '../../components/images';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { FloatingSelectionControls } from '../../components/layout';
 import { ManageAccessModal } from '../../components/profiles';
 import { MoveToMomentModal } from '../../components/moments';
@@ -1130,48 +1131,51 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   <p className="text-gray-500">{t('uploadDetail.noImagesInThisUpload')}</p>
                 </div>
               ) : (
-                <div 
-                  ref={setGridContainerRef}
-                  className="photo-gallery-grid"
+                <AbsoluteMasonryGrid
+                  items={uploadImages}
+                  baseSize={Math.max(100, 266 * imageSize * 0.75)}
+                  imageClasses={imageClasses}
+                  containerHeight="auto"
+                  className="w-full"
+                  onPinchRef={setGridContainerRef}
                   style={{
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
+                    '--grid-scale': 1,
+                    '--grid-z-index': 1,
                   }}
-                >
-                  {uploadImages.map((img, index) => (
-                    <motion.div
-                      key={img.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.15 }}
-                      className={`photo-card ${imageClasses[img.id] || 'square'}`}
-                    >
-                                      <SingleImageTile
-                                        ref={(el) => {
-                                          if (el && imageTileRefs.current[index] !== el) {
-                                            imageTileRefs.current[index] = el;
-                                          }
-                                        }}
-                                        image={img}
-                                        aspectClass={imageClasses[img.id] || 'square'}
-                                        imageFit="cover"
-                                        thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
-                                        selectionMode={selectionMode}
-                                        isSelected={currentSelection.has(img.id)}
-                                        onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                        onOpen={() => openImageViewerInUpload(img.id, index)}
-                                        onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                        eventUrl={eventUrl}
-                                        urlHelpers={urlHelpers}
-                                        showFavoriteButton={false}
-                                        showArchiveButton={false}
-                                        photoIndex={index}
-                                        contextType="Upload"
-                                        contextLabel={upload?.profile_label || uploadId}
-                                      />
-                    </motion.div>
-                  ))}
-                </div>
+                  onItemRef={(img, index, el) => {
+                    if (el && imageTileRefs.current[index] !== el) {
+                      imageTileRefs.current[index] = el;
+                    }
+                  }}
+                  renderItem={(img, index, isPortrait, setRef) => {
+                    return (
+                      <div
+                        className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                        style={{ width: '100%', height: '100%' }}
+                      >
+                        <SingleImageTile
+                          ref={setRef}
+                          image={img}
+                          aspectClass={imageClasses[img.id] || 'square'}
+                          imageFit="cover"
+                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
+                          selectionMode={selectionMode}
+                          isSelected={currentSelection.has(img.id)}
+                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                          onOpen={() => openImageViewerInUpload(img.id, index)}
+                          onImageLoad={(e) => handleImageLoad(img.id, e)}
+                          eventUrl={eventUrl}
+                          urlHelpers={urlHelpers}
+                          showFavoriteButton={false}
+                          showArchiveButton={false}
+                          photoIndex={index}
+                          contextType="Upload"
+                          contextLabel={upload?.profile_label || uploadId}
+                        />
+                      </div>
+                    );
+                  }}
+                />
               )}
             </motion.div>
           )}
@@ -1312,55 +1316,61 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {groupFaces.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noFacesFromThisUpload')}</p>
                               ) : (
-                                <div 
-                                  className="photo-gallery-grid"
-                                  style={{
-                                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                  }}
-                                >
-                                  {groupFaces.map((face, faceIndex) => {
-                                    const img = entities?.[eventId]?.images?.[face.image_id];
-                                    if (!img) return null;
-                                    const isRep = isRepresentative(face.id);
-                                    return (
-                                      <div
-                                        key={face.id}
-                                        className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
-                                      >
-                                        <SingleImageTile
-                                          ref={(el) => {
-                                            if (!groupFaceTileRefs.current[group.id]) {
-                                              groupFaceTileRefs.current[group.id] = [];
-                                            }
-                                            if (el && groupFaceTileRefs.current[group.id][faceIndex] !== el) {
-                                              groupFaceTileRefs.current[group.id][faceIndex] = el;
-                                            }
-                                          }}
-                                          image={img}
-                                          aspectClass={imageClasses[img.id] || 'square'}
-                                          imageFit="cover"
-                                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
-                                          selectionMode={selectionMode}
-                                          isSelected={currentSelection.has(face.id)}
-                                          onToggleSelect={(e) => toggleImageSelection(face.id, e)}
-                                          onOpen={() => openImageViewerInGroup(group.id, face.id)}
-                                          onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                          eventUrl={eventUrl}
-                                          urlHelpers={urlHelpers}
-                                          showFavoriteButton={false}
-                                          showArchiveButton={false}
-                                          showCropBadge={false}
-                                          showRepresentativeButton={true}
-                                          isRepresentative={isRep}
-                                          photoIndex={faceIndex}
-                                          contextType="Person"
-                                          contextLabel={groupEntity?.label || group.label}
-                                          onSetRepresentative={() => handleSetFaceAsRep(group.id, face.id)}
-                                        />
-                                      </div>
-                                    );
-                                  })}
+                                <div style={{ height: '400px', marginTop: '0.5rem' }}>
+                                  <AbsoluteMasonryGrid
+                                    items={groupFaces}
+                                    baseSize={Math.max(100, 266 * imageSize * 0.75)}
+                                    imageClasses={imageClasses}
+                                    containerHeight="100%"
+                                    className="w-full"
+                                    style={{
+                                      '--grid-scale': 1,
+                                      '--grid-z-index': 1,
+                                    }}
+                                    onItemRef={(face, faceIndex, el) => {
+                                      if (!groupFaceTileRefs.current[group.id]) {
+                                        groupFaceTileRefs.current[group.id] = [];
+                                      }
+                                      if (el && groupFaceTileRefs.current[group.id][faceIndex] !== el) {
+                                        groupFaceTileRefs.current[group.id][faceIndex] = el;
+                                      }
+                                    }}
+                                    renderItem={(face, faceIndex, isPortrait, setRef) => {
+                                      const img = entities?.[eventId]?.images?.[face.image_id];
+                                      if (!img) return null;
+                                      const isRep = isRepresentative(face.id);
+                                      return (
+                                        <div
+                                          className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
+                                          style={{ width: '100%', height: '100%' }}
+                                        >
+                                          <SingleImageTile
+                                            ref={setRef}
+                                            image={img}
+                                            aspectClass={imageClasses[img.id] || 'square'}
+                                            imageFit="cover"
+                                            thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
+                                            selectionMode={selectionMode}
+                                            isSelected={currentSelection.has(face.id)}
+                                            onToggleSelect={(e) => toggleImageSelection(face.id, e)}
+                                            onOpen={() => openImageViewerInGroup(group.id, face.id)}
+                                            onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                            eventUrl={eventUrl}
+                                            urlHelpers={urlHelpers}
+                                            showFavoriteButton={false}
+                                            showArchiveButton={false}
+                                            showCropBadge={false}
+                                            showRepresentativeButton={true}
+                                            isRepresentative={isRep}
+                                            photoIndex={faceIndex}
+                                            contextType="Person"
+                                            contextLabel={groupEntity?.label || group.label}
+                                            onSetRepresentative={() => handleSetFaceAsRep(group.id, face.id)}
+                                          />
+                                        </div>
+                                      );
+                                    }}
+                                  />
                                 </div>
                               )}
                             </div>
@@ -1456,52 +1466,58 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {momentImages.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noImagesFromThisUpload')}</p>
                               ) : (
-                                <div 
-                                  className="photo-gallery-grid"
-                                  style={{
-                                    gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 266 * imageSize * 0.75)}px, 1fr))`,
-                                    gridAutoRows: `${Math.max(100, 266 * imageSize * 0.75)}px`
-                                  }}
-                                >
-                                  {momentImages.map((img, imgIndex) => {
-                                    const isRep = isRepresentative(img.id);
-                                    return (
-                                      <div
-                                        key={img.id}
-                                        className={`photo-card ${imageClasses[img.id] || 'square'}`}
-                                      >
-                                        <SingleImageTile
-                                          ref={(el) => {
-                                            if (!momentImageTileRefs.current[moment.id]) {
-                                              momentImageTileRefs.current[moment.id] = [];
-                                            }
-                                            if (el && momentImageTileRefs.current[moment.id][imgIndex] !== el) {
-                                              momentImageTileRefs.current[moment.id][imgIndex] = el;
-                                            }
-                                          }}
-                                          image={img}
-                                          aspectClass={imageClasses[img.id] || 'square'}
-                                          imageFit="cover"
-                                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
-                                          selectionMode={selectionMode}
-                                          isSelected={currentSelection.has(img.id)}
-                                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                          onOpen={() => openImageViewerInMoment(moment.id, img.id)}
-                                          onImageLoad={(e) => handleImageLoad(img.id, e)}
-                                          eventUrl={eventUrl}
-                                          urlHelpers={urlHelpers}
-                                          showFavoriteButton={false}
-                                          showArchiveButton={false}
-                                          photoIndex={imgIndex}
-                                          contextType="Moment"
-                                          contextLabel={moment?.label || moment?.name}
-                                          showRepresentativeButton={true}
-                                          isRepresentative={isRep}
-                                          onSetRepresentative={() => handleSetMomentImageAsRep(moment.id, img.id)}
-                                        />
-                                      </div>
-                                    );
-                                  })}
+                                <div style={{ height: '400px', marginTop: '0.5rem' }}>
+                                  <AbsoluteMasonryGrid
+                                    items={momentImages}
+                                    baseSize={Math.max(100, 266 * imageSize * 0.75)}
+                                    imageClasses={imageClasses}
+                                    containerHeight="100%"
+                                    className="w-full"
+                                    style={{
+                                      '--grid-scale': 1,
+                                      '--grid-z-index': 1,
+                                    }}
+                                    onItemRef={(img, imgIndex, el) => {
+                                      if (!momentImageTileRefs.current[moment.id]) {
+                                        momentImageTileRefs.current[moment.id] = [];
+                                      }
+                                      if (el && momentImageTileRefs.current[moment.id][imgIndex] !== el) {
+                                        momentImageTileRefs.current[moment.id][imgIndex] = el;
+                                      }
+                                    }}
+                                    renderItem={(img, imgIndex, isPortrait, setRef) => {
+                                      const isRep = isRepresentative(img.id);
+                                      return (
+                                        <div
+                                          className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                                          style={{ width: '100%', height: '100%' }}
+                                        >
+                                          <SingleImageTile
+                                            ref={setRef}
+                                            image={img}
+                                            aspectClass={imageClasses[img.id] || 'square'}
+                                            imageFit="cover"
+                                            thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
+                                            selectionMode={selectionMode}
+                                            isSelected={currentSelection.has(img.id)}
+                                            onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                            onOpen={() => openImageViewerInMoment(moment.id, img.id)}
+                                            onImageLoad={(e) => handleImageLoad(img.id, e)}
+                                            eventUrl={eventUrl}
+                                            urlHelpers={urlHelpers}
+                                            showFavoriteButton={false}
+                                            showArchiveButton={false}
+                                            photoIndex={imgIndex}
+                                            contextType="Moment"
+                                            contextLabel={moment?.label || moment?.name}
+                                            showRepresentativeButton={true}
+                                            isRepresentative={isRep}
+                                            onSetRepresentative={() => handleSetMomentImageAsRep(moment.id, img.id)}
+                                          />
+                                        </div>
+                                      );
+                                    }}
+                                  />
                                 </div>
                               )}
                             </div>

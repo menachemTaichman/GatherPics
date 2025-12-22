@@ -1,104 +1,255 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 
-/**
- * Hook for pinch-to-zoom functionality on mobile devices
- * @param {number} imageSize - Current image size value (0.5 to 3.0)
- * @param {function} setImageSize - Function to update image size
- * @param {object} options - Optional configuration
- * @param {number} options.minSize - Minimum size (default: 0.5)
- * @param {number} options.maxSize - Maximum size (default: 3.0)
- * @returns {function} Callback ref to attach to the container element
- */
 export default function usePinchToZoom(imageSize, setImageSize, options = {}) {
-  const { minSize = 0.5, maxSize = 3.0 } = options;
+  const { minSize = 0.25, maxSize = 3.0, sensitivity = 1.0 } = options;
   
-  const pinchStartDistanceRef = useRef(null);
-  const pinchStartSizeRef = useRef(null);
   const gridContainerRef = useRef(null);
-  const imageSizeRef = useRef(imageSize);
   
-  // Keep imageSizeRef in sync
-  useEffect(() => {
-    imageSizeRef.current = imageSize;
-  }, [imageSize]);
+  // משתנים למגע (Touch)
+  const pinchStartDistanceRef = useRef(null);
   
-  // State to track when container is ready
-  const [containerReady, setContainerReady] = useState(false);
-  
-  // Callback ref to ensure container is set
-  const setGridContainerRef = useCallback((node) => {
-    gridContainerRef.current = node;
-    setContainerReady(!!node);
-  }, []);
-  
-  // Pinch-to-zoom handlers for mobile
-  useEffect(() => {
+  // משתנים ל-Trackpad (Wheel)
+  const isWheelingRef = useRef(false);
+  const wheelTimeoutRef = useRef(null);
+
+  const startSizeRef = useRef(imageSize);
+  const currentVisualScaleRef = useRef(1);
+  const setImageSizeRef = useRef(setImageSize);
+
+  // עדכון רפרנסים
+  useEffect(() => { setImageSizeRef.current = setImageSize; }, [setImageSize]);
+  useEffect(() => { startSizeRef.current = imageSize; }, [imageSize]);
+
+  // --- פונקציית עזר לניקוי אגרסיבי (משותפת לכולם) ---
+  const forceResetVisualZoom = useCallback(() => {
     const container = gridContainerRef.current;
-    if (!container || !containerReady) return;
-    
-    const getDistance = (touch1, touch2) => {
-      const dx = touch2.clientX - touch1.clientX;
-      const dy = touch2.clientY - touch1.clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    };
-    
-    const handleTouchStart = (e) => {
-      // Only handle if exactly 2 touches on the container or its children
-      if (e.touches.length === 2) {
-        // Check if touches are within the container bounds
-        const rect = container.getBoundingClientRect();
-        const touchesInContainer = Array.from(e.touches).every(touch => {
-          return touch.clientX >= rect.left && touch.clientX <= rect.right &&
-                 touch.clientY >= rect.top && touch.clientY <= rect.bottom;
-        });
-        
-        if (touchesInContainer) {
-          const distance = getDistance(e.touches[0], e.touches[1]);
-          pinchStartDistanceRef.current = distance;
-          pinchStartSizeRef.current = imageSizeRef.current;
-          e.preventDefault();
-        }
+    if (container) {
+       container.style.transition = 'none';
+       container.style.setProperty('--grid-scale', '1');
+       container.style.setProperty('--grid-z-index', '1');
+       requestAnimationFrame(() => {
+           if(container) container.style.transition = '';
+       });
+       
+       pinchStartDistanceRef.current = null;
+       isWheelingRef.current = false;
+       currentVisualScaleRef.current = 1;
+    }
+  }, []);
+
+  // --- רשת ביטחון ---
+  useEffect(() => {
+    if (pinchStartDistanceRef.current === null && !isWheelingRef.current) {
+      requestAnimationFrame(forceResetVisualZoom);
+    }
+  }, [imageSize, forceResetVisualZoom]);
+
+  
+  // ==========================================
+  // Lógica de TOUCH (כבר עובד, השארתי ללא שינוי מהותי)
+  // ==========================================
+  const handleTouchStart = useCallback((e) => {
+    if (e.touches.length === 2) {
+      const container = gridContainerRef.current;
+      if (!container) return;
+
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDistanceRef.current = Math.sqrt(dx * dx + dy * dy);
+      
+      startSizeRef.current = imageSize; // חשוב: לוקחים גודל עדכני
+      container.style.setProperty('--grid-scale', '1');
+      container.style.setProperty('--grid-z-index', '10');
+      
+      if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
+    }
+  }, [imageSize]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (e.touches.length === 2 && pinchStartDistanceRef.current !== null) {
+      const container = gridContainerRef.current;
+      if (!container) return;
+      if (e.cancelable) { e.preventDefault(); e.stopPropagation(); }
+
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+      const scale = currentDistance / pinchStartDistanceRef.current;
+      
+      updateVisualZoom(scale); // פונקציה משותפת שיצרתי למטה
+    }
+  }, [minSize, maxSize]); // הנחתי שפונקציית העדכון משתמשת בהם
+
+  const handleTouchEnd = useCallback((e) => {
+    if (e.touches.length < 2 && pinchStartDistanceRef.current !== null) {
+       applyZoom(); // פונקציה משותפת לסיום
+    }
+  }, []);
+
+
+  // ==========================================
+  // Lógica de TRACKPAD / WHEEL
+  // ==========================================
+  const handleWheel = useCallback((e) => {
+    // בודקים אם זה Pinch ב-Trackpad (דפדפנים שולחים ctrlKey ב-Pinch)
+    if (e.ctrlKey) {
+      const container = gridContainerRef.current;
+      if (!container) return;
+
+      e.preventDefault(); // מונע זום של כל הדפדפן
+
+      // התחלת זום אם לא התחלנו
+      if (!isWheelingRef.current) {
+        isWheelingRef.current = true;
+        startSizeRef.current = imageSize; // מתחילים מהגודל הנוכחי
+        container.style.setProperty('--grid-z-index', '10');
+        currentVisualScaleRef.current = 1;
       }
-    };
-    
-    const handleTouchMove = (e) => {
-      // Only handle if we have 2 touches and a valid start distance
-      if (e.touches.length === 2 && pinchStartDistanceRef.current !== null) {
-        const currentDistance = getDistance(e.touches[0], e.touches[1]);
-        const scale = currentDistance / pinchStartDistanceRef.current;
-        const newSize = Math.max(minSize, Math.min(maxSize, pinchStartSizeRef.current * scale));
-        setImageSize(newSize);
-        e.preventDefault();
+
+      // חישוב הסקייל החדש על בסיס הדלתא של הגלגלת
+      // e.deltaY שלילי = זום אין, חיובי = זום אאוט
+      // המקדם 0.01 הוא הרגישות, אפשר לשחק איתו
+      const zoomFactor = 1 - e.deltaY * 0.01; 
+      
+      // מכפילים את הסקייל הויזואלי הנוכחי בפקטור החדש
+      const newVisualScale = currentVisualScaleRef.current * zoomFactor;
+      
+      // מעדכנים ויזואלית (משתמשים בפונקציה המשותפת אבל עם לוגיקה קצת שונה כי כאן זה מצטבר)
+      let targetSize = startSizeRef.current * newVisualScale;
+      targetSize = Math.max(minSize * 0.9, Math.min(maxSize * 1.1, targetSize));
+      const finalVisualScale = targetSize / startSizeRef.current;
+      
+      currentVisualScaleRef.current = finalVisualScale;
+      
+      requestAnimationFrame(() => {
+          if (container) container.style.setProperty('--grid-scale', finalVisualScale);
+      });
+
+      // זיהוי סיום הגלילה (Debounce)
+      // מכיוון שאירוע wheel לא נותן "end", אנחנו מניחים שאם עברו 150ms בלי אירוע, זה נגמר
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+      
+      wheelTimeoutRef.current = setTimeout(() => {
+        isWheelingRef.current = false;
+        applyZoom(); // מבצעים את העדכון ל-State
+      }, 150);
+    }
+  }, [imageSize, minSize, maxSize]);
+
+
+  // ==========================================
+  // פונקציות עזר משותפות (DRY)
+  // ==========================================
+  
+  // עדכון ויזואלי בזמן אמת (עבור Touch)
+  const updateVisualZoom = (scale) => {
+      const container = gridContainerRef.current;
+      if (!container) return;
+
+      let targetSize = startSizeRef.current * scale;
+      targetSize = Math.max(minSize * 0.9, Math.min(maxSize * 1.1, targetSize)); 
+      const visualScale = targetSize / startSizeRef.current;
+      currentVisualScaleRef.current = visualScale;
+
+      requestAnimationFrame(() => {
+         container.style.setProperty('--grid-scale', visualScale);
+      });
+  };
+
+  // החלת הזום הסופי ל-State
+  const applyZoom = () => {
+      const finalScale = currentVisualScaleRef.current;
+      let newSize = startSizeRef.current * finalScale;
+      newSize = Math.max(minSize, Math.min(maxSize, newSize));
+
+      forceResetVisualZoom(); // איפוס ויזואלי
+
+      if (Math.abs(newSize - startSizeRef.current) > 0.1) {
+          setImageSizeRef.current(newSize);
       }
-    };
+  };
+
+
+  // ==========================================
+  // חיבור Event Listeners
+  // ==========================================
+  // Helper function to attach listeners - called both from useEffect and from ref callback
+  const attachListeners = useCallback(() => {
+    const container = gridContainerRef.current;
+    if (!container) {
+      return null;
+    }
     
-    const handleTouchEnd = (e) => {
-      // Reset if we have less than 2 touches
-      if (e.touches.length < 2) {
-        pinchStartDistanceRef.current = null;
-        pinchStartSizeRef.current = null;
-      }
-    };
+    // אתחול ערכים התחלתיים
+    container.style.setProperty('--grid-scale', '1');
+    container.style.setProperty('--grid-z-index', '1');
+
+    const opts = { passive: false };
+
+    container.addEventListener('touchstart', handleTouchStart, opts);
+    container.addEventListener('touchmove', handleTouchMove, opts);
+    container.addEventListener('touchend', handleTouchEnd, opts);
+    container.addEventListener('touchcancel', handleTouchEnd, opts);
     
-    const handleTouchCancel = (e) => {
-      pinchStartDistanceRef.current = null;
-      pinchStartSizeRef.current = null;
-    };
-    
-    // Attach listeners to container
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd);
-    container.addEventListener('touchcancel', handleTouchCancel);
+    // מאזין ל-Wheel בשביל Trackpad
+    container.addEventListener('wheel', handleWheel, opts);
     
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchCancel);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('wheel', handleWheel);
+      
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
     };
-  }, [containerReady, setImageSize, minSize, maxSize]);
-  
-  return setGridContainerRef;
-}
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleWheel]);
 
+  // Store cleanup function
+  const cleanupRef = useRef(null);
+
+  useEffect(() => {
+    const container = gridContainerRef.current;
+    
+    // Clean up previous listeners if any
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    
+    // Attach listeners if container is available
+    if (container) {
+      cleanupRef.current = attachListeners();
+    }
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [attachListeners]);
+
+  return useCallback((node) => {
+     // Clean up previous listeners if container changed or being removed
+     if (cleanupRef.current) {
+       cleanupRef.current();
+       cleanupRef.current = null;
+     }
+     
+     gridContainerRef.current = node;
+     
+     // אתחול גם כאן למקרה של Remount
+     if (node) {
+         node.style.setProperty('--grid-scale', '1');
+         node.style.setProperty('--grid-z-index', '1');
+         
+         // Attach listeners immediately when ref is set
+         const cleanup = attachListeners();
+         if (cleanup) {
+           cleanupRef.current = cleanup;
+         }
+     }
+  }, [imageSize, attachListeners]);
+}

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FaceCard } from '../../components/groups';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
@@ -231,35 +232,35 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           </p>
         </motion.div>
       ) : (
-        <div ref={setGridContainerRef}>
-          <motion.div 
-            className={`gallery-grid size-${Math.round(cardSize * 100).toString().padStart(3, '0')}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(100, 175 * cardSize)}px, 1fr))`,
-              columnGap: `${Math.max(0.5, 0.25 + (cardSize - 0.75) * 0.3)}rem`,
-              rowGap: `${Math.max(0.75, 1.5 + (cardSize - 0.75) * 0.3)}rem`
-            }}
-          >
-          {filteredAndSortedGroups.map((group, index) => (
-            <motion.div
-              key={group.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-            >
-              <FaceCard
-                group={group}
-                cardSize={cardSize}
-                urlHelpers={urlHelpers}
-                eventUrl={eventUrl}
-              />
-            </motion.div>
-          ))}
-          </motion.div>
-        </div>
+        <AbsoluteMasonryGrid
+          items={filteredAndSortedGroups}
+          baseSize={Math.max(100, 175 * cardSize)}
+          imageClasses={{}}
+          containerHeight="auto"
+          className="w-full"
+          onPinchRef={setGridContainerRef}
+          style={{
+            '--grid-scale': 1,
+            '--grid-z-index': 1,
+          }}
+          onItemRef={(group, index, el) => {
+            // No specific ref handling needed for groups
+          }}
+          renderItem={(group, index, isPortrait, setRef) => {
+            return (
+              <div
+                style={{ width: '100%', height: '100%' }}
+              >
+                <FaceCard
+                  group={group}
+                  cardSize={cardSize}
+                  urlHelpers={urlHelpers}
+                  eventUrl={eventUrl}
+                />
+              </div>
+            );
+          }}
+        />
       )}
       </div>
     </div>

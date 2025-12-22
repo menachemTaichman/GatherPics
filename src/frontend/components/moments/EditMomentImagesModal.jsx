@@ -14,6 +14,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { formatDateTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
@@ -757,8 +758,22 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
 
         </div>
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
-            {filteredImages.map((image, index) => {
+          <AbsoluteMasonryGrid
+            items={filteredImages}
+            baseSize={120}
+            imageClasses={{}}
+            containerHeight="auto"
+            className="w-full"
+            style={{
+              '--grid-scale': 1,
+              '--grid-z-index': 1,
+            }}
+            onItemRef={(image, index, el) => {
+              if (el) {
+                imageRefs.current[index] = el;
+              }
+            }}
+            renderItem={(image, index, isPortrait, setRef) => {
               const selectionState = getImageSelectionState(image.id);
               const momentInfo = getImageMomentInfo(image.id);
               const isInPeriod = isImageInPeriod(image.id);
@@ -782,8 +797,10 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
               
               return (
                 <div
-                  key={image.id}
-                  ref={el => imageRefs.current[index] = el}
+                  className={`image-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
+                    isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
+                  }`}
+                  style={{ width: '100%', height: '100%' }}
                   onClick={() => toggleImage(image.id)}
                   onFocus={() => setFocusedImageIndex(index)}
                   onKeyDown={(e) => {
@@ -792,9 +809,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                       toggleImage(image.id);
                     }
                   }}
-                  className={`image-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
-                    isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
-                  }`}
                   tabIndex={0}
                   role="button"
                   aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
@@ -822,8 +836,8 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                   )}
                 </div>
               );
-            })}
-          </div>
+            }}
+          />
         </div>
       </motion.div>
     </div>

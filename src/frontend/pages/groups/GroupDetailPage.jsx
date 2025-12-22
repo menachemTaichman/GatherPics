@@ -20,6 +20,7 @@ import {
   Key,
 } from 'lucide-react';
 import { ImageViewer } from '../../components/images';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { useToast } from '../../contexts/ToastContext';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { MergeConflictModal, TransferFacesModal } from '../../components/groups';
@@ -170,6 +171,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const setImageSize = (value) => setPreference('general.size', value);
   const [showCrops, setShowCrops] = useState(false);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
+  
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
   const selectionMode = usePreference('general.select', false);
@@ -1822,108 +1838,110 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           </motion.div>
         ) : (
           <>
-            <div ref={setGridContainerRef} className="w-full">
-            <motion.div
-              className="w-full photo-gallery-grid"
-              style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
-              }}
-              initial={skipNextAnimation.current ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              onAnimationComplete={() => {
-                skipNextAnimation.current = false;
-              }}
-            >
-              {sortedImages.map((item, index) => {
-                // In faces mode, item is a face; in images mode, item is an image
-                const isFacesMode = showCrops;
-                const itemId = item.id;
-                const imageId = isFacesMode ? item.image_id : item.id;
-                const image = isFacesMode ? (() => {
-                  const store = useDataStore.getState();
-                  return store.entities?.[eventId]?.images?.[item.image_id];
-                })() : item;
-                
-                // In faces mode, item IS the face; in images mode, we don't need the face for display
-                let faceId = null;
-                if (isFacesMode) {
-                  faceId = item.id;
-                } else {
-                  // For images mode, find a face for the crop URL (if any)
-                  const store = useDataStore.getState();
-                  const facesSet = store.entities?.[eventId]?.groups?.[group.id]?.faces;
-                  if (facesSet) {
-                    const facesMap = store.entities?.[eventId]?.faces || {};
-                    const facesInImage = Array.from(facesSet)
-                      .map(fId => facesMap[fId])
-                      .filter(f => f && f.image_id === imageId)
-                      .sort((a, b) => {
-                        const sizeA = (a.face_width || 0) * (a.face_height || 0);
-                        const sizeB = (b.face_width || 0) * (b.face_height || 0);
-                        return sizeB - sizeA;
-                      });
-                    faceId = facesInImage[0]?.id || null;
+            <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '17rem'})`, marginTop: '1rem' }}>
+              <AbsoluteMasonryGrid
+                items={sortedImages}
+                baseSize={Math.max(60, 266 * imageSize)}
+                imageClasses={imageClasses}
+                containerHeight="100%"
+                className="w-full"
+                onPinchRef={setGridContainerRef}
+                style={{
+                  '--grid-scale': 1,
+                  '--grid-z-index': 1,
+                }}
+                onItemRef={(item, index, el) => {
+                  if (el) {
+                    const itemId = item.id;
+                    registerImageRef(itemId, el);
+                    // Store ref for arrow key navigation - find actual index
+                    const actualIndex = sortedImages.findIndex(img => img.id === itemId);
+                    if (actualIndex !== -1 && imageTileRefs.current[actualIndex] !== el) {
+                      imageTileRefs.current[actualIndex] = el;
+                    }
                   }
-                }
-                const isRep = group?.representative_face === faceId;
-                
-                return (
-                  <motion.div
-                    key={itemId || `unknown-${index}`}
-                    initial={skipNextAnimation.current ? false : { opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className={`photo-card ${(showCrops ? 'square' : (imageClasses[imageId] || 'square'))} relative`}
-                  >
-                    <SingleImageTile
-                      ref={(el) => {
-                        registerImageRef(itemId, el);
-                        // Store ref for arrow key navigation
-                        if (el && imageTileRefs.current[index] !== el) {
-                          imageTileRefs.current[index] = el;
-                        }
-                      }}
-                      image={image || item}
-                      aspectClass={showCrops ? 'square' : (imageClasses[imageId] || 'square')}
-                      imageFit={'cover'}
-                      thumbSrc={item.isPlaceholder ? null : (isFacesMode && urlHelpers ? urlHelpers.getFaceCropUrl(faceId) : (urlHelpers ? urlHelpers.getThumbnailUrl(imageId) : null))}
-                      selectionMode={selectionMode}
-                      isSelected={selectedImages.has(itemId)}
-                      onToggleSelect={(e) => toggleImageSelection(itemId, e)}
-                      onOpen={() => openImageViewer(itemId, index)}
-                      onImageLoad={showCrops ? undefined : ((e) => handleImageLoad(imageId, e))}
-                      showCropBadge={false}
-                      eventUrl={eventUrl}
-                      urlHelpers={urlHelpers}
-                      isHighlighted={isHighlighted(itemId)}
-                      showFavoriteButton={!isFacesMode}
-                      showArchiveButton={!isFacesMode}
-                      showRepresentativeButton={isFacesMode}
-                      isRepresentative={isRep}
-                      photoIndex={index}
-                      contextType="Person"
-                      contextLabel={group?.label}
-                      onSetRepresentative={isFacesMode ? (async () => {
-                        // Use ImageActions hook for setting representative
-                        await groupImageActions.setRepresentative(imageId, faceId);
-                      }) : undefined}
-                    />
-                    {/* Group label overlay for faces mode when filtering with at least one group */}
-                    {isFacesMode && filterGroups.length > 1 && (
-                      <div className={`absolute top-2 ${endClass('2')} bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium`}>
-                        {(() => {
-                          const store = useDataStore.getState();
-                          return store.entities?.[eventId]?.groups?.[item.group_id]?.label || `${t('groupDetail.person')} ${item.group_id}`;
-                        })()}
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </motion.div>
+                }}
+                renderItem={(item, index, isPortrait, setRef) => {
+                  // In faces mode, item is a face; in images mode, item is an image
+                  const isFacesMode = showCrops;
+                  const itemId = item.id;
+                  const imageId = isFacesMode ? item.image_id : item.id;
+                  const image = isFacesMode ? (() => {
+                    const store = useDataStore.getState();
+                    return store.entities?.[eventId]?.images?.[item.image_id];
+                  })() : item;
+                  
+                  // In faces mode, item IS the face; in images mode, we don't need the face for display
+                  let faceId = null;
+                  if (isFacesMode) {
+                    faceId = item.id;
+                  } else {
+                    // For images mode, find a face for the crop URL (if any)
+                    const store = useDataStore.getState();
+                    const facesSet = store.entities?.[eventId]?.groups?.[group.id]?.faces;
+                    if (facesSet) {
+                      const facesMap = store.entities?.[eventId]?.faces || {};
+                      const facesInImage = Array.from(facesSet)
+                        .map(fId => facesMap[fId])
+                        .filter(f => f && f.image_id === imageId)
+                        .sort((a, b) => {
+                          const sizeA = (a.face_width || 0) * (a.face_height || 0);
+                          const sizeB = (b.face_width || 0) * (b.face_height || 0);
+                          return sizeB - sizeA;
+                        });
+                      faceId = facesInImage[0]?.id || null;
+                    }
+                  }
+                  const isRep = group?.representative_face === faceId;
+                  
+                  // Find actual index in sortedImages
+                  const actualIndex = sortedImages.findIndex(img => img.id === itemId);
+                  
+                  return (
+                    <div
+                      className={`photo-card ${(showCrops ? 'square' : (imageClasses[imageId] || 'square'))} relative`}
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <SingleImageTile
+                        ref={setRef}
+                        image={image || item}
+                        aspectClass={showCrops ? 'square' : (imageClasses[imageId] || 'square')}
+                        imageFit={'cover'}
+                        thumbSrc={item.isPlaceholder ? null : (isFacesMode && urlHelpers ? urlHelpers.getFaceCropUrl(faceId) : (urlHelpers ? urlHelpers.getThumbnailUrl(imageId) : null))}
+                        selectionMode={selectionMode}
+                        isSelected={selectedImages.has(itemId)}
+                        onToggleSelect={(e) => toggleImageSelection(itemId, e)}
+                        onOpen={() => openImageViewer(itemId, actualIndex !== -1 ? actualIndex : 0)}
+                        onImageLoad={showCrops ? undefined : ((e) => handleImageLoad(imageId, e))}
+                        showCropBadge={false}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        isHighlighted={isHighlighted(itemId)}
+                        showFavoriteButton={!isFacesMode}
+                        showArchiveButton={!isFacesMode}
+                        showRepresentativeButton={isFacesMode}
+                        isRepresentative={isRep}
+                        photoIndex={actualIndex !== -1 ? actualIndex : 0}
+                        contextType="Person"
+                        contextLabel={group?.label}
+                        onSetRepresentative={isFacesMode ? (async () => {
+                          // Use ImageActions hook for setting representative
+                          await groupImageActions.setRepresentative(imageId, faceId);
+                        }) : undefined}
+                      />
+                      {/* Group label overlay for faces mode when filtering with at least one group */}
+                      {isFacesMode && filterGroups.length > 1 && (
+                        <div className={`absolute top-2 ${endClass('2')} bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-medium`}>
+                          {(() => {
+                            const store = useDataStore.getState();
+                            return store.entities?.[eventId]?.groups?.[item.group_id]?.label || `${t('groupDetail.person')} ${item.group_id}`;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }}
+              />
             </div>
             {hasMore && (
               <div className="text-center mt-8">

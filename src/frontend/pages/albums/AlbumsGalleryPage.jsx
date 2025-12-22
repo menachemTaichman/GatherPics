@@ -9,6 +9,7 @@ import { setPreference, getImageCount } from '../../utils/settings';
 import { albumsAPI } from '../../utils/apiService';
 import { useAlbumsList } from '../../utils/dataManager';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { useToast } from '../../contexts/ToastContext';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
@@ -413,30 +414,29 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
             </p>
           </motion.div>
         ) : (
-          <div ref={setGridContainerRef}>
-            <motion.div 
-              className="photo-gallery-grid"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * cardSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(120, 266 * cardSize)}px`
-              }}
-            >
-            {filteredAndSortedAlbums.map((album, index) => {
+          <AbsoluteMasonryGrid
+            items={filteredAndSortedAlbums}
+            baseSize={Math.max(120, 266 * cardSize)}
+            imageClasses={imageClasses}
+            containerHeight="auto"
+            className="w-full"
+            onPinchRef={setGridContainerRef}
+            style={{
+              '--grid-scale': 1,
+              '--grid-z-index': 1,
+            }}
+            onItemRef={(album, index, el) => {
+              // No specific ref handling needed for albums
+            }}
+            renderItem={(album, index, isPortrait, setRef) => {
               const imageSrc = urlHelpers?.getRepresentativeUrl 
                 ? `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}` 
                 : null;
               
               return (
-                <motion.div
-                  key={album.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.15 }}
+                <div
                   className={`photo-card ${imageClasses[album.id] || 'square'}`}
-                  style={{ transition: 'transform 0.2s ease-out' }}
+                  style={{ width: '100%', height: '100%', transition: 'transform 0.2s ease-out' }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
                   }}
@@ -469,11 +469,10 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
                       </div>
                     </div>
                   </Link>
-                </motion.div>
+                </div>
               );
-            })}
-            </motion.div>
-          </div>
+            }}
+          />
         ))}
       </div>
       

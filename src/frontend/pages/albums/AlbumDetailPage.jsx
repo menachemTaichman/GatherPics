@@ -19,6 +19,7 @@ import {
   Key
 } from 'lucide-react';
 import { ImageViewer, SingleImageTile } from '../../components/images';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { useToast } from '../../contexts/ToastContext';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { FloatingSelectionControls } from '../../components/layout';
@@ -79,8 +80,22 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
   // Pinch-to-zoom for mobile
-  const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
+  const setPinchRef = usePinchToZoom(imageSize, setImageSize);
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
   const [imageClasses, setImageClasses] = useState({});
@@ -716,10 +731,10 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   const next25 = Math.ceil(currentPercent / 25) * 25;
                 const prev25 = Math.floor((currentPercent - 1) / 25) * 25;
                 const subtract25 = currentPercent - 25;
-                const newPercent = Math.max(50, Math.max(subtract25, prev25));
+                const newPercent = Math.max(25, Math.max(subtract25, prev25));
                 setImageSize(newPercent / 100);
               }}
-              disabled={imageSize <= 0.5}
+              disabled={imageSize <= 0.25}
               className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('albumDetail.decreaseSize')}
               aria-label={t('albumDetail.decreaseSize')}
@@ -738,7 +753,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               onBlur={e => {
                 let val = parseInt(e.target.value, 10);
                 if (isNaN(val)) val = Math.round(imageSize * 100);
-                val = Math.max(50, Math.min(300, val));
+                val = Math.max(25, Math.min(300, val));
                 setImageSize(val / 100);
                 setImageSizeInputValue(undefined);
               }}
@@ -818,7 +833,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
       </div>
 
       {/* Content Area */}
-      <div className="px-4 sm:px-8 py-4 sm:py-8">
+      <div className="px-4 sm:px-8 pt-0 pb-0">
         {/* Photos Grid */}
         {loading ? (
           <div className="text-center py-12">
@@ -840,54 +855,59 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
             </p>
           </motion.div>
         ) : (
-          <div ref={setGridContainerRef} className="w-full">
-            <motion.div
-              className="w-full photo-gallery-grid"
+          <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
+            <AbsoluteMasonryGrid
+              items={sortedImages}
+              baseSize={Math.max(60, 266 * imageSize)}
+              imageClasses={imageClasses}
+              containerHeight="100%"
+              className="w-full"
+              onPinchRef={setPinchRef}
               style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(120, 266 * imageSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(120, 266 * imageSize)}px`
+                '--grid-scale': 1,
+                '--grid-z-index': 1,
               }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-            {sortedImages.map((image, index) => (
-              <motion.div
-                key={image.id || `unknown-${index}`}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className={`photo-card ${imageClasses[image.id] || 'square'}`}
-              >
-                <SingleImageTile
-                  ref={(el) => {
-                    registerImageRef(image.id, el);
-                    // Store ref for arrow key navigation
-                    if (el && imageTileRefs.current[index] !== el) {
-                      imageTileRefs.current[index] = el;
-                    }
-                  }}
-                  image={image}
-                  aspectClass={imageClasses[image.id] || 'square'}
-                  imageFit={'cover'}
-                  thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
-                  selectionMode={selectionMode}
-                  isSelected={selectedImages.has(image.id)}
-                  onToggleSelect={(e) => toggleImageSelection(image.id, e)}
-                  onOpen={() => openImageViewer(image.id, index)}
-                  onImageLoad={(e) => handleImageLoad(image.id, e)}
-                  showCropBadge={false}
-                  eventUrl={eventUrl}
-                  urlHelpers={urlHelpers}
-                  isHighlighted={isHighlighted(image.id)}
-                  photoIndex={index}
-                  contextType="Album"
-                  contextLabel={album?.label}
-                />
-              </motion.div>
-            ))}
-            </motion.div>
+              onItemRef={(image, index, el) => {
+                if (el) {
+                  registerImageRef(image.id, el);
+                  // Store ref for arrow key navigation - find actual index
+                  const actualIndex = sortedImages.findIndex(img => img.id === image.id);
+                  if (actualIndex !== -1 && imageTileRefs.current[actualIndex] !== el) {
+                    imageTileRefs.current[actualIndex] = el;
+                  }
+                }
+              }}
+              renderItem={(image, index, isPortrait, setRef) => {
+                // Find actual index in sortedImages
+                const actualIndex = sortedImages.findIndex(img => img.id === image.id);
+                return (
+                  <div
+                    className={`photo-card ${imageClasses[image.id] || 'square'}`}
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    <SingleImageTile
+                      ref={setRef}
+                      image={image}
+                      aspectClass={imageClasses[image.id] || 'square'}
+                      imageFit={'cover'}
+                      thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
+                      selectionMode={selectionMode}
+                      isSelected={selectedImages.has(image.id)}
+                      onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                      onOpen={() => openImageViewer(image.id, actualIndex !== -1 ? actualIndex : 0)}
+                      onImageLoad={(e) => handleImageLoad(image.id, e)}
+                      showCropBadge={false}
+                      eventUrl={eventUrl}
+                      urlHelpers={urlHelpers}
+                      isHighlighted={isHighlighted(image.id)}
+                      photoIndex={actualIndex !== -1 ? actualIndex : 0}
+                      contextType="Album"
+                      contextLabel={album?.label}
+                    />
+                  </div>
+                );
+              }}
+            />
           </div>
         )}
       </div>

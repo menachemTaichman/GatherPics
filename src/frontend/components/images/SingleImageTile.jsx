@@ -7,6 +7,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { generateImageAltText } from '../../utils/accessibility';
 import { formatTime } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
+import { usePreference } from '../../hooks/useSettings';
 
 const SingleImageTile = forwardRef(function SingleImageTile({
   image,
@@ -56,6 +57,30 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   // RTL support
   const { t } = useTranslation();
   const { isRTL } = useRTL();
+  
+  // Get zoom level and preference for hiding timestamps
+  const imageSize = usePreference('general.size', 1.0);
+  const hideTimestampsInGallery = usePreference('general.hideTimestampsInGallery', false);
+  
+  // Detect mobile vs desktop
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Determine if timestamp should be hidden based on zoom level
+  // Mobile: hide below 42% (0.42), Desktop: hide below 51% (0.51)
+  // If hideTimestampsInGallery is true, always hide (only affects above thresholds)
+  const shouldHideTimestamp = hideTimestampsInGallery || 
+    (isMobile ? imageSize <= 0.42 : imageSize <= 0.51);
   
   // Apply highlight styles
   const highlightStyle = isHighlighted ? {
@@ -243,7 +268,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-lg pointer-events-none"></div>
 
       {/* Date overlay - bottom-left in LTR, bottom-right in RTL */}
-      {showDate && (dateLabel || image?.date_taken) && (
+      {showDate && (dateLabel || image?.date_taken) && !shouldHideTimestamp && (
         <div className={`absolute bottom-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded ${
           isRTL ? 'right-2' : 'left-2'
         }`}>
@@ -304,6 +329,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
 // Memoize the component to prevent unnecessary re-renders
 // Only re-render if props actually change
 // Returns true if props are equal (skip re-render), false if different (re-render)
+// Note: imageSize and hideTimestampsInGallery are accessed via hooks inside the component,
+// so they don't need to be in the comparison - React will re-render when hooks change
 const MemoizedSingleImageTile = memo(SingleImageTile, (prevProps, nextProps) => {
   // Compare all relevant props that affect rendering
   // Note: urlHelpers and onToggleSelect/onOpen/onImageLoad are function references

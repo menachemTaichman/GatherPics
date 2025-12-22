@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useState, useRef, useCallback } from 'react';
 import { Image, Clock, Calendar, CheckCheck, X, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SingleImageTile } from '../images';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes } from '../../utils/storeUtils';
 import { useDataStore } from '../../utils/dataManager';
@@ -261,34 +262,33 @@ const MomentCard = forwardRef(({
             </div>
           </div>
           <div className="p-3 sm:p-4 md:p-6">
-            <motion.div
-              className="w-full photo-gallery-grid"
+            <AbsoluteMasonryGrid
+              items={images}
+              baseSize={Math.max(80, 266 * imageSize)}
+              imageClasses={imageClasses}
+              containerHeight="auto"
+              className="w-full"
               style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(80, 266 * imageSize)}px, 1fr))`,
-                gridAutoRows: `${Math.max(80, 266 * imageSize)}px`
+                '--grid-scale': 1,
+                '--grid-z-index': 1,
               }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {images.map((image, index) => {
+              onItemRef={(image, index, el) => {
+                if (el) {
+                  registerImageRef?.(image.id, el);
+                  // Store ref for arrow key navigation
+                  if (imageTileRefs.current[index] !== el) {
+                    imageTileRefs.current[index] = el;
+                  }
+                }
+              }}
+              renderItem={(image, index, isPortrait, setRef) => {
                 return (
-                <motion.div
-                  key={image.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
+                  <div
                     className={`photo-card ${imageClasses[image.id] || 'square'}`}
+                    style={{ width: '100%', height: '100%' }}
                   >
                     <SingleImageTile
-                      ref={(el) => {
-                        registerImageRef?.(image.id, el);
-                        // Store ref for arrow key navigation
-                        if (el && imageTileRefs.current[index] !== el) {
-                          imageTileRefs.current[index] = el;
-                        }
-                      }}
+                      ref={setRef}
                       image={image}
                       aspectClass={imageClasses[image.id] || 'square'}
                       thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
@@ -304,10 +304,10 @@ const MomentCard = forwardRef(({
                       contextType="Moment"
                       contextLabel={moment?.label || moment?.name}
                     />
-                  </motion.div>
+                  </div>
                 );
-              })}
-            </motion.div>
+              }}
+            />
           </div>
         </motion.div>
       </div>
