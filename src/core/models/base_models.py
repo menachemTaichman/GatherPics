@@ -216,12 +216,13 @@ class BaseModels(ABC):
 
         return valid_childs
 
-    def get_parents(self, child: str, entity_ids: list[str] | str, parents: list[str] | str | None = None) -> dict[str, list[str]] | list[str]:
+    def get_parents(self, child: str, entity_ids: list[str] | str, parents: list[str] | str | None = None, *, bypass_ctx: bool = False) -> dict[str, list[str]] | list[str]:
         """Get parents of a child.
         Args:
             child: child entity
             entity_ids: list of child ids or single child id
             parents: list of parent ids or single parent id or None to get all parents
+            bypass_ctx: if True, bypass the context table and use raw parent table
         Returns:
             if entity_ids is a single item, return the list of parent ids
             if entity_ids is a list, return dict of parents with parent ids as keys and list of child ids as values
@@ -251,7 +252,7 @@ class BaseModels(ABC):
         for parent in parents:
             id_field = self.db.get_id_field(parent)
             relation, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
-            ctx_relation = f'{relation}_ctx'
+            ctx_relation = f'{relation}_ctx' if not bypass_ctx else relation
             
             if return_format == ReturnFormat.LIST_TUPLES:
                 fields = f'r.{id_field}, r.{child_id_field}'

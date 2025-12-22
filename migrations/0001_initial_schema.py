@@ -709,7 +709,8 @@ step(
             'QUEUED',
             'PROCESSING',
             'READY',
-            'FAILED'
+            'FAILED',
+            'DELETING'
         ));
         """,
         """

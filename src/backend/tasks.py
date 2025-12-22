@@ -12,6 +12,7 @@ from src.backend.redis_client import get_redis_client
 from src.core.services.event import Event
 from src.core.errors import log_error
 from src.core.database.db import DB, ReturnFormat
+from src.core.audit_log import AuditAction, log_audit
 
 logger = get_task_logger(__name__)
 
@@ -280,3 +281,98 @@ def expire_pending_uploads_task():
             'expired_image_count': 0,
             'error': str(e)
         }
+
+@celery.task(name='delete_images_task')
+def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
+    """
+    Delete images from storage.
+
+    Args:
+        event_id: Event ID
+        profile_id: Profile ID (for context)
+        image_ids: List of image IDs to delete
+    """
+    try:
+        # Create Event instance
+        event = Event(event_id, profile_id=profile_id)
+        query = f"""
+            SELECT
+                i.image_id,
+                i.image_id,
+                i.event_id,
+                i.label,
+                i.status,
+                COUNT(f.face_id) as faces_count
+            FROM images i
+            LEFT JOIN faces f ON i.image_id = f.image_id
+            WHERE i.image_id IN ({','.join(['%s'] * len(image_ids))})
+            GROUP BY i.image_id, i.event_id, i.label, i.status;
+        """
+        images_details = event.models.db.execute_query(query, image_ids, return_format=ReturnFormat.DICT_DICTS)
+        image_ids = list(images_details.keys())
+        
+        query = f"""
+            SELECT face_id FROM faces WHERE image_id IN ({','.join(['%s'] * len(image_ids))});
+        """
+        face_ids = event.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_VALUES)
+        delete_aws_rekognition_faces_task.delay(event_id, profile_id, face_ids)
+
+        paths = []
+        for image_id, image_info in images_details.items():
+            if image_info['status'] != 'READY':
+                paths.append(f"{event.to_process_dir}/{image_id}.jpg")
+            paths.append(f"{event.original_dir}/{image_id}.jpg")
+            paths.append(f"{event.high_quality_dir}/{image_id}.jpg")
+            paths.append(f"{event.display_dir}/{image_id}.webp")
+            paths.append(f"{event.thumb_dir}/{image_id}.webp")
+
+        for face_id in face_ids:
+            paths.append(f"{event.faces_dir}/{face_id}.webp")
+
+        deleted = set(images_details.keys())
+        result = event.file_helper.delete_many(paths)
+        if result:
+            for failure in result:
+                if failure['code'] == '404':
+                    continue
+                else:
+                    error_msg = f"Error deleting object {failure['path']}: {failure['message']}"
+                    log_error(error_msg, "ObjectDeletionError", traceback.format_exc())
+                    image_id = failure['path'].split('/')[-1].split('.')[0]
+                    deleted.remove(image_id)
+                    images_details.pop(image_id)
+
+        if deleted:
+            log_audit(
+                action=AuditAction.IMAGE_DELETED,
+                actor_profile_id=profile_id,
+                details=images_details
+            )
+
+            query = f"""
+                DELETE FROM images WHERE image_id IN ({','.join(['%s'] * len(deleted))});
+                RETURNING image_id;
+            """
+            deleted_image_ids = event.models.db.execute_query(query, deleted, return_format=ReturnFormat.LIST_VALUES)
+
+            query = f"""
+                ANALYZE images; ANALYZE faces; ANALYZE groups;
+            """
+            event.models.db.execute_query(query)
+
+    except Exception as e:
+        error_msg = f"Error deleting objects for event {event_id}: {str(e)}"
+        log_error(error_msg, "ObjectDeletionError", traceback.format_exc())
+
+@celery.task(name='delete_aws_rekognition_faces_task')
+def delete_aws_rekognition_faces_task(event_id: str, profile_id: str, face_ids: list[str]):
+    """
+    Delete faces from AWS Rekognition.
+    """
+    try:
+        # Create Event instance
+        event = Event(event_id, profile_id=profile_id)
+        event.face_utils.rek_helper.delete_faces(face_ids)
+    except Exception as e:
+        error_msg = f"Error deleting faces for event {event_id}: {str(e)}"
+        log_error(error_msg, "FaceDeletionError", traceback.format_exc())

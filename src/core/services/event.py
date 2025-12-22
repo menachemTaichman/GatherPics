@@ -13,9 +13,10 @@ from src.core.errors import Forbidden, PolicyError
 from src.core.utils.face_utils import FaceUtils
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core.database.db import ReturnFormat
-from src.core import DATA_ROOT
 from src.core.audit_log import AuditAction, log_audit
 from src.core.storage import get_file_helper
+
+from src.core import DATA_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -516,80 +517,27 @@ class Event():
         if not self.models.is_accessible('images', image_ids):
             raise Forbidden(f"Some of the images are not accessible to the profile")
 
-        parents = {}
-        deleted_groups = set()
-        deleted_images_info = []
         actor_profile_id = self.models.db.profile_context.get('profile_id')
         
         # Get image info for audit logging
-        query = f"""
-            SELECT image_id, label, status
-            FROM images
-            WHERE image_id IN ({','.join(['%s'] * len(image_ids))});
-        """
-        images_details = self.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
-
-        for image_id, label, status in images_details:
-            image_parents = self.models.get_parents('images', image_id)
-            query = f"""
-                SELECT face_id FROM faces WHERE image_id = %s;
-            """
-            face_ids = self.models.db.execute_query(query, (image_id,), return_format=ReturnFormat.LIST_VALUES)
-            print(f'face_ids: {face_ids}')
-            if face_ids:
-                query = f"""
-                    DELETE FROM faces WHERE face_id IN ({','.join(['%s'] * len(face_ids))});
-                """
-                self.models.db.execute_query(query, face_ids)
-            query = f"""
-                DELETE FROM images WHERE image_id = %s;
-            """
-            self.models.db.execute_query(query, (image_id,))
-            self.face_utils.rek_helper.delete_faces(face_ids)
-            for face_id in face_ids:
-                face_path = f"{self.faces_dir}/{face_id}.webp"
-                self.file_helper.delete(face_path)
-
-            # Delete image files
-            if status != 'READY':
-                self.file_helper.delete(f"{self.to_process_dir}/{image_id}.jpg")
-            self.file_helper.delete(f"{self.original_dir}/{image_id}.jpg")
-            self.file_helper.delete(f"{self.high_quality_dir}/{image_id}.jpg")
-            self.file_helper.delete(f"{self.display_dir}/{image_id}.webp")
-            self.file_helper.delete(f"{self.thumb_dir}/{image_id}.webp")
-            
-            for group_id in image_parents.get('groups', set()):
-                if self.models.is_empty('groups', group_id):
-                    try:
-                        self.models.delete('groups', group_id)                    
-                        deleted_groups.add(group_id)
-                    except PolicyError as e:
-                        continue
-                    except Forbidden as e:
-                        continue
-                    
-                    set(image_parents.get('groups', set())).discard(group_id)
-                elif self.models.is_empty('groups', group_id, only_accessible=True):
-                    self.models.ensure_representative('groups', group_id)
-                    
-                    deleted_groups.add(group_id)
-                    set(image_parents.get('groups', set())).discard(group_id)
-
-            # Store image info for audit log
-            deleted_images_info.append({
-                'image_id': image_id,
-                'image_label': label,
-                'faces_count': len(face_ids)
-            })
-            
-            for entity, entity_ids in image_parents.items():
-                parents.setdefault(entity, set()).update(entity_ids)
-
-        query = f"""
-            SELECT set_transaction_context('include_pending_images', 'false');
-            ANALYZE images; ANALYZE faces; ANALYZE groups;
-        """
-        self.models.db.execute_query(query)
+        parents = self.models.get_parents('images', image_ids, bypass_ctx=True)
+        self.models.update_image_status(image_ids, 'DELETING')
+        
+        from src.backend.tasks import delete_images_task
+        delete_images_task.delay(self.event_id, actor_profile_id, image_ids)
+        
+        deleted_groups = []
+        for group_id in parents.get('groups', []):
+            if self.models.is_empty('groups', group_id):
+                try:
+                    self.models.delete('groups', group_id)                    
+                    deleted_groups.append(group_id)
+                except PolicyError as e:
+                    continue
+                except Forbidden as e:
+                    continue
+            elif self.models.is_empty('groups', group_id, only_accessible=True):
+                deleted_groups.append(group_id)
 
         for entity, entity_ids in parents.items():
             parents[entity] = list(entity_ids)
@@ -597,16 +545,4 @@ class Event():
                 self.models.ensure_representative(entity, entity_id)
         
         # Log audit events for each deleted image
-        for img_info in deleted_images_info:
-            log_audit(
-                action=AuditAction.IMAGE_DELETED,
-                actor_profile_id=actor_profile_id,
-                details={
-                    'image_id': img_info['image_id'],
-                    'image_label': img_info['image_label'],
-                    'event_id': self.event_id,
-                    'faces_count': img_info['faces_count'],
-                }
-            )
-                
         return list(deleted_groups), parents

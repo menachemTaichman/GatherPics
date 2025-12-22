@@ -6,6 +6,7 @@ Similar pattern to mock_rekognition.py for consistency.
 
 import os
 import shutil
+from itertools import islice
 from abc import ABC, abstractmethod
 from typing import BinaryIO, Optional
 from pathlib import Path
@@ -41,6 +42,11 @@ class StorageBackend(ABC):
         """Delete file."""
         pass
     
+    @abstractmethod
+    def delete_many(self, paths: list[str]) -> list[dict]:
+        """Delete many files."""
+        pass
+
     @abstractmethod
     def copy(self, source_path: str, dest_path: str, content_type: Optional[str] = None) -> None:
         """Copy file from source to destination (efficient server-side copy when possible)."""
@@ -144,6 +150,19 @@ class LocalStorageBackend(StorageBackend):
         full_path = self._get_full_path(path)
         if full_path.exists():
             full_path.unlink()
+    
+    def delete_many(self, paths: list[str]) -> list[dict]:
+        failures = []
+        for path in paths:
+            try:
+                self.delete(path)
+            except Exception as e:
+                failures.append({
+                    "path": path,
+                    "code": e.code,
+                    "message": str(e)
+                })
+        return failures
     
     def copy(self, source_path: str, dest_path: str, content_type: Optional[str] = None) -> None:
         """Copy file from source to destination (content_type ignored for local storage)."""
@@ -317,6 +336,38 @@ class S3StorageBackend(StorageBackend):
         except ClientError:
             pass  # Ignore if already deleted
     
+    def delete_many(self, paths: list[str]) -> list[dict]:
+        """
+        Delete many files.
+        Returns list of failures (dicts with 'path', 'code', 'message')
+        """
+        def chunks(iterable, size=1000):
+            it = iter(iterable)
+            while True:
+                chunk = list(islice(it, size))
+                if not chunk:
+                    break
+                yield chunk
+
+        failures = []
+        for batch in chunks(paths):
+            response = self.s3_client.delete_objects(
+                Bucket=self.bucket_name,
+                Delete={
+                    "Objects": [{"Key": self._get_key(p)} for p in batch],
+                    "Quiet": True
+                }
+            )
+
+            for err in response.get("Errors", []):
+                failures.append({
+                    "path": err.get("Key"),
+                    "code": err.get("Code"),
+                    "message": err.get("Message"),
+                })
+
+        return failures
+
     def copy(self, source_path: str, dest_path: str, content_type: Optional[str] = None) -> None:
         """Copy file from source to destination using S3 copy_object (efficient server-side copy)."""
         source_key = self._get_key(source_path)

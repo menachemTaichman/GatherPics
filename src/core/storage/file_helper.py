@@ -61,6 +61,10 @@ class FileHelper:
         """Delete file."""
         self.storage.delete(path)
     
+    def delete_many(self, paths: list[str]) -> list[dict]:
+        """Delete many files. Returns list of failures (dicts with 'path', 'code', 'message')."""
+        return self.storage.delete_many(paths)
+    
     def get_file_path(self, path: str) -> str:
         """
         Get full filesystem path for local storage.

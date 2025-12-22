@@ -406,16 +406,20 @@ class EventModels(BaseModels):
         result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_DICTS)
         return result
 
-    def update_image_status(self, image_id: str, status: str):
+    def update_image_status(self, image_ids: str | list[str], status: str):
         """Update image status.
         Args:
-            image_id: image id
-            status: new status (PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED)
+            image_ids: image id or list of image ids
+            status: new status (PENDING_UPLOAD, QUEUED, PROCESSING, READY, FAILED, DELETING)
         """
+        if isinstance(image_ids, str):
+            image_ids = [image_ids]
+
+        placeholders = ','.join(['%s'] * len(image_ids))
         query = f"""
-            UPDATE images SET status = %s WHERE image_id = %s;
+            UPDATE images SET status = %s WHERE image_id IN ({placeholders});
         """
-        self.db.execute_query(query, (status, image_id))
+        self.db.execute_query(query, [status] + image_ids)
     
     def get_ready_face_ids_in_upload(self, upload_id: int) -> list[str]:
         """Get ready face ids from images in an upload.
