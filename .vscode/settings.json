@@ -10,5 +10,13 @@
             "source": "PowerShell",
             "args": []
         }
+    },
+    "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true,
+    "**/tmp/**": true,
+    "**/dist/**": true,
+    "**/__pycache__/**": true
     }
 }
