@@ -809,7 +809,8 @@ step(
             ('SettingsPage', 'auditFilterAction', 'str', 'all'),
             ('SettingsPage', 'auditSortBy', 'str', 'timestamp'),
             ('SettingsPage', 'auditSortDir', 'str', 'desc'),
-            ('general', 'language', 'str', 'en')
+            ('general', 'language', 'str', 'en'),
+            ('general', 'hideTimestampsInGallery', 'bool', '0')
         ON CONFLICT (preference_group, preference_key) DO NOTHING;
         
         -- Insert default preferences into profiles_preferences for all profiles

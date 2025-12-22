@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Archive, User, UserCircle, Edit2, Plus, LogOut, Lock, Trash2, FileText, Eye, Check, MessageSquare } from 'lucide-react';
+import { X, Archive, User, UserCircle, Edit2, Plus, LogOut, Lock, Trash2, FileText, Eye, Check, MessageSquare, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
@@ -29,6 +29,7 @@ export default function AccountModal({ hideButton = false }) {
   const { isRTL, ms, me } = useRTL();
   const [isOpen, setIsOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(getPreference('general.includeArchived', false));
+  const [hideTimestampsInGallery, setHideTimestampsInGallery] = useState(getPreference('general.hideTimestampsInGallery', false));
   const params = useParams();
   const location = useLocation();
   
@@ -216,6 +217,11 @@ export default function AccountModal({ hideButton = false }) {
   const handleIncludeArchivedChange = (checked) => {
     setIncludeArchived(checked);
     setPreference('general.includeArchived', checked);
+  };
+
+  const handleHideTimestampsInGalleryChange = (checked) => {
+    setHideTimestampsInGallery(checked);
+    setPreference('general.hideTimestampsInGallery', checked);
   };
 
   const handleSignOut = async () => {
@@ -474,32 +480,57 @@ export default function AccountModal({ hideButton = false }) {
                       )}
                     </div>
 
-                    {/* Include Archived */}
-                    <PermissionGate requires="hasArchiveAlbum" eventUrl={eventUrl}>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('account.galleryPreferences')}</h4>
+                    {/* Gallery Preferences */}
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('account.galleryPreferences')}</h4>
+                      <div className="space-y-2">
+                        {/* Include Archived */}
+                        <PermissionGate requires="hasArchiveAlbum" eventUrl={eventUrl}>
+                          <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                                <Archive className="w-5 h-5 text-gray-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">{t('account.includeArchived')}</p>
+                                <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleIncludeArchivedChange(!includeArchived)}
+                              className={`w-10 h-6 rounded-full relative transition-colors ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
+                              aria-pressed={includeArchived}
+                              title={t('account.includeArchived')}
+                              aria-label={t('account.includeArchived')}
+                            >
+                              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${includeArchived ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                            </button>
+                          </div>
+                        </PermissionGate>
+                        
+                        {/* Hide Timestamps in Gallery */}
                         <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
-                              <Archive className="w-5 h-5 text-gray-600" />
+                              <Clock className="w-5 h-5 text-gray-600" />
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900">{t('account.includeArchived')}</p>
-                              <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
+                              <p className="font-medium text-gray-900">{t('account.hideTimestampsInGallery')}</p>
+                              <p className="text-sm text-gray-500">{t('account.hideTimestampsInGalleryDescription')}</p>
                             </div>
                           </div>
                           <button
-                            onClick={() => handleIncludeArchivedChange(!includeArchived)}
-                            className={`w-10 h-6 rounded-full relative transition-colors ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
-                            aria-pressed={includeArchived}
-                            title={t('account.includeArchived')}
-                            aria-label={t('account.includeArchived')}
+                            onClick={() => handleHideTimestampsInGalleryChange(!hideTimestampsInGallery)}
+                            className={`w-10 h-6 rounded-full relative transition-colors ${hideTimestampsInGallery ? 'bg-primary-600' : 'bg-gray-300'}`}
+                            aria-pressed={hideTimestampsInGallery}
+                            title={t('account.hideTimestampsInGallery')}
+                            aria-label={t('account.hideTimestampsInGallery')}
                           >
-                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${includeArchived ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${hideTimestampsInGallery ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
                           </button>
                         </div>
                       </div>
-                    </PermissionGate>
+                    </div>
 
                     {/* My Requests Section - only show if there are requests or new requests are enabled */}
                     {(() => {

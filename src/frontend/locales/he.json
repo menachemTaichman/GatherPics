@@ -65,6 +65,8 @@
     "galleryPreferences": "העדפות גלריה",
     "includeArchived": "כלול ארכיון",
     "showArchivedImages": "הצג תמונות מארכיון בגלריות",
+    "hideTimestampsInGallery": "הסתר חותמות זמן בגלריה",
+    "hideTimestampsInGalleryDescription": "הסתר תמיד חותמות זמן על תמונות בגלריות",
     "myRequests": "הבקשות שלי",
     "createRequest": "צור בקשה",
     "noRequestsYet": "אין בקשות עדיין",

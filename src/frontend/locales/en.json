@@ -65,6 +65,8 @@
     "galleryPreferences": "Gallery Preferences",
     "includeArchived": "Include Archived",
     "showArchivedImages": "Show archived images in galleries",
+    "hideTimestampsInGallery": "Hide Timestamps in Gallery",
+    "hideTimestampsInGalleryDescription": "Always hide timestamps on images in galleries",
     "myRequests": "My Requests",
     "createRequest": "Create Request",
     "noRequestsYet": "No requests yet",
