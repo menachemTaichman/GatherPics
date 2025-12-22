@@ -1,4 +1,4 @@
-import React, { forwardRef, useState, useEffect } from 'react';
+import React, { forwardRef, useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../../hooks/useImage.jsx';
@@ -301,7 +301,37 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   );
 });
 
-export default SingleImageTile;
+// Memoize the component to prevent unnecessary re-renders
+// Only re-render if props actually change
+// Returns true if props are equal (skip re-render), false if different (re-render)
+const MemoizedSingleImageTile = memo(SingleImageTile, (prevProps, nextProps) => {
+  // Compare all relevant props that affect rendering
+  // Note: urlHelpers and onToggleSelect/onOpen/onImageLoad are function references
+  // that may change but we compare by their effect (image id, selection state, etc.)
+  const propsEqual = (
+    prevProps.image?.id === nextProps.image?.id &&
+    prevProps.aspectClass === nextProps.aspectClass &&
+    prevProps.thumbSrc === nextProps.thumbSrc &&
+    prevProps.selectionMode === nextProps.selectionMode &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isHighlighted === nextProps.isHighlighted &&
+    prevProps.showFavoriteButton === nextProps.showFavoriteButton &&
+    prevProps.showArchiveButton === nextProps.showArchiveButton &&
+    prevProps.showCheckbox === nextProps.showCheckbox &&
+    prevProps.showRepresentativeButton === nextProps.showRepresentativeButton &&
+    prevProps.isRepresentative === nextProps.isRepresentative &&
+    prevProps.imageFit === nextProps.imageFit &&
+    prevProps.eventUrl === nextProps.eventUrl &&
+    prevProps.photoIndex === nextProps.photoIndex &&
+    prevProps.contextType === nextProps.contextType &&
+    prevProps.contextLabel === nextProps.contextLabel
+  );
+  
+  // Return true if props are equal (skip re-render), false if different (re-render)
+  return propsEqual;
+});
+
+export default MemoizedSingleImageTile;
 
 
 
