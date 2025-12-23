@@ -1031,6 +1031,15 @@ export default function UploadFormModal({
               )}
             </AnimatePresence>
 
+            {/* Note about data changes - only show after upload completed/failed */}
+            {(existingUploadStatus === 'COMPLETED' || existingUploadStatus === 'FAILED' || (uploadProgress && (uploadProgress.step === 'complete' || uploadProgress.step === 'error'))) && (
+              <div className="px-6 py-2 border-b border-gray-200">
+                <div className="text-xs text-gray-500 italic text-center">
+                  {t('uploadDetail.dataMayHaveChanged')}
+                </div>
+              </div>
+            )}
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {/* Upload limits info */}

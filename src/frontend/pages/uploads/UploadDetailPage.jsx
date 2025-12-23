@@ -48,6 +48,20 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const setImageSize = (value) => setPreference('general.size', value);
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
   // Pinch-to-zoom for mobile
   const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
   const [expandedGroup, setExpandedGroup] = useState(null); // Single group ID
@@ -1115,7 +1129,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       </div>
 
       {/* Content Area */}
-      <div className="px-4 sm:px-8 py-4 sm:py-8 overflow-x-auto">
+      <div className="px-4 sm:px-8 pt-0 pb-0 overflow-x-auto">
         <AnimatePresence mode="wait">
           {mode === 'images' && (
             <motion.div
@@ -1131,51 +1145,53 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   <p className="text-gray-500">{t('uploadDetail.noImagesInThisUpload')}</p>
                 </div>
               ) : (
-                <AbsoluteMasonryGrid
-                  items={uploadImages}
-                  baseSize={Math.max(100, 266 * imageSize * 0.75)}
-                  imageClasses={imageClasses}
-                  containerHeight="auto"
-                  className="w-full"
-                  onPinchRef={setGridContainerRef}
-                  style={{
-                    '--grid-scale': 1,
-                    '--grid-z-index': 1,
-                  }}
-                  onItemRef={(img, index, el) => {
-                    if (el && imageTileRefs.current[index] !== el) {
-                      imageTileRefs.current[index] = el;
-                    }
-                  }}
-                  renderItem={(img, index, isPortrait, setRef) => {
-                    return (
-                      <div
-                        className={`photo-card ${imageClasses[img.id] || 'square'}`}
-                        style={{ width: '100%', height: '100%' }}
-                      >
-                        <SingleImageTile
-                          ref={setRef}
-                          image={img}
-                          aspectClass={imageClasses[img.id] || 'square'}
-                          imageFit="cover"
-                          thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
-                          selectionMode={selectionMode}
-                          isSelected={currentSelection.has(img.id)}
-                          onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                          onOpen={() => openImageViewerInUpload(img.id, index)}
-                          onImageLoad={(e) => handleImageLoad(img.id, e)}
-                          eventUrl={eventUrl}
-                          urlHelpers={urlHelpers}
-                          showFavoriteButton={false}
-                          showArchiveButton={false}
-                          photoIndex={index}
-                          contextType="Upload"
-                          contextLabel={upload?.profile_label || uploadId}
-                        />
-                      </div>
-                    );
-                  }}
-                />
+                <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
+                  <AbsoluteMasonryGrid
+                    items={uploadImages}
+                    baseSize={Math.max(60, 266 * imageSize)}
+                    imageClasses={imageClasses}
+                    containerHeight="100%"
+                    className="w-full"
+                    onPinchRef={setGridContainerRef}
+                    style={{
+                      '--grid-scale': 1,
+                      '--grid-z-index': 1,
+                    }}
+                    onItemRef={(img, index, el) => {
+                      if (el && imageTileRefs.current[index] !== el) {
+                        imageTileRefs.current[index] = el;
+                      }
+                    }}
+                    renderItem={(img, index, isPortrait, setRef) => {
+                      return (
+                        <div
+                          className={`photo-card ${imageClasses[img.id] || 'square'}`}
+                          style={{ width: '100%', height: '100%' }}
+                        >
+                          <SingleImageTile
+                            ref={setRef}
+                            image={img}
+                            aspectClass={imageClasses[img.id] || 'square'}
+                            imageFit="cover"
+                            thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getThumbnailUrl?.(img.id))}
+                            selectionMode={selectionMode}
+                            isSelected={currentSelection.has(img.id)}
+                            onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                            onOpen={() => openImageViewerInUpload(img.id, index)}
+                            onImageLoad={(e) => handleImageLoad(img.id, e)}
+                            eventUrl={eventUrl}
+                            urlHelpers={urlHelpers}
+                            showFavoriteButton={false}
+                            showArchiveButton={false}
+                            photoIndex={index}
+                            contextType="Upload"
+                            contextLabel={upload?.profile_label || uploadId}
+                          />
+                        </div>
+                      );
+                    }}
+                  />
+                </div>
               )}
             </motion.div>
           )}
@@ -1319,7 +1335,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                 <div style={{ height: '400px', marginTop: '0.5rem' }}>
                                   <AbsoluteMasonryGrid
                                     items={groupFaces}
-                                    baseSize={Math.max(100, 266 * imageSize * 0.75)}
+                                    baseSize={Math.max(60, 266 * imageSize)}
                                     imageClasses={imageClasses}
                                     containerHeight="100%"
                                     className="w-full"
@@ -1469,7 +1485,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                 <div style={{ height: '400px', marginTop: '0.5rem' }}>
                                   <AbsoluteMasonryGrid
                                     items={momentImages}
-                                    baseSize={Math.max(100, 266 * imageSize * 0.75)}
+                                    baseSize={Math.max(60, 266 * imageSize)}
                                     imageClasses={imageClasses}
                                     containerHeight="100%"
                                     className="w-full"
@@ -1531,11 +1547,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Note about data changes */}
-        <div className="mt-6 text-xs text-gray-500 italic text-center">
-          {t('uploadDetail.dataMayHaveChanged')}
-        </div>
       </div>
 
       {/* Floating Selection Controls - using component for all modes */}

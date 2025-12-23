@@ -1815,7 +1815,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
       </div>
 
       {/* Content Area */}
-      <div className="px-4 sm:px-8 py-4 sm:py-8">
+      <div className="px-4 sm:px-8 pt-0 pb-0">
         {/* Photos Grid/List */}
         {loading ? (
           <div className="text-center py-12">
@@ -1838,7 +1838,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           </motion.div>
         ) : (
           <>
-            <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '17rem'})`, marginTop: '1rem' }}>
+            <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
               <AbsoluteMasonryGrid
                 items={sortedImages}
                 baseSize={Math.max(60, 266 * imageSize)}

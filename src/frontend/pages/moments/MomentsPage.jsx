@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare } from 'lucide-react';
+import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare, ChevronDown, ChevronUp } from 'lucide-react';
 import { ImageViewer } from '../../components/images';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
-import { EditMomentsModal, MoveToMomentModal, MomentCard } from '../../components/moments';
+import { EditMomentsModal, MoveToMomentModal } from '../../components/moments';
 import { FloatingSelectionControls } from '../../components/layout';
 import { Toast, PermissionGate } from '../../components/common';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -13,13 +13,12 @@ import { setPreference } from '../../utils/settings';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { shallow } from 'zustand/shallow';
-import { momentsAPI } from '../../utils/apiService';
+import { momentsAPI, imagesAPI } from '../../utils/apiService';
 import useImageActions from '../../components/images/ImageActions';
-import timelineManager from '../../utils/timeline';
 import useBucketStore from '../../utils/bucketStore';
 import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { sortMoments } from '../../utils/sorting';
+import { sortMoments, sortImages } from '../../utils/sorting';
 import { getImageCount } from '../../utils/settings';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useImageHighlight } from '../../hooks/useImageHighlight';
@@ -29,6 +28,8 @@ import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils'
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
+import { SingleImageTile } from '../../components/images';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
 
@@ -43,7 +44,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const { t } = useTranslation();
   const { isRTL, startClass, endClass } = useRTL();
   
-  // Apply scope for all moments - memoized to ensure proper cleanup
+  // Apply scope for all moments and images - memoized to ensure proper cleanup
   const momentsScopes = useMemo(() => {
     if (!eventId) return [];
     return [{ entity: 'all', id: 'moments', eventId }];
@@ -51,6 +52,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   useApplyScopes(momentsScopes);
   
   const storeMoments = useDataStore(state => storeSelectors.momentsAll(state, eventId), shallow);
+  
+  // Get all images from store (they should have moment_id field)
+  const storeImages = useDataStore(state => storeSelectors.imagesAll(state, eventId), shallow);
   
   // Create placeholder moments when not authenticated
   const placeholderMoments = useMemo(() => {
@@ -94,11 +98,37 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const [imageSizeInputValue, setImageSizeInputValue] = useState();
   
   // Pinch-to-zoom for mobile
-  const setGridContainerRef = usePinchToZoom(imageSize, setImageSize);
+  const setPinchRef = usePinchToZoom(imageSize, setImageSize);
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const carouselVisible = usePreference('Moments.carouselExpanded', true);
-  const setCarouselVisible = (value) => setPreference('Moments.carouselExpanded', value);
+  const [carouselVisible, setCarouselVisible] = useState(false);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
+  
+  // State for image aspect ratio classes
+  const [imageClasses, setImageClasses] = useState({});
+  const imageClassesRef = useRef(imageClasses);
+  useEffect(() => { imageClassesRef.current = imageClasses; }, [imageClasses]);
+  const pendingClassUpdatesRef = useRef({});
+  const flushClassesRafRef = useRef(null);
+  
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Refs for arrow key navigation
+  const imageTileRefs = useRef([]);
+  const gridContainerRef = useRef(null);
+  const headerRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const { toast, showToast, hideToast } = useToast();
   const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
@@ -109,54 +139,114 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     defaultSortOrder: 'asc',
     urlHelpers,
   });
+  
   const { addImages, open } = useBucketStore();
   
   // Image highlight hook for navigation
   const { highlightedIds, registerImageRef } = useImageHighlight();
   
-  // Moment-level scrolling
-  const momentRefsMap = useRef(new Map());
-  useEffect(() => {
-    const highlightMoment = location.state?.highlightMoment;
-    if (highlightMoment) {
-      // Wait a bit for moment to render
-      const scrollTimeout = setTimeout(() => {
-        const momentElement = momentRefsMap.current.get(highlightMoment);
-        if (momentElement) {
-          momentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 200);
-      return () => clearTimeout(scrollTimeout);
-    }
-  }, [location.key]);
-  
   // Selection mode and state
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
 
-  // Get all images across all moments for selection
-  // We'll collect images from the store directly since we can't call hooks in loops
-  const allImages = useMemo(() => {
-    const images = [];
+  // Get all images sorted by moment and date
+  // Images should have moment_id field from backend
+  const sortedImages = useMemo(() => {
+    if (!isAuthenticated || !storeImages.length) return EMPTY_ARRAY;
     
+    // Filter images by archived status and ensure they have moment_id
+    const filteredImages = storeImages.filter(image => {
+      if (!image) return false;
+      if (!includeArchived && image.is_archived) return false;
+      // Only include images that belong to a moment
+      return image.moment_id && moments.some(m => m.id === image.moment_id);
+    });
+    
+    // Group by moment and sort within each moment
+    const momentMap = new Map();
     moments.forEach(moment => {
-      const momentImages = entities?.[eventId]?.moments?.[moment.id]?.images;
-      if (momentImages && momentImages instanceof Set) {
-        Array.from(momentImages).forEach(imageId => {
-          const image = entities?.[eventId]?.images?.[imageId];
-          if (image && (includeArchived || !image.is_archived)) {
-            images.push({ 
-              key: `${moment.id}:${image.id}`, 
-              group: moment.id,
-              image: image 
-            });
-          }
-        });
+      momentMap.set(moment.id, []);
+    });
+    
+    filteredImages.forEach(image => {
+      if (image.moment_id && momentMap.has(image.moment_id)) {
+        momentMap.get(image.moment_id).push(image);
       }
     });
     
-    return images;
-  }, [moments, includeArchived, entities]);
+    // Sort images within each moment by date, then combine
+    const sorted = [];
+    moments.forEach(moment => {
+      const momentImages = momentMap.get(moment.id) || [];
+      const sortedMomentImages = sortImages(momentImages, 'date', 'asc');
+      sorted.push(...sortedMomentImages);
+    });
+    
+    return sorted;
+  }, [storeImages, moments, includeArchived, isAuthenticated]);
+  
+  // Calculate moment indexes (first index of each moment in sortedImages)
+  const momentIndexes = useMemo(() => {
+    const indexes = new Map();
+    let currentIndex = 0;
+    
+    moments.forEach(moment => {
+      const momentImages = sortedImages.filter(img => img.moment_id === moment.id);
+      if (momentImages.length > 0) {
+        indexes.set(moment.id, currentIndex);
+        currentIndex += momentImages.length;
+      }
+    });
+    
+    return indexes;
+  }, [moments, sortedImages]);
+  
+  // Get all images for selection (with moment_id key)
+  const allImages = useMemo(() => {
+    return sortedImages.map(image => ({
+      key: `${image.moment_id}:${image.id}`,
+      group: image.moment_id,
+      image: image
+    }));
+  }, [sortedImages]);
+  
+  // Create items array with headers inserted between moments
+  const itemsWithHeaders = useMemo(() => {
+    if (sortedImages.length === 0) return [];
+    
+    const items = [];
+    let currentMomentId = null;
+    
+    sortedImages.forEach((image, index) => {
+      // If this is the first image of a new moment, add a header
+      if (image.moment_id !== currentMomentId) {
+        const moment = moments.find(m => m.id === image.moment_id);
+        if (moment) {
+          // Increase header height when selection mode is active to account for selected count display
+          // Use larger height on mobile to account for text wrapping
+          const headerHeight = selectionMode 
+            ? (isMobile ? 120 : 100)  // More space on mobile for wrapped text
+            : (isMobile ? 90 : 80);   // Slightly more on mobile even without selection
+          items.push({
+            id: `header-${moment.id}`,
+            isHeader: true,
+            headerHeight: headerHeight,
+            moment: moment,
+            momentId: moment.id
+          });
+        }
+        currentMomentId = image.moment_id;
+      }
+      items.push(image);
+    });
+    
+    return items;
+  }, [sortedImages, moments]);
+  
+  // Update refs array when sortedImages changes
+  useEffect(() => {
+    imageTileRefs.current = imageTileRefs.current.slice(0, sortedImages.length);
+  }, [sortedImages.length]);
 
   const {
     selectedKeys,
@@ -174,65 +264,91 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     enableRange: true,
     groupKey: (it) => it.group,
   });
+  
+  // Measure header height for carousel positioning
+  useEffect(() => {
+    const updateHeaderHeight = () => {
+      if (headerRef.current) {
+        setHeaderHeight(headerRef.current.offsetHeight);
+      }
+    };
+    updateHeaderHeight();
+    window.addEventListener('resize', updateHeaderHeight);
+    return () => window.removeEventListener('resize', updateHeaderHeight);
+  }, [carouselVisible]); // Re-measure when carousel visibility changes (header might expand)
+
+  // Detect current visible moment based on scroll position
+  useEffect(() => {
+    const gridContainer = gridContainerRef.current;
+    if (!gridContainer || sortedImages.length === 0) return;
+    
+    const handleScroll = () => {
+      const containerRect = gridContainer.getBoundingClientRect();
+      const scrollTop = gridContainer.scrollTop;
+      const viewportCenter = scrollTop + containerRect.height / 2;
+      
+      // Find which moment's images are in the viewport center
+      let currentMoment = null;
+      for (const moment of moments) {
+        const firstIndex = momentIndexes.get(moment.id);
+        if (firstIndex === undefined) continue;
+        
+        const momentImageCount = sortedImages.filter(img => img.moment_id === moment.id).length;
+        if (momentImageCount === 0) continue;
+        
+        // Estimate the position range for this moment's images
+        // This is approximate since we don't have exact positions without rendering
+        const imageElement = imageTileRefs.current[firstIndex];
+        if (imageElement) {
+          const imageRect = imageElement.getBoundingClientRect();
+          const containerRect = gridContainer.getBoundingClientRect();
+          const relativeTop = imageRect.top - containerRect.top + gridContainer.scrollTop;
+          
+          // If the first image of this moment is in the viewport, consider it current
+          if (relativeTop <= viewportCenter && relativeTop >= scrollTop - 200) {
+            currentMoment = moment;
+            break;
+          }
+        }
+      }
+      
+      // Fallback: find moment by checking which images are visible
+      if (!currentMoment) {
+        for (let i = 0; i < imageTileRefs.current.length; i++) {
+          const element = imageTileRefs.current[i];
+          if (!element) continue;
+          
+          const rect = element.getBoundingClientRect();
+          const containerRect = gridContainer.getBoundingClientRect();
+          
+          if (rect.top >= containerRect.top && rect.top <= containerRect.bottom) {
+            const image = sortedImages[i];
+            if (image) {
+              currentMoment = moments.find(m => m.id === image.moment_id);
+              if (currentMoment) break;
+            }
+          }
+        }
+      }
+      
+      if (currentMoment && currentMoment.id !== currentVisibleMoment?.id) {
+        setCurrentVisibleMoment(currentMoment);
+      }
+    };
+    
+    gridContainer.addEventListener('scroll', handleScroll, { passive: true });
+    // Initial check
+    handleScroll();
+    
+    return () => {
+      gridContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [sortedImages, moments, momentIndexes, currentVisibleMoment]);
 
 
-  const momentsRef = useRef({});
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
-  const navigateRef = useRef(navigate);
-  const momentsRefForCallback = useRef(moments);
-  const momentsReadyCalled = useRef(false);
 
-
-  // Update the ref when navigate changes
-  useEffect(() => {
-    navigateRef.current = navigate;
-  }, [navigate]);
-
-  // Update moments ref for callback
-  useEffect(() => {
-    momentsRefForCallback.current = moments;
-  }, [moments]);
-
-  // Initialize timeline manager when component mounts
-	useEffect(() => {
-		if (!eventId) return; // Wait for eventId
-		
-		// Initialize timeline manager but don't handle URL yet (moments not ready)
-		timelineManager.init(`/${eventUrl}/timeline`, '.sticky.top-\\[4\\.5rem\\]', (momentKey) => {
-			// Callback from timeline manager when moment changes
-			const moment = momentsRefForCallback.current.find(m => m.label === momentKey);
-			if (moment) {
-				setCurrentVisibleMoment(moment);
-			}
-		}, false, eventId); // Pass eventId to timeline manager
-		
-		return () => {
-			timelineManager.destroy();
-		};
-	}, [eventUrl, eventId]);
-
-  // Clean up refs when moments change
-  useEffect(() => {
-    // Clear old refs
-    momentsRef.current = {};
-  }, [moments]);
-
-
-  // Callback ref function to set refs for moment elements
-  const setMomentRef = useCallback((momentIdOrName) => (element) => {
-    if (element) {
-      momentsRef.current[momentIdOrName] = element;
-      momentRefsMap.current.set(momentIdOrName, element);
-      // Register with timeline manager using name key
-      timelineManager.registerMoment(momentIdOrName, element);
-    } else {
-      // Clean up ref when element is unmounted
-      delete momentsRef.current[momentIdOrName];
-      timelineManager.unregisterMoment(momentIdOrName);
-    }
-  }, []);
-
-  // Define fetchMoments before using it in useAuthRefresh
+  // Define fetchMoments and fetchImages before using it in useAuthRefresh
   const fetchMoments = useCallback(async () => {
     if (!eventUrl) return;
     try {
@@ -246,6 +362,77 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       setStoreLoading(false);
     }
   }, [eventUrl]);
+  
+  const fetchImages = useCallback(async () => {
+    if (!eventUrl) return;
+    try {
+      // Fetch all images (they include moment_id field)
+      await imagesAPI.getImages(null, eventUrl);
+      // Changes are automatically applied by apiService interceptor
+    } catch (err) {
+      console.error('Failed to load images:', err);
+    }
+  }, [eventUrl]);
+  
+  // Fetch images when moments are loaded
+  useEffect(() => {
+    if (isAuthenticated && moments.length > 0 && storeImages.length === 0) {
+      fetchImages();
+    }
+  }, [isAuthenticated, moments.length, storeImages.length, fetchImages]);
+  
+  // Handle image load to determine aspect ratio
+  const handleImageLoad = useCallback((imageId, e) => {
+    const img = e.target;
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+    
+    let imageClass = 'square';
+    if (aspectRatio > 1.2) {
+      imageClass = 'landscape';
+    } else if (aspectRatio < 0.8) {
+      imageClass = 'portrait';
+    }
+    
+    const current = imageClassesRef.current?.[imageId];
+    if (current === imageClass) return;
+
+    pendingClassUpdatesRef.current[imageId] = imageClass;
+    if (!flushClassesRafRef.current) {
+      try {
+        flushClassesRafRef.current = requestAnimationFrame(() => {
+          const updates = pendingClassUpdatesRef.current;
+          pendingClassUpdatesRef.current = {};
+          flushClassesRafRef.current = null;
+          setImageClasses(prev => {
+            let changed = false;
+            const next = { ...prev };
+            for (const id in updates) {
+              if (Object.prototype.hasOwnProperty.call(updates, id)) {
+                if (prev[id] !== updates[id]) {
+                  next[id] = updates[id];
+                  changed = true;
+                }
+              }
+            }
+            return changed ? next : prev;
+          });
+        });
+      } catch {
+        setImageClasses(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const id in pendingClassUpdatesRef.current) {
+            if (prev[id] !== pendingClassUpdatesRef.current[id]) {
+              next[id] = pendingClassUpdatesRef.current[id];
+              changed = true;
+            }
+          }
+          pendingClassUpdatesRef.current = {};
+          return changed ? next : prev;
+        });
+      }
+    }
+  }, []);
 
   // Fetch moments data with auto-refresh on auth changes
   useAuthRefresh(fetchMoments, [eventUrl]);
@@ -258,43 +445,14 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   // Note: Timeline elements are automatically registered/unregistered through setMomentRef callback
   // No need to call refreshElements() as it clears all registered elements unnecessarily
 
-  // Handle initial URL when moments are loaded
-	useEffect(() => {
-		if (moments.length > 0 && !momentsReadyCalled.current) {
-			momentsReadyCalled.current = true; // Prevent multiple calls
-			// Small delay to ensure DOM elements are rendered
-			setTimeout(() => {
-				timelineManager.handleMomentsReady();
-			}, 200);
-		}
-	}, [moments.length]); // Only when moments are first loaded
-
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
-    if (location.state?.scrollToMoment && moments.length > 0) {
+    if (location.state?.scrollToMoment && moments.length > 0 && sortedImages.length > 0) {
       const momentId = location.state.scrollToMoment;
       window.history.replaceState({}, document.title);
-      const moment = moments.find(m => m.id === momentId);
-      if (moment) {
-        timelineManager.navigateToMoment(moment.label, moment.label);
-      }
+      handleJumpToMoment({ id: momentId });
     }
-  }, [location.state, moments]);
-
-  // REMOVED: URL query parameter handling - this is now handled by timelineManager.handleInitialURL()
-  // The timeline manager handles both initial URL navigation and URL parameter navigation
-  // This prevents duplicate navigation calls
-
-  // Recalculate timeline offset when carousel visibility changes
-  useEffect(() => {
-    // Use a delay to ensure the DOM has updated and animations complete
-    const timer = setTimeout(() => {
-      timelineManager.recalculateOffset();
-    }, 400); // Slightly longer than timeline manager's delay to ensure DOM is ready
-    return () => clearTimeout(timer);
-  }, [carouselVisible]);
-
-  // The timeline manager now handles all scroll detection and URL updates automatically
+  }, [location.state, moments, sortedImages]);
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
@@ -319,9 +477,16 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     }
   };
 
-  const handleImageSelect = (imageName, momentId, event) => {
-    const key = `${momentId}:${imageName}`;
-    toggleKey(key, event);
+  const handleImageSelect = (imageId, event) => {
+    const image = sortedImages.find(img => img.id === imageId);
+    if (image) {
+      const key = `${image.moment_id}:${imageId}`;
+      toggleKey(key, event);
+    }
+  };
+  
+  const toggleImageSelection = (imageId, event) => {
+    handleImageSelect(imageId, event);
   };
 
   const selectAllImages = () => {
@@ -372,15 +537,11 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
 
   const selectAllInMoment = (momentId) => {
-    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
-    if (!momentImages || !(momentImages instanceof Set)) return;
+    const momentImageKeys = sortedImages
+      .filter(img => img.moment_id === momentId)
+      .map(img => `${momentId}:${img.id}`);
     
-    const momentImageKeys = Array.from(momentImages)
-      .map(imageId => {
-        const image = entities?.[eventId]?.images?.[imageId];
-        return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
-      })
-      .filter(Boolean);
+    if (momentImageKeys.length === 0) return;
     
     // Check if all images in this moment are already selected
     const allSelected = momentImageKeys.every(key => selectedKeys.has(key));
@@ -395,18 +556,30 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   };
 
   const clearMomentSelection = (momentId) => {
-    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
-    if (!momentImages || !(momentImages instanceof Set)) return;
-    
-    const momentImageKeys = Array.from(momentImages)
-      .map(imageId => {
-        const image = entities?.[eventId]?.images?.[imageId];
-        return image && (includeArchived || !image.is_archived) ? `${momentId}:${imageId}` : null;
-      })
-      .filter(Boolean);
+    const momentImageKeys = sortedImages
+      .filter(img => img.moment_id === momentId)
+      .map(img => `${momentId}:${img.id}`);
     
     deselectMany(momentImageKeys);
   };
+  
+  // Get selected images count for current moment
+  const getCurrentMomentSelectedCount = useMemo(() => {
+    if (!currentVisibleMoment) return 0;
+    const momentImageKeys = sortedImages
+      .filter(img => img.moment_id === currentVisibleMoment.id)
+      .map(img => `${currentVisibleMoment.id}:${img.id}`);
+    return momentImageKeys.filter(key => selectedKeys.has(key)).length;
+  }, [currentVisibleMoment, sortedImages, selectedKeys]);
+  
+  // Check if all images in current moment are selected
+  const allCurrentMomentSelected = useMemo(() => {
+    if (!currentVisibleMoment) return false;
+    const momentImageKeys = sortedImages
+      .filter(img => img.moment_id === currentVisibleMoment.id)
+      .map(img => `${currentVisibleMoment.id}:${img.id}`);
+    return momentImageKeys.length > 0 && momentImageKeys.every(key => selectedKeys.has(key));
+  }, [currentVisibleMoment, sortedImages, selectedKeys]);
 
   // clearGlobalSelection provided by useImageSelection
 
@@ -475,71 +648,72 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
 
 
-  // Helper function to get images for a moment (filtered for display)
-  const getMomentImages = (momentId) => {
-    // Return placeholder images for placeholder moments
-    if (momentId?.startsWith('placeholder-')) {
-      return Array.from({ length: 8 }, (_, i) => ({
-        id: `placeholder-img-${momentId}-${i}`,
-        label: '',
-        isPlaceholder: true
-      }));
-    }
-    
-    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
-    if (!momentImages || !(momentImages instanceof Set)) return EMPTY_ARRAY;
-    
-    return Array.from(momentImages)
-      .map(imageId => entities?.[eventId]?.images?.[imageId])
-      .filter(image => image && (includeArchived || !image.is_archived))
-      .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
-  };
-
-  // Helper function to get total image count for a moment (from store, no filtering)
-  const getMomentTotalImageCount = (momentId) => {
-    // Return placeholder count for placeholder moments
-    if (momentId?.startsWith('placeholder-')) return 8;
-    
-    const momentImages = entities?.[eventId]?.moments?.[momentId]?.images;
-    if (!momentImages || !(momentImages instanceof Set)) return 0;
-    
-    return Array.from(momentImages)
-      .map(imageId => entities?.[eventId]?.images?.[imageId])
-      .filter(image => image) // Only filter out null/undefined, not archived status
-      .length;
-  };
-
-  // Calculate total photo count from all moments in store (depends on includeArchived flag)
+  // Calculate total photo count from sorted images
   const totalPhotoCount = useMemo(() => {
-    return allMoments.reduce((total, moment) => {
-      if (includeArchived) {
-        // Show all images including archived
-        return total + (moment.images_count || 0);
-      } else {
-        // Show only active images
-        return total + (moment.active_images_count || 0);
-      }
-    }, 0);
-  }, [allMoments, includeArchived]);
+    return sortedImages.length;
+  }, [sortedImages]);
 
-  const openImageViewer = (images, image, index) => {
-    const momentId = moments.find(m => {
-      const momentImages = entities?.[eventId]?.moments?.[m.id]?.images;
-      return momentImages instanceof Set && momentImages.has(image?.id);
-    })?.id;
+  const openImageViewer = (imageId, index) => {
+    // Find the image in sortedImages to get the correct moment
+    const image = sortedImages.find(img => img.id === imageId) || sortedImages[index];
+    if (!image) return;
     
-    openViewer({ index, parent: momentId, entity: 'moment', sortBy: 'date', sortOrder: 'asc' });
+    const momentId = image.moment_id;
+    
+    // Get all images for this moment from sortedImages
+    const momentImages = sortedImages.filter(img => img.moment_id === momentId);
+    const momentImageIds = momentImages.map(img => img.id);
+    
+    // Find the index within the moment's images (not in all sortedImages)
+    const momentIndex = momentImages.findIndex(img => img.id === imageId);
+    
+    if (momentIndex === -1) return;
+    
+    openViewer({ 
+      index: momentIndex, // Index within the moment's images
+      parent: momentId, 
+      entity: 'moment', 
+      sortBy: 'date', 
+      sortOrder: 'asc',
+      filteredIds: momentImageIds // Pass all image IDs for this moment
+    });
   };
-
-  const closeImageViewer = () => {};
-  const navigateImage = (direction, index) => navigateViewer(direction, index);
 
   const handleJumpToMoment = (momentInfo) => {
-    // Find the moment in our moments list and scroll to it
-            const moment = moments.find(m => m.id === momentInfo.id);
+    // Navigate to first index of the moment
+    const moment = moments.find(m => m.id === momentInfo.id);
     if (moment) {
-      // Use timeline manager for navigation
-            timelineManager.navigateToMoment(moment.id, moment.label);
+      const firstIndex = momentIndexes.get(moment.id);
+      if (firstIndex !== undefined && firstIndex < sortedImages.length) {
+        // Scroll to the first image of the moment in the grid
+        setTimeout(() => {
+          const imageElement = imageTileRefs.current[firstIndex];
+          if (imageElement && gridContainerRef.current) {
+            const containerRect = gridContainerRef.current.getBoundingClientRect();
+            const elementRect = imageElement.getBoundingClientRect();
+            const scrollTop = gridContainerRef.current.scrollTop;
+            const targetScroll = scrollTop + elementRect.top - containerRect.top + 100; // 20px offset from top
+            gridContainerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
+          }
+        }, 100);
+      }
+    }
+  };
+  
+  // Handle carousel navigation to jump to first index of moment
+  const handleCarouselMomentClick = (moment) => {
+    const firstIndex = momentIndexes.get(moment.id);
+    if (firstIndex !== undefined && firstIndex < sortedImages.length) {
+      setTimeout(() => {
+        const imageElement = imageTileRefs.current[firstIndex];
+        if (imageElement && gridContainerRef.current) {
+          const containerRect = gridContainerRef.current.getBoundingClientRect();
+          const elementRect = imageElement.getBoundingClientRect();
+          const scrollTop = gridContainerRef.current.scrollTop;
+          const targetScroll = scrollTop + elementRect.top - containerRect.top - 20; // 20px offset from top
+          gridContainerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
+        }
+      }, 100);
     }
   };
 
@@ -568,24 +742,26 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <PermissionGate requires="canEdit">
-              <button
-                onClick={() => setShowEditMomentsModal(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title={t('moments.editMomentsTitle')}
-                aria-label={t('moments.editMomentsTitle')}
-              >
-                <Pencil className="w-5 h-5 text_gray-600" />
-              </button>
-            </PermissionGate>
-          </div>
         </div>
 
         {/* Controls Row */}
         <div className="mt-4 sm:mt-6 md:mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center divide-x divide-gray-200 flex-wrap">
-            {/* Group 1: View and Size Controls */}
+            {/* Group 1: Edit Moments Button */}
+            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
+              <PermissionGate requires="canEdit">
+                <button
+                  onClick={() => setShowEditMomentsModal(true)}
+                  className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 text-gray-700 flex items-center justify-center"
+                  title={t('moments.editMomentsTitle')}
+                  aria-label={t('moments.editMomentsTitle')}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </PermissionGate>
+            </div>
+            
+            {/* Group 2: View and Size Controls */}
             <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
               {storeLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -648,7 +824,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                   </button>
             </div>
 
-            {/* Group 2: Selection Controls */}
+            {/* Group 3: Selection Controls */}
             <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
               {storeLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -670,40 +846,36 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                   </button>
                   
-                  {/* Carousel Toggle Button - moved here */}
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setCarouselVisible(!carouselVisible)}
-                    className="flex items-center justify-center w-8 h-8 bg-white rounded-md border border-gray-200 hover:bg-gray-50 transition-all duration-200"
-                    title={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
-                    aria-label={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
-                  >
-                    {carouselVisible ? (
-                      <span className="text-gray-600 font-bold text-base leading-none">↑</span>
-                    ) : (
-                      <span className="text-gray-600 font-bold text-base leading-none">↓</span>
-                    )}
-                  </motion.button>
-
-                  {/* Compact Current Moment Box - Mobile only, in same row */}
-                  <div className="md:hidden flex items-center">
-                    {currentVisibleMoment ? (
-                      <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md border border-gray-200 shadow-sm">
-                        <div className="flex flex-col min-w-0">
-                          <div className="text-xs font-semibold text-gray-900 truncate max-w-[100px] sm:max-w-[120px]">
-                            {currentVisibleMoment.label}
-                          </div>
-                          <div className="text-[10px] text-gray-600 truncate">
-                            {formatTimeOnly(currentVisibleMoment.start_date)} - {formatTimeOnly(currentVisibleMoment.end_date)}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-md border border-gray-200 shadow-sm">
-                        <div className="text-xs font-semibold text-gray-900">{t('moments.timeline')}</div>
-                      </div>
-                    )}
+                  {/* Split Carousel Button: Moment Label + Toggle */}
+                  <div className="flex items-center border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
+                    {/* Left part: Current moment label (clickable to jump) */}
+                    <button
+                      onClick={() => {
+                        if (currentVisibleMoment) {
+                          handleJumpToMoment({ id: currentVisibleMoment.id });
+                        }
+                      }}
+                      className="px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors flex items-center gap-2 min-w-0 flex-1"
+                      title={currentVisibleMoment ? t('moments.jumpToMoment') : t('moments.timeline')}
+                      aria-label={currentVisibleMoment ? t('moments.jumpToMoment') : t('moments.timeline')}
+                    >
+                      <span className="truncate max-w-[120px] sm:max-w-[150px]">
+                        {currentVisibleMoment ? currentVisibleMoment.label : t('moments.timeline')}
+                      </span>
+                    </button>
+                    {/* Right part: Narrow toggle button */}
+                    <button
+                      onClick={() => setCarouselVisible(!carouselVisible)}
+                      className="px-2 py-2 border-l border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-center flex-shrink-0"
+                      title={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
+                      aria-label={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
+                    >
+                      {carouselVisible ? (
+                        <ChevronUp className="w-4 h-4 text-gray-600" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-gray-600" />
+                      )}
+                    </button>
                   </div>
                 </>
               )}
@@ -711,72 +883,74 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
 
           </div>
         </div>
-
-        {/* Carousel - Now part of the header */}
-        <AnimatePresence>
-          {carouselVisible && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="overflow-hidden pt-4"
-            >
-              <div className="carousel-container flex gap-4 overflow-x-auto pb-2">
-                {moments.length === 0 && (
-                  <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
-                    {t('moments.noMomentsYet')}
-                  </div>
-                )}
-                {storeLoading && moments.length > 0 && (
-                  <div className="bg-gray-100 rounded-lg h-32 min-w-[200px] flex items-center justify-center text-gray-400">
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                      <span>{t('moments.loadingPhotos')}</span>
-                    </div>
-                  </div>
-                )}
-                {moments.map(moment => (
-                  <motion.div 
-                    key={moment.id} 
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="relative bg_white rounded-lg shadow flex-shrink-0 w-40 sm:w-48 md:w-56 h-28 sm:h-32 flex flex-col items-center justify-center p-2 sm:p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => {
-                      // Use timeline manager for navigation with moment name
-                      timelineManager.navigateToMoment(moment.label, moment.label);
-                    }}
-                  >
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded overflow-hidden flex items-center justify-center mb-1 sm:mb-2">
-                      {ImageComponent(
-                        urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
-                        {
-                          width: 80,
-                          height: 80,
-                          className: 'object-cover w-full h-full',
-                          alt: moment.label
-                        }
-                      )}
-                    </div>
-                      <div className="text-center">
-                      <div className="text-sm sm:text-base font-semibold truncate max-w-[5rem] sm:max-w-[7rem]">{moment.label}</div>
-                      <div className="text-xs text-gray-500 truncate max-w-[5rem] sm:max-w-[7rem]">
-                        {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* Timeline */}
-      <div className="px-2 sm:px-4 py-4 sm:py-6 md:py-8">
+      {/* Floating Carousel - Below header, triggered from header button */}
+      <AnimatePresence>
+        {carouselVisible && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="fixed left-4 right-4 z-40 p-4"
+            style={{ top: 'calc(4rem + 9rem)' }} // Position below header (4rem top bar + ~10rem header height)
+          >
+            <div className="carousel-container flex gap-4 overflow-x-auto pb-2">
+              {moments.length === 0 && (
+                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  {t('moments.noMomentsYet')}
+                </div>
+              )}
+              {storeLoading && moments.length > 0 && (
+                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white/80"></div>
+                    <span>{t('moments.loadingPhotos')}</span>
+                  </div>
+                </div>
+              )}
+              {moments.map(moment => (
+                <motion.div 
+                  key={moment.id} 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="relative flex-shrink-0 w-32 sm:w-36 md:w-40 h-28 sm:h-32 flex flex-col items-center justify-center p-2 sm:p-3 cursor-pointer transition-all"
+                  onClick={() => {
+                    handleCarouselMomentClick(moment);
+                  }}
+                >
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500/90 to-purple-600/90 rounded-lg overflow-hidden flex items-center justify-center mb-1 sm:mb-2 shadow-lg ring-2 ring-white/20">
+                    {ImageComponent(
+                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
+                      {
+                        width: 80,
+                        height: 80,
+                        className: 'object-cover w-full h-full',
+                        alt: moment.label
+                      }
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm sm:text-base font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] truncate max-w-[5rem] sm:max-w-[7rem]">
+                      {moment.label}
+                    </div>
+                    <div className="text-xs text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] truncate max-w-[5rem] sm:max-w-[7rem]">
+                      {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Content Area */}
+      <div className="px-4 sm:px-8 pt-0 pb-0">
         {moments.length === 0 ? (
           <div className="text-center py-8 sm:py-12">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-gray-200 rounded-full flex items_center justify-center mb-4">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-4">
               <Calendar className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400" />
             </div>
             <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">{t('moments.noMomentsYet')}</h3>
@@ -790,87 +964,168 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">{t('moments.loadingTimeline')}</h3>
             <p className="text-sm sm:text-base text-gray-500">{t('moments.loadingPhotos')}</p>
           </div>
+        ) : sortedImages.length === 0 ? (
+          <div className="text-center py-12">
+            <Image className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('moments.noPhotosYet')}</h3>
+            <p className="text-gray-500">{t('moments.noPhotosInMoments')}</p>
+          </div>
         ) : (
-          <div ref={setGridContainerRef} className="relative">
-                         {/* Fixed right sidebar for sticky info - hidden on mobile */}
-             <div className={`hidden md:block fixed ${endClass('4')} top-100 w-56 lg:w-64 z-30 bg-white/70 backdrop-blur-sm p-3 sm:p-4 rounded-lg shadow-lg border border-gray-200`}>
-              {currentVisibleMoment ? (
-                <>
-                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{currentVisibleMoment.label}</div>
-                  <div className="text-xs text-gray-700 mb-1 font-medium">
-                    {formatTimeOnly(currentVisibleMoment.start_date)} - {formatTimeOnly(currentVisibleMoment.end_date)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {formatDate(currentVisibleMoment.start_date)}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-base font-bold text-gray-900 mb-1 leading-tight">{t('moments.timeline')}</div>
-                  <div className="text-xs text-gray-500">{t('moments.scrollToSeeMoments')}</div>
-                </>
-              )}
-            </div>
-            
-            {/* Timeline line */}
-            <div className={`absolute ${endClass('0')} top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500`}>
-                             {/* Colorful dots for each moment */}
-              {moments.map((moment, index) => (
-                 <div
-                  key={moment.id}
-                   className="absolute w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg z-10"
-                  style={{
-                    left: '-6px'
-                  }}
-                  ref={(el) => {
-                    if (el && momentsRef.current[moment.label]) {
-                      // Position the dot at the beginning of the moment card (top of info box)
-                      const momentRect = momentsRef.current[moment.label].getBoundingClientRect();
-                      const containerRect = el.parentElement.getBoundingClientRect();
-                      el.style.top = `${momentRect.top - containerRect.top + 24}px`; // 24px = p-6 (24px) to align with top of info box
+          <div className="relative">
+            {/* Photos Grid */}
+            <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
+              <AbsoluteMasonryGrid
+                items={itemsWithHeaders}
+                baseSize={Math.max(80, 266 * imageSize)}
+                imageClasses={imageClasses}
+                containerHeight="100%"
+                className="w-full absolute-masonry-grid-container"
+                onPinchRef={(node) => {
+                  setPinchRef(node);
+                  gridContainerRef.current = node;
+                }}
+                style={{
+                  '--grid-scale': 1,
+                  '--grid-z-index': 1,
+                }}
+                renderHeader={(headerData) => {
+                  const moment = headerData.moment;
+                  if (!moment) return null;
+                  
+                  const momentImageCount = sortedImages.filter(img => img.moment_id === moment.id).length;
+                  const momentImageKeys = sortedImages
+                    .filter(img => img.moment_id === moment.id)
+                    .map(img => `${moment.id}:${img.id}`);
+                  const selectedInMoment = momentImageKeys.filter(key => selectedKeys.has(key));
+                  const allSelectedInMoment = momentImageKeys.length > 0 && momentImageKeys.every(key => selectedKeys.has(key));
+                  
+                  // Calculate dynamic header height based on content
+                  const hasSelectedCount = selectedInMoment.length > 0;
+                  // Use larger min-height when selection mode is active or when selected count is shown
+                  const headerMinHeight = (selectionMode || hasSelectedCount) ? '6rem' : '4rem';
+                  
+                  return (
+                    <div className="bg-white border-b border-gray-200 px-4 py-3" style={{ minHeight: headerMinHeight }}>
+                      <div className="flex items-center gap-3">
+                        {/* Representative Image */}
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shadow-md">
+                            {ImageComponent(
+                              urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
+                              {
+                                width: 48,
+                                height: 48,
+                                className: 'w-full h-full object-cover',
+                                alt: moment.label
+                              }
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-bold text-gray-900 truncate mb-1">{moment.label}</h3>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 min-h-[1.5rem]">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>{formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              <span>{formatDate(moment.start_date)}</span>
+                            </div>
+                            {momentImageCount > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Image className="w-3 h-3" />
+                                <span>{momentImageCount} {t('moments.photos')}</span>
+                              </div>
+                            )}
+                            {selectedInMoment.length > 0 && (
+                              <span className="text-primary-600 font-medium">
+                                • {selectedInMoment.length} {t('moments.selected')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Selection buttons - square buttons in same row */}
+                        {selectionMode && momentImageCount > 0 && (
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {!allSelectedInMoment && (
+                              <button
+                                onClick={() => selectAllInMoment(moment.id)}
+                                className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
+                                  selectedInMoment.length > 0 
+                                    ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                                    : 'hover:bg-gray-100 text-gray-700'
+                                }`}
+                                title={t('moments.selectAll')}
+                                aria-label={t('moments.selectAll')}
+                              >
+                                <CheckCheck className="w-4 h-4" />
+                              </button>
+                            )}
+                            {selectedInMoment.length > 0 && (
+                              <button
+                                onClick={() => clearMomentSelection(moment.id)}
+                                className="w-8 h-8 rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors flex items-center justify-center"
+                                title={t('moments.clearSelection')}
+                                aria-label={t('moments.clearSelection')}
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }}
+                onItemRef={(image, index, el) => {
+                  if (el && image && !image.isHeader) {
+                    registerImageRef(image.id, el);
+                    // Store ref for arrow key navigation
+                    const actualIndex = sortedImages.findIndex(img => img.id === image.id);
+                    if (actualIndex !== -1 && imageTileRefs.current[actualIndex] !== el) {
+                      imageTileRefs.current[actualIndex] = el;
                     }
-                  }}
-                ></div>
-              ))}
-            </div>
-            
-            {/* Timeline items */}
-            <div className="space-y-8 sm:space-y-10 md:space-y-12" style={{ [isRTL ? 'paddingLeft' : 'paddingRight']: '0.5rem' }}>
-              {storeLoading && (
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center gap-2 text-gray-500">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-                    <span>{t('moments.loadingPhotos')}</span>
-                  </div>
-                </div>
-              )}
-              {moments.map((moment, index) => {
-                const momentImages = getMomentImages(moment.id);
-                const totalImageCount = getMomentTotalImageCount(moment.id);
-                
-                return (
-                  <MomentCard
-                    key={moment.id}
-                    moment={moment}
-                    images={momentImages}
-                    totalImageCount={totalImageCount}
-                    imageSize={imageSize}
-                    globalSelection={selectedKeys}
-                    onImageSelect={handleImageSelect}
-                    onOpenImageViewer={openImageViewer}
-                    selectionMode={selectionMode}
-                    onSelectAllInMoment={selectAllInMoment}
-                    onClearMomentSelection={clearMomentSelection}
-                    eventUrl={eventUrl}
-                    urlHelpers={urlHelpers}
-                    includeArchived={includeArchived}
-                    highlightedIds={highlightedIds}
-                    registerImageRef={registerImageRef}
-                    ref={setMomentRef(moment.label)}
-                    data-moment-id={moment.id}
-                  />
-                );
-              })}
+                  }
+                }}
+                renderItem={(image, index, isPortrait, setRef) => {
+                  // Skip rendering if it's a header (handled by renderHeader)
+                  if (image.isHeader) return null;
+                  
+                  // Find actual index in sortedImages
+                  const actualIndex = sortedImages.findIndex(img => img.id === image.id);
+                  const momentId = image.moment_id;
+                  return (
+                    <div
+                      className={`photo-card ${imageClasses[image.id] || 'square'}`}
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <SingleImageTile
+                        ref={setRef}
+                        image={image}
+                        aspectClass={imageClasses[image.id] || 'square'}
+                        thumbSrc={image.isPlaceholder ? null : (urlHelpers ? urlHelpers.getThumbnailUrl(image.id) : null)}
+                        selectionMode={selectionMode}
+                        isSelected={selectedKeys.has(`${momentId}:${image.id}`)}
+                        onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                        onOpen={() => {
+                          const correctIndex = sortedImages.findIndex(img => img.id === image.id);
+                          if (correctIndex !== -1) {
+                            openImageViewer(image.id, correctIndex);
+                          }
+                        }}
+                        onImageLoad={(e) => handleImageLoad(image.id, e)}
+                        eventUrl={eventUrl}
+                        urlHelpers={urlHelpers}
+                        isHighlighted={highlightedIds?.has(image.id)}
+                        photoIndex={actualIndex !== -1 ? actualIndex : 0}
+                        contextType="Moment"
+                        contextLabel={moments.find(m => m.id === momentId)?.label || ''}
+                      />
+                    </div>
+                  );
+                }}
+              />
             </div>
           </div>
         )}

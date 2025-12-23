@@ -9,6 +9,30 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses) => 
   const colHeights = new Array(colCount).fill(0);
 
   const layout = items.map((item) => {
+    // Handle header items (for moment separators)
+    if (item.isHeader) {
+      // 1. מוצאים את הגובה המקסימלי הנוכחי (תחתית האלמנט הכי נמוך)
+      const currentMaxHeight = Math.max(...colHeights);
+      
+      // 2. קובעים גובה לכותרת (למשל 50 פיקסל)
+      const headerHeight = item.headerHeight || 50; 
+
+      // 3. מעדכנים את כל העמודות להיות "אחרי" הכותרת
+      const newBaseHeight = currentMaxHeight + headerHeight + gap;
+      colHeights.fill(newBaseHeight);
+
+      return {
+        id: item.id,
+        top: currentMaxHeight, // מתחיל מייד אחרי האלמנט הכי נמוך
+        left: 0,
+        width: containerWidth, // תופס את כל הרוחב!
+        height: headerHeight,
+        data: item,
+        isHeader: true // כדי שתוכל לרנדר אותו אחרת
+      };
+    }
+    
+    // Regular image item
     const isPortrait = imageClasses[item.id] === 'portrait';
     const itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
     
@@ -56,8 +80,9 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses) => 
 export default function AbsoluteMasonryGrid({
   items = [],
   renderItem,
+  renderHeader = null, // Optional function to render header items
   baseSize = 150,
-  gap = 12,
+  gap = 8,
   imageClasses = {},
   containerHeight = '100%',
   className = '',
@@ -136,36 +161,59 @@ export default function AbsoluteMasonryGrid({
 
   // שינוי 2: קומפוננטה פנימית עם Memo כדי למנוע רינדורים מיותרים בזמן גלילה
   // זה קריטי כי renderItem שלך מוגדר כפונקציה בתוך ה-Parent ולכן מתחדש כל הזמן
-  const MemoizedItem = useMemo(() => React.memo(({ itemLayout, renderItem, onItemRef }) => {
-     return (
+  const MemoizedItem = useMemo(() => React.memo(({ itemLayout, renderItem, renderHeader, onItemRef }) => {
+    // Handle header items differently
+    if (itemLayout.isHeader) {
+      return (
         <div
-            style={{
-              position: 'absolute',
-              top: `${itemLayout.top}px`,
-              left: `${itemLayout.left}px`,
-              width: `${itemLayout.width}px`,
-              height: `${itemLayout.height}px`,
-              contain: 'strict',
-              
-              // --- השינוי הקריטי ---
-              // התמונה מקבלת את הסקייל מהמשתנה שהגדרנו באבא
-              transform: 'scale(var(--grid-scale, 1))', 
-              // נקודת העוגן היא המרכז, כך שהתמונות גדלות מהאמצע החוצה
-              transformOrigin: 'center center',
-              // Z-Index דינמי: בזמן זום התמונות עולות למעלה כדי לא להסתיר אחת את השנייה עם חיתוכים
-              zIndex: 'var(--grid-z-index, 1)',
-              // מעבר חד בזמן צביטה כדי למנוע לאגים
-              transition: 'transform 0.1s ease-out', // טרנזישן קצר מאוד
-              willChange: 'transform'
-            }}
-          >
-             <div style={{ width: '100%', height: '100%' }}>
-                {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
-                  if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
-                })}
-             </div>
-          </div>
-     );
+          style={{
+            position: 'absolute',
+            top: `${itemLayout.top}px`,
+            left: `${itemLayout.left}px`,
+            width: `${itemLayout.width}px`,
+            height: `${itemLayout.height}px`,
+            zIndex: 10, // Headers should be above images
+          }}
+        >
+          {renderHeader ? renderHeader(itemLayout.data) : (
+            <div style={{ width: '100%', height: '100%', padding: '8px' }}>
+              {itemLayout.data.label || itemLayout.data.title || 'Header'}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Regular image item
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: `${itemLayout.top}px`,
+          left: `${itemLayout.left}px`,
+          width: `${itemLayout.width}px`,
+          height: `${itemLayout.height}px`,
+          contain: 'strict',
+          
+          // --- השינוי הקריטי ---
+          // התמונה מקבלת את הסקייל מהמשתנה שהגדרנו באבא
+          transform: 'scale(var(--grid-scale, 1))', 
+          // נקודת העוגן היא המרכז, כך שהתמונות גדלות מהאמצע החוצה
+          transformOrigin: 'center center',
+          // Z-Index דינמי: בזמן זום התמונות עולות למעלה כדי לא להסתיר אחת את השנייה עם חיתוכים
+          zIndex: 'var(--grid-z-index, 1)',
+          // מעבר חד בזמן צביטה כדי למנוע לאגים
+          transition: 'transform 0.1s ease-out', // טרנזישן קצר מאוד
+          willChange: 'transform'
+        }}
+      >
+        <div style={{ width: '100%', height: '100%' }}>
+          {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
+            if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
+          })}
+        </div>
+      </div>
+    );
   }), []);
 
   if (!items.length) return null;
@@ -198,6 +246,7 @@ export default function AbsoluteMasonryGrid({
              key={itemLayout.id}
              itemLayout={itemLayout}
              renderItem={renderItem}
+             renderHeader={renderHeader}
              onItemRef={onItemRef}
           />
         ))}

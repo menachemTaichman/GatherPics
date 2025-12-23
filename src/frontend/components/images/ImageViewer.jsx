@@ -218,6 +218,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   // Apply frontend filtering with same logic as GroupDetailPage
   const filteredImages = useMemo(() => {
+    // If filteredIds is provided and relatedImages is empty, use filteredIds to get images from store
+    if (filteredIds && Array.isArray(filteredIds) && filteredIds.length > 0 && (!relatedImages || relatedImages.length === 0)) {
+      const store = useDataStore.getState();
+      const imagesMap = store.entities?.[eventId]?.images || {};
+      const images = filteredIds
+        .map(id => imagesMap[String(id)])
+        .filter(Boolean)
+        .filter((img) => includeArchived || !img.is_archived);
+      return sortImages(images, sortBy, sortOrder);
+    }
+    
     if (!filterGroups || filterGroups.length === 0) {
       return relatedImages;
     }
@@ -243,10 +254,8 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     const filtered = filterImages(allImages, allGroups, filterMode, onlySelected);
     
     // Apply sorting to filtered images
-    const sorted = sortImages(filtered, sortBy, sortOrder);
-    
-    return sorted;
-  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived]);
+    return sortImages(filtered, sortBy, sortOrder);
+  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived, filteredIds, eventId]);
   
   useEffect(() => {
   }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);

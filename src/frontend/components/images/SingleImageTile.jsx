@@ -86,7 +86,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   const highlightStyle = isHighlighted ? {
     animation: 'pulse-glow 1.5s ease-in-out infinite',
     border: '3px solid rgb(34, 197, 94)',
-    borderRadius: '0.5rem'
+    borderRadius: '0'
   } : {};
   
   // Generate alt text if not provided
@@ -154,7 +154,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
         {useImageComponent(thumbSrc, {
           width: 200,
           height: 200,
-          className: `w-full h-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'} rounded-lg`,
+          className: `w-full h-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`,
           alt: generatedAltText,
           onLoad: onImageLoad,
           onError: onImageError
@@ -265,11 +265,11 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       </div>
 
       {/* Hover overlay - darkens image on hover */}
-      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-lg pointer-events-none"></div>
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 pointer-events-none"></div>
 
       {/* Date overlay - bottom-left in LTR, bottom-right in RTL */}
       {showDate && (dateLabel || image?.date_taken) && !shouldHideTimestamp && (
-        <div className={`absolute bottom-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded ${
+        <div className={`absolute bottom-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 ${
           isRTL ? 'right-2' : 'left-2'
         }`}>
           {dateLabel || formatTime(image?.date_taken)}
@@ -278,7 +278,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
 
       {/* Crop indicator - top-right in LTR, top-left in RTL */}
       {showCropBadge && (
-        <div className={`absolute top-2 bg-primary-600 text-white text-xs px-2 py-1 rounded ${
+        <div className={`absolute top-2 bg-primary-600 text-white text-xs px-2 py-1 ${
           isRTL ? 'left-2' : 'right-2'
         }`}>
           {t('singleImageTile.crop')}
