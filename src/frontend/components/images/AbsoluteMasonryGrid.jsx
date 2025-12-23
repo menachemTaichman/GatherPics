@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 
 // --- האלגוריתם שלך נשאר ללא שינוי ---
-const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses) => {
+const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
 
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (baseSize + gap)));
@@ -33,8 +33,18 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses) => 
     }
     
     // Regular image item
-    const isPortrait = imageClasses[item.id] === 'portrait';
-    const itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
+    // --- השינוי כאן ---
+    let itemHeight;
+    
+    if (isSquareGrid) {
+        // במצב ריבועי: הגובה שווה לרוחב (יחס 1:1)
+        itemHeight = realColWidth;
+    } else {
+        // במצב מייסונרי רגיל: הלוגיקה המקורית שלך
+        const isPortrait = imageClasses[item.id] === 'portrait';
+        itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
+    }
+    // ------------------
     
     // מציאת העמודה הנמוכה ביותר
     const minHeight = Math.min(...colHeights);
@@ -52,11 +62,35 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses) => 
       width: realColWidth,
       height: itemHeight,
       data: item,
-      isPortrait
+      isPortrait: isSquareGrid ? false : imageClasses[item.id] === 'portrait' // אופציונלי: לעדכן גם את הדגל הזה
     };
   });
 
   return { layout, totalHeight: Math.max(...colHeights) };
+};
+
+// התאמה לרשימה (עמודה אחת)
+const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
+  if (!containerWidth) return { layout: [], totalHeight: 0 };
+  
+  // פשוט רץ אחד אחרי השני
+  let currentTop = 0;
+  
+  const layout = items.map(item => {
+    const top = currentTop;
+    currentTop += itemHeight + gap; // מקדם את ה-Top הבא
+    
+    return {
+      id: item.id,
+      top,
+      left: 0,
+      width: containerWidth, // רוחב מלא
+      height: itemHeight,
+      data: item
+    };
+  });
+
+  return { layout, totalHeight: currentTop };
 };
 
 /**
@@ -92,6 +126,9 @@ export default function AbsoluteMasonryGrid({
   // Higher = smoother scrolling but more DOM elements (try 1.0, 2.5, 5.0)
   bufferMultiplier = 3.0,
   onPinchRef = null, // <--- Prop חדש שמקבל את ה-Ref מההוק
+  isSquareGrid = false, // <--- Prop חדש למצב ריבועי
+  isListLayout = false, // <--- Prop חדש למצב רשימה
+  listItemHeight = 80, // <--- גובה פריט במצב רשימה
 }) {
   const internalContainerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 800 });
@@ -139,8 +176,11 @@ export default function AbsoluteMasonryGrid({
 
   // 2. חישוב ה-Layout (רץ רק כשמשתנה הרוחב או התמונות)
   const { layout, totalHeight } = useMemo(() => {
-    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses);
-  }, [items, dimensions.width, baseSize, gap, imageClasses]);
+    if (isListLayout) {
+      return calculateListLayout(items, dimensions.width, listItemHeight, gap);
+    }
+    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid);
+  }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight]);
 
   // 3. הווירטואליזציה האמיתית
   const visibleItems = useMemo(() => {
@@ -187,6 +227,7 @@ export default function AbsoluteMasonryGrid({
     // Regular image item
     return (
       <div
+        className="virtualized-grid-item"
         style={{
           position: 'absolute',
           top: `${itemLayout.top}px`,

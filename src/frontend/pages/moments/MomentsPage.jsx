@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
 import { ImageViewer } from '../../components/images';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { EditMomentsModal, MoveToMomentModal } from '../../components/moments';
@@ -18,7 +18,7 @@ import useImageActions from '../../components/images/ImageActions';
 import useBucketStore from '../../utils/bucketStore';
 import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { sortMoments, sortImages } from '../../utils/sorting';
+import { sortMoments, sortImages, toggleSortOrder } from '../../utils/sorting';
 import { getImageCount } from '../../utils/settings';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useImageHighlight } from '../../hooks/useImageHighlight';
@@ -56,6 +56,21 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   // Get all images from store (they should have moment_id field)
   const storeImages = useDataStore(state => storeSelectors.imagesAll(state, eventId), shallow);
   
+  // Subscribe to entities changes to make the component reactive
+  const entities = useDataStore(state => state.entities, shallow);
+  
+  // Track moment_id changes in images to ensure grid updates when images move between moments
+  // This creates a signature that changes when any image's moment_id changes
+  const momentIdSignature = useMemo(() => {
+    if (!isAuthenticated || !entities?.[eventId]?.images) return '';
+    const images = entities[eventId].images;
+    return Object.values(images)
+      .filter(img => img && img.moment_id)
+      .map(img => `${img.id}:${img.moment_id}`)
+      .sort()
+      .join('|');
+  }, [entities, eventId, isAuthenticated]);
+  
   // Create placeholder moments when not authenticated
   const placeholderMoments = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => ({
@@ -67,10 +82,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   }, []);
   
   const allMoments = isAuthenticated ? storeMoments : placeholderMoments;
-  
-  // Subscribe to entities changes to make the component reactive
-  const entities = useDataStore(state => state.entities, shallow);
   const includeArchived = usePreference('general.includeArchived', false);
+  const momentSortOrder = usePreference('Moments.sortDir', 'desc'); // Default: newest first
+  const setMomentSortOrder = (value) => setPreference('Moments.sortDir', value);
   const moments = useMemo(() => {
     // Return placeholders as-is without filtering
     if (!isAuthenticated) return allMoments;
@@ -85,8 +99,8 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       filteredMoments = filteredMoments.filter(moment => !moment.is_archived);
     }
     
-    return sortMoments(filteredMoments, 'asc');
-  }, [allMoments, includeArchived, isAuthenticated]);
+    return sortMoments(filteredMoments, momentSortOrder);
+  }, [allMoments, includeArchived, isAuthenticated, momentSortOrder]);
   
   const storeLoading = useDataStore(state => state.loading);
   const storeError = useDataStore(state => state.error);
@@ -178,12 +192,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     const sorted = [];
     moments.forEach(moment => {
       const momentImages = momentMap.get(moment.id) || [];
-      const sortedMomentImages = sortImages(momentImages, 'date', 'asc');
+      const sortedMomentImages = sortImages(momentImages, 'date', momentSortOrder);
       sorted.push(...sortedMomentImages);
     });
     
     return sorted;
-  }, [storeImages, moments, includeArchived, isAuthenticated]);
+  }, [storeImages, moments, includeArchived, isAuthenticated, momentIdSignature, momentSortOrder]);
   
   // Calculate moment indexes (first index of each moment in sortedImages)
   const momentIndexes = useMemo(() => {
@@ -222,11 +236,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       if (image.moment_id !== currentMomentId) {
         const moment = moments.find(m => m.id === image.moment_id);
         if (moment) {
-          // Increase header height when selection mode is active to account for selected count display
+          // Use consistent height regardless of selection mode
           // Use larger height on mobile to account for text wrapping
-          const headerHeight = selectionMode 
-            ? (isMobile ? 120 : 100)  // More space on mobile for wrapped text
-            : (isMobile ? 90 : 80);   // Slightly more on mobile even without selection
+          const headerHeight = isMobile ? 90 : 80;
           items.push({
             id: `header-${moment.id}`,
             isHeader: true,
@@ -241,7 +253,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     });
     
     return items;
-  }, [sortedImages, moments]);
+  }, [sortedImages, moments, isMobile]);
   
   // Update refs array when sortedImages changes
   useEffect(() => {
@@ -654,28 +666,23 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   }, [sortedImages]);
 
   const openImageViewer = (imageId, index) => {
-    // Find the image in sortedImages to get the correct moment
+    // Find the image in sortedImages
     const image = sortedImages.find(img => img.id === imageId) || sortedImages[index];
     if (!image) return;
     
-    const momentId = image.moment_id;
+    // Find the index in sortedImages
+    const currentIndex = sortedImages.findIndex(img => img.id === imageId);
     
-    // Get all images for this moment from sortedImages
-    const momentImages = sortedImages.filter(img => img.moment_id === momentId);
-    const momentImageIds = momentImages.map(img => img.id);
+    if (currentIndex === -1) return;
     
-    // Find the index within the moment's images (not in all sortedImages)
-    const momentIndex = momentImages.findIndex(img => img.id === imageId);
-    
-    if (momentIndex === -1) return;
-    
+    // Don't pass filteredIds - let ImageViewer construct the list with proper sorting
+    // Use a special parent value that signals "all moments"
     openViewer({ 
-      index: momentIndex, // Index within the moment's images
-      parent: momentId, 
-      entity: 'moment', 
+      index: currentIndex, // Index in all sorted images
+      parent: '__all_moments__', // Special value that signals all moments
+      entity: 'moment', // Entity type for context
       sortBy: 'date', 
-      sortOrder: 'asc',
-      filteredIds: momentImageIds // Pass all image IDs for this moment
+      sortOrder: momentSortOrder, // Use the same sort order as the grid
     });
   };
 
@@ -759,6 +766,23 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                   <Pencil className="w-4 h-4" />
                 </button>
               </PermissionGate>
+              
+              {/* Sort Direction Toggle */}
+              <button
+                onClick={() => {
+                  const newOrder = toggleSortOrder(momentSortOrder);
+                  setMomentSortOrder(newOrder);
+                }}
+                className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 text-gray-700 flex items-center justify-center"
+                title={momentSortOrder === 'asc' ? t('moments.sortAscending') : t('moments.sortDescending')}
+                aria-label={momentSortOrder === 'asc' ? t('moments.sortAscending') : t('moments.sortDescending')}
+              >
+                {momentSortOrder === 'asc' ? (
+                  <ArrowUp className="w-4 h-4" />
+                ) : (
+                  <ArrowDown className="w-4 h-4" />
+                )}
+              </button>
             </div>
             
             {/* Group 2: View and Size Controls */}
@@ -999,10 +1023,8 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                   const selectedInMoment = momentImageKeys.filter(key => selectedKeys.has(key));
                   const allSelectedInMoment = momentImageKeys.length > 0 && momentImageKeys.every(key => selectedKeys.has(key));
                   
-                  // Calculate dynamic header height based on content
-                  const hasSelectedCount = selectedInMoment.length > 0;
-                  // Use larger min-height when selection mode is active or when selected count is shown
-                  const headerMinHeight = (selectionMode || hasSelectedCount) ? '6rem' : '4rem';
+                  // Use consistent min-height regardless of selection state
+                  const headerMinHeight = '4rem';
                   
                   return (
                     <div className="bg-white border-b border-gray-200 px-4 py-3" style={{ minHeight: headerMinHeight }}>

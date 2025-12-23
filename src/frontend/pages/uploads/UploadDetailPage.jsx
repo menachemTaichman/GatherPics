@@ -72,6 +72,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const [notesValue, setNotesValue] = useState('');
   const [editingGroupLabel, setEditingGroupLabel] = useState(null);
   const [groupLabelValue, setGroupLabelValue] = useState('');
+  const [editingMomentLabel, setEditingMomentLabel] = useState(null);
+  const [momentLabelValue, setMomentLabelValue] = useState('');
   const [showManageAccessModal, setShowManageAccessModal] = useState(false);
   const [manageAccessEntity, setManageAccessEntity] = useState({ type: null, ids: [] });
   const [showMoveToMomentModal, setShowMoveToMomentModal] = useState(false);
@@ -434,6 +436,27 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const handleCancelEditGroupLabel = () => {
     setEditingGroupLabel(null);
     setGroupLabelValue('');
+  };
+
+  const handleEditMomentLabel = (momentId, currentLabel) => {
+    setEditingMomentLabel(momentId);
+    setMomentLabelValue(currentLabel || '');
+  };
+
+  const handleSaveMomentLabel = async (momentId) => {
+    try {
+      await momentsAPI.update(momentId, { label: momentLabelValue }, eventUrl);
+      showToast(t('uploadDetail.momentLabelUpdated'), 'success');
+      setEditingMomentLabel(null);
+    } catch (error) {
+      console.error('Failed to update moment label:', error);
+      showToast(formatErrorMessage('update moment label', error), 'error');
+    }
+  };
+
+  const handleCancelEditMomentLabel = () => {
+    setEditingMomentLabel(null);
+    setMomentLabelValue('');
   };
 
   const handleManageGroupAccess = (groupId) => {
@@ -1332,7 +1355,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {groupFaces.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noFacesFromThisUpload')}</p>
                               ) : (
-                                <div style={{ height: '400px', marginTop: '0.5rem' }}>
+                                <div style={{ height: '430px', marginTop: '0.5rem' }}>
                                   <AbsoluteMasonryGrid
                                     items={groupFaces}
                                     baseSize={Math.max(60, 266 * imageSize)}
@@ -1443,11 +1466,52 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               className: 'w-12 h-12 object-cover rounded-lg',
                               alt: moment.label
                             })}
-                            <div>
-                              <h4 className="font-medium text-gray-900">{moment.label}</h4>
-                              <p className="text-sm text-gray-600">
-                                {totalImagesCount} {totalImagesCount === 1 ? t('uploadDetail.photo') : t('uploadDetail.photosPlural')}, {uploadImagesCount} {t('uploadDetail.inThisUpload')}
-                              </p>
+                            <div className="flex-1">
+                              {editingMomentLabel === moment.id ? (
+                                <div 
+                                  className="flex items-center space-x-2" 
+                                  onClick={(e) => e.stopPropagation()}
+                                  onBlur={(e) => {
+                                    // Only save if focus moved outside this element
+                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                      handleSaveMomentLabel(moment.id);
+                                    }
+                                  }}
+                                >
+                                  <input
+                                    type="text"
+                                    value={momentLabelValue}
+                                    onChange={(e) => setMomentLabelValue(e.target.value)}
+                                    className="flex-1 border-b-2 border-primary-500 bg-transparent px-2 py-1 text-base font-medium focus:outline-none"
+                                    placeholder="Moment name..."
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleSaveMomentLabel(moment.id);
+                                      } else if (e.key === 'Escape') {
+                                        handleCancelEditMomentLabel();
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <h4 
+                                    className={`font-medium text-gray-900 inline-block ${
+                                      permissions.canEdit ? 'cursor-pointer hover:text-primary-600 transition-colors' : ''
+                                    }`}
+                                    onClick={permissions.canEdit ? ((e) => {
+                                      e.stopPropagation();
+                                      handleEditMomentLabel(moment.id, moment.label);
+                                    }) : undefined}
+                                  >
+                                    {moment.label}
+                                  </h4>
+                                  <p className="text-sm text-gray-600">
+                                    {totalImagesCount} {totalImagesCount === 1 ? t('uploadDetail.photo') : t('uploadDetail.photosPlural')}, {uploadImagesCount} {t('uploadDetail.inThisUpload')}
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1482,7 +1546,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {momentImages.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noImagesFromThisUpload')}</p>
                               ) : (
-                                <div style={{ height: '400px', marginTop: '0.5rem' }}>
+                                <div style={{ height: '430px', marginTop: '0.5rem' }}>
                                   <AbsoluteMasonryGrid
                                     items={momentImages}
                                     baseSize={Math.max(60, 266 * imageSize)}

@@ -17,6 +17,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import PublicProfilePasswordModal from './PublicProfilePasswordModal';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false, initialEventId = null }) {
   const { t } = useTranslation();
@@ -2531,17 +2532,24 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificPhotosConfigured')}
                   </p>
                 ) : (
-                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
-                    {profileImages.map((image) => (
-                      <ProfileImageThumb
-                        key={image.id}
-                        imageId={image.id}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveImage(image.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    ))}
+                  <div className="max-h-48 overflow-y-auto">
+                    <AbsoluteMasonryGrid
+                      items={profileImages.map(img => ({ id: img.id, ...img }))}
+                      baseSize={48}
+                      gap={4}
+                      isSquareGrid={true}
+                      containerHeight="auto"
+                      className="w-full"
+                      renderItem={(image) => (
+                        <ProfileImageThumb
+                          imageId={image.id}
+                          eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+                          urlHelpers={dynamicUrlHelpers}
+                          onRemove={() => handleRemoveImage(image.id)}
+                          title={t('editProfile.clickToRemove')}
+                        />
+                      )}
+                    />
                   </div>
                 )}
               </div>
@@ -2575,17 +2583,24 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificAlbumsConfigured')}
                   </p>
                 ) : (
-                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
-                    {profileAlbums.map((album) => (
-                      <ProfileAlbumThumb
-                        key={album.id}
-                        album={album}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveAlbum(album.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    ))}
+                  <div className="max-h-48 overflow-y-auto">
+                    <AbsoluteMasonryGrid
+                      items={profileAlbums.map(album => ({ id: album.id, ...album }))}
+                      baseSize={48}
+                      gap={4}
+                      isSquareGrid={true}
+                      containerHeight="auto"
+                      className="w-full"
+                      renderItem={(album) => (
+                        <ProfileAlbumThumb
+                          album={album}
+                          eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+                          urlHelpers={dynamicUrlHelpers}
+                          onRemove={() => handleRemoveAlbum(album.id)}
+                          title={t('editProfile.clickToRemove')}
+                        />
+                      )}
+                    />
                   </div>
                 )}
               </div>
@@ -2619,17 +2634,24 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificPeopleConfigured')}
                   </p>
                 ) : (
-                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
-                    {profileGroups.map((group) => (
-                      <ProfileGroupThumb
-                        key={group.id}
-                        group={group}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveGroup(group.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    ))}
+                  <div className="max-h-48 overflow-y-auto">
+                    <AbsoluteMasonryGrid
+                      items={profileGroups.map(group => ({ id: group.id, ...group }))}
+                      baseSize={48}
+                      gap={4}
+                      isSquareGrid={true}
+                      containerHeight="auto"
+                      className="w-full"
+                      renderItem={(group) => (
+                        <ProfileGroupThumb
+                          group={group}
+                          eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+                          urlHelpers={dynamicUrlHelpers}
+                          onRemove={() => handleRemoveGroup(group.id)}
+                          title={t('editProfile.clickToRemove')}
+                        />
+                      )}
+                    />
                   </div>
                 )}
               </div>

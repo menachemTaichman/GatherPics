@@ -10,6 +10,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { RemovableThumbnail } from '../common';
 import { useRTL } from '../../hooks/useRTL';
 import { downloadAsZip } from '../../utils/downloadHelper';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
@@ -82,6 +83,16 @@ export default function BucketDrawer() {
   const alreadyList = mode === 'download' ? downloaded : uploaded;
 
   const compactList = useMemo(() => alreadyList.slice(0, 30), [alreadyList]);
+
+  // Convert queue to items format for AbsoluteMasonryGrid
+  const queueItems = useMemo(() => {
+    return queue.map(id => ({ id, imageId: id }));
+  }, [queue]);
+
+  // Convert alreadyList to items format for AbsoluteMasonryGrid
+  const alreadyListItems = useMemo(() => {
+    return alreadyList.map(id => ({ id, imageId: id }));
+  }, [alreadyList]);
 
   const handlePrimaryAction = async () => {
     if (queue.length === 0) return;
@@ -259,11 +270,17 @@ export default function BucketDrawer() {
             {queue.length === 0 ? (
               <p className="text-sm text-gray-500">{t('bucketDrawer.noItemsInQueue')}</p>
             ) : (
-              <div className="grid grid-cols-6 gap-2">
-                {queue.map((id) => (
-                  <BucketThumb key={id} eventUrl={eventUrl} imageId={id} size="medium" removeFrom="queue" />
-                ))}
-              </div>
+              <AbsoluteMasonryGrid
+                items={queueItems}
+                baseSize={48}
+                gap={8}
+                isSquareGrid={true}
+                containerHeight="100%"
+                className="w-full"
+                renderItem={(item) => (
+                  <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="medium" removeFrom="queue" />
+                )}
+              />
             )}
           </div>
 
@@ -285,10 +302,18 @@ export default function BucketDrawer() {
             {alreadyList.length === 0 ? (
               <p className="text-xs text-gray-400">{t('bucketDrawer.nothingYet')}</p>
             ) : (
-              <div className="grid grid-cols-6 gap-2">
-                {compactList.map((id) => (
-                  <BucketThumb key={`done-${id}`} eventUrl={eventUrl} imageId={id} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
-                ))}
+              <div className="h-48 overflow-y-auto">
+                <AbsoluteMasonryGrid
+                  items={alreadyListItems}
+                  baseSize={48}
+                  gap={8}
+                  isSquareGrid={true}
+                  containerHeight="auto"
+                  className="w-full"
+                  renderItem={(item) => (
+                    <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
+                  )}
+                />
               </div>
             )}
           </div>

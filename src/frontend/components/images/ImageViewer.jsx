@@ -15,7 +15,7 @@ import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { useModalFocus } from '../../hooks/useModalFocus';
-import { sortImages, sortGroups, sortByField, filterImages } from '../../utils/sorting';
+import { sortImages, sortGroups, sortByField, filterImages, sortMoments } from '../../utils/sorting';
 import { useModalStore } from '../../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -211,13 +211,70 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   
   
   // Use universal util for related images
-  const relatedImages = useChilds(eventId, entity + 's', parent, 'images', { filterByUploadId, includeArchived, sortBy, sortOrder });
+  // Skip useChilds for special '__all_moments__' case - we'll construct the list manually
+  const relatedImages = useChilds(
+    eventId, 
+    entity && parent !== '__all_moments__' ? entity + 's' : null, 
+    parent !== '__all_moments__' ? parent : null, 
+    'images', 
+    { filterByUploadId, includeArchived, sortBy, sortOrder }
+  );
   
   // Get entities from store for filtering
   const entities = useDataStore((state) => state.entities?.[eventId] || null);
   
   // Apply frontend filtering with same logic as GroupDetailPage
   const filteredImages = useMemo(() => {
+    // Special case: Show all images from all moments (when parent is '__all_moments__')
+    // This matches the grid sorting: moments by time, then images within each moment by time
+    if (entity === 'moment' && parent === '__all_moments__') {
+      const store = useDataStore.getState();
+      const momentsMap = store.entities?.[eventId]?.moments || {};
+      const imagesMap = store.entities?.[eventId]?.images || {};
+      
+      // Get all images that belong to moments (same approach as MomentsPage)
+      const allImagesWithMoments = Object.values(imagesMap).filter(image => {
+        if (!image) return false;
+        if (!includeArchived && image.is_archived) return false;
+        // Only include images that belong to a moment
+        return image.moment_id && momentsMap[image.moment_id];
+      });
+      
+      // Get all moments that have images, filter by archived status
+      const momentIdsWithImages = new Set(allImagesWithMoments.map(img => img.moment_id));
+      const allMoments = Object.values(momentsMap).filter(moment => {
+        if (!moment) return false;
+        if (!includeArchived && moment.is_archived) return false;
+        // Only include moments that have images
+        return momentIdsWithImages.has(moment.id);
+      });
+      
+      const sortedMoments = sortMoments(allMoments, sortOrder);
+      
+      // Group images by moment and sort within each moment
+      const momentMap = new Map();
+      sortedMoments.forEach(moment => {
+        momentMap.set(moment.id, []);
+      });
+      
+      allImagesWithMoments.forEach(image => {
+        if (image.moment_id && momentMap.has(image.moment_id)) {
+          momentMap.get(image.moment_id).push(image);
+        }
+      });
+      
+      // For each moment, sort images and combine
+      const allImages = [];
+      sortedMoments.forEach(moment => {
+        const momentImages = momentMap.get(moment.id) || [];
+        // Sort images within this moment
+        const sortedMomentImages = sortImages(momentImages, sortBy, sortOrder);
+        allImages.push(...sortedMomentImages);
+      });
+      
+      return allImages;
+    }
+    
     // If filteredIds is provided and relatedImages is empty, use filteredIds to get images from store
     if (filteredIds && Array.isArray(filteredIds) && filteredIds.length > 0 && (!relatedImages || relatedImages.length === 0)) {
       const store = useDataStore.getState();
@@ -255,7 +312,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     
     // Apply sorting to filtered images
     return sortImages(filtered, sortBy, sortOrder);
-  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived, filteredIds, eventId]);
+  }, [relatedImages, filterGroups, filterMode, onlySelected, entities, parent, sortBy, sortOrder, includeArchived, filteredIds, eventId, entity]);
   
   useEffect(() => {
   }, [filteredImages, entity, parent, includeArchived, sortBy, sortOrder, filterGroups, filterMode, onlySelected]);

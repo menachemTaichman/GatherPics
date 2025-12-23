@@ -12,6 +12,7 @@ import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useEventGeneralById } from '../../utils/dataManager';
 import { formatDuration } from '../../utils/dateUtils';
 import ConfirmDelete from '../modals/ConfirmDelete';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 
 export default function UploadFormModal({ 
   isOpen, 
@@ -825,6 +826,32 @@ export default function UploadFormModal({
     });
   }, [selectedFiles, fileToImageMap, imageStatuses, statusFilter, uploading]);
 
+  // Convert to items format for AbsoluteMasonryGrid list layout
+  const listItems = useMemo(() => {
+    const items = [];
+    // Add existing upload images
+    filteredExistingUploadImages.forEach(img => {
+      items.push({
+        id: `existing-${img.image_id}`,
+        type: 'existing',
+        data: img
+      });
+    });
+    // Add selected files
+    filteredSelectedFiles.forEach((fileItem) => {
+      const originalIndex = selectedFiles.findIndex(f => f.id === fileItem.id);
+      const imageId = originalIndex !== -1 ? fileToImageMap[originalIndex] : null;
+      items.push({
+        id: `file-${fileItem.id}`,
+        type: 'file',
+        data: fileItem,
+        imageId,
+        originalIndex
+      });
+    });
+    return items;
+  }, [filteredExistingUploadImages, filteredSelectedFiles, selectedFiles, fileToImageMap]);
+
   // Get available statuses from images
   const availableStatuses = useMemo(() => {
     const statusSet = new Set();
@@ -1213,9 +1240,16 @@ export default function UploadFormModal({
                     <p className="text-sm text-gray-500 text-center py-4">{t('upload.noImagesWithSelectedStatus')}</p>
                   </div>
                 ) : (
-                  <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3 bg-gray-50">
-                      {/* Helper function for status info */}
-                      {(() => {
+                  <div className="border rounded-lg bg-gray-50" style={{ height: '256px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ flex: 1, overflow: 'hidden', padding: '12px' }}>
+                      <AbsoluteMasonryGrid
+                        items={listItems}
+                        isListLayout={true}
+                        listItemHeight={80}
+                        gap={8}
+                        containerHeight="100%"
+                        className="w-full"
+                      renderItem={(item) => {
                         const getStatusInfo = (status) => {
                           switch (status) {
                             case 'UPLOADING':
@@ -1235,95 +1269,87 @@ export default function UploadFormModal({
                           }
                         };
 
-                        return (
-                          <>
-                            {/* Existing upload images */}
-                            {filteredExistingUploadImages.map((img) => {
-                              const status = img.status || 'PENDING_UPLOAD';
-                              const statusInfo = getStatusInfo(status);
-                              const StatusIcon = statusInfo.icon;
-                              
-                              return (
-                                <div
-                                  key={img.image_id}
-                                  className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
-                                    status === 'READY' 
-                                      ? 'border-green-300 bg-green-50' 
-                                      : status === 'FAILED'
-                                      ? 'border-red-300 bg-red-50'
-                                      : status === 'PROCESSING' || status === 'QUEUED'
-                                      ? 'border-blue-300 bg-blue-50'
-                                      : 'border-gray-200'
-                                  }`}
-                                >
-                                  <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                                    <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-sm font-medium text-gray-900 truncate">{img.label || img.image_id}</p>
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
-                                        {statusInfo.label}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-gray-500">ID: {img.image_id}</p>
-                                  </div>
+                        if (item.type === 'existing') {
+                          const img = item.data;
+                          const status = img.status || 'PENDING_UPLOAD';
+                          const statusInfo = getStatusInfo(status);
+                          const StatusIcon = statusInfo.icon;
+                          
+                          return (
+                            <div
+                              className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
+                                status === 'READY' 
+                                  ? 'border-green-300 bg-green-50' 
+                                  : status === 'FAILED'
+                                  ? 'border-red-300 bg-red-50'
+                                  : status === 'PROCESSING' || status === 'QUEUED'
+                                  ? 'border-blue-300 bg-blue-50'
+                                  : 'border-gray-200'
+                              }`}
+                            >
+                              <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{img.label || img.image_id}</p>
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
+                                    {statusInfo.label}
+                                  </span>
                                 </div>
-                              );
-                            })}
-                            
-                            {/* Newly selected files */}
-                            {filteredSelectedFiles.map((fileItem) => {
-                              // Find the original index in selectedFiles to get the correct imageId
-                              const originalIndex = selectedFiles.findIndex(f => f.id === fileItem.id);
-                              const imageId = originalIndex !== -1 ? fileToImageMap[originalIndex] : null;
-                              const status = imageId ? (imageStatuses[imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
-                              const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
-                              const StatusIcon = statusInfo.icon;
-                              
-                              return (
-                                <div
-                                  key={fileItem.id}
-                                  className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
-                                    status === 'READY' 
-                                      ? 'border-green-300 bg-green-50' 
-                                      : status === 'FAILED'
-                                      ? 'border-red-300 bg-red-50'
-                                      : status === 'PROCESSING' || status === 'QUEUED' || status === 'UPLOADING'
-                                      ? 'border-blue-300 bg-blue-50'
-                                      : 'border-gray-200 hover:border-gray-300'
-                                  }`}
-                                >
-                                  <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                                    <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
-                                      {status && (
-                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
-                                          {statusInfo.label}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
-                                  </div>
-                                  {!uploading && !isViewingExistingUpload && (
-                                    <button
-                                      onClick={() => handleRemoveFile(fileItem.id)}
-                                      className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
-                                      title={t('upload.removeFile')}
-                                      aria-label={t('upload.removeFile')}
-                                    >
-                                      <Trash2 className="w-4 h-4 text-red-600" />
-                                    </button>
+                                <p className="text-xs text-gray-500">ID: {img.image_id}</p>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // file type
+                          const fileItem = item.data;
+                          const status = item.imageId ? (imageStatuses[item.imageId] || 'PENDING_UPLOAD') : (uploading ? 'UPLOADING' : null);
+                          const statusInfo = status ? getStatusInfo(status) : { color: 'text-gray-500', bg: 'bg-gray-100', icon: ImageIcon, label: 'Waiting' };
+                          const StatusIcon = statusInfo.icon;
+                          
+                          return (
+                            <div
+                              className={`flex items-center gap-3 p-3 bg-white border rounded-lg transition-colors ${
+                                status === 'READY' 
+                                  ? 'border-green-300 bg-green-50' 
+                                  : status === 'FAILED'
+                                  ? 'border-red-300 bg-red-50'
+                                  : status === 'PROCESSING' || status === 'QUEUED' || status === 'UPLOADING'
+                                  ? 'border-blue-300 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className={`w-12 h-12 ${statusInfo.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                <StatusIcon className={`w-6 h-6 ${statusInfo.color} ${statusInfo.spinning ? 'animate-spin' : ''}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{fileItem.name}</p>
+                                  {status && (
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.color}`}>
+                                      {statusInfo.label}
+                                    </span>
                                   )}
                                 </div>
-                              );
-                            })}
-                          </>
-                        );
-                      })()}
+                                <p className="text-xs text-gray-500">{formatFileSize(fileItem.size)}</p>
+                              </div>
+                              {!uploading && !isViewingExistingUpload && (
+                                <button
+                                  onClick={() => handleRemoveFile(fileItem.id)}
+                                  className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
+                                  title={t('upload.removeFile')}
+                                  aria-label={t('upload.removeFile')}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+                      }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

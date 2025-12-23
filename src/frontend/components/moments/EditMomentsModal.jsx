@@ -42,9 +42,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   const [deletingMoment, setDeletingMoment] = useState(null); // { id, label } for confirm modal
 
   // Update local state when store moments change (e.g., representative_image updated)
+  // Preserve editingTitle state if a moment is being edited
   useEffect(() => {
+    // Don't update if we're currently editing a title - preserve editing state
+    if (editingTitle) {
+      return;
+    }
+    
     setEditingMoments(prev => {
-      return prev.map(localMoment => {
+      const updated = prev.map(localMoment => {
         const momentId = localMoment.id || localMoment.moment_id;
         // Skip temporary moments
         if (String(momentId).startsWith('temp-')) return localMoment;
@@ -66,10 +72,41 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         // Not changed locally, use store version
         return storeMoment;
       });
+      
+      // Re-sort after updating (only if no moments are being edited)
+      // If there are changed moments, we'll sort after they're saved
+      if (changedMoments.size === 0) {
+        return sortMoments(updated, 'asc');
+      }
+      
+      return updated;
     });
     
     setInternalMoments(sortedStoreMoments);
-  }, [storeMoments, sortedStoreMoments, changedMoments]);
+  }, [storeMoments, sortedStoreMoments, changedMoments, editingTitle]);
+
+  // Re-sort editingMoments when all changes are saved (changedMoments becomes empty)
+  // This ensures moments are sorted after all individual saves complete
+  const prevChangedMomentsSizeRef = useRef(changedMoments.size);
+  useEffect(() => {
+    const prevSize = prevChangedMomentsSizeRef.current;
+    const currentSize = changedMoments.size;
+    prevChangedMomentsSizeRef.current = currentSize;
+    
+    // If changedMoments went from non-empty to empty, re-sort
+    if (prevSize > 0 && currentSize === 0 && editingMoments.length > 0) {
+      const sorted = sortMoments(editingMoments, 'asc');
+      // Only update if order actually changed
+      const orderChanged = sorted.some((m, i) => {
+        const current = editingMoments[i];
+        return !current || (m.id || m.moment_id) !== (current.id || current.moment_id);
+      });
+      
+      if (orderChanged) {
+        setEditingMoments(sorted);
+      }
+    }
+  }, [changedMoments.size, editingMoments]);
 
   // Use modal focus hook with proper modal manager integration
   const { modalRef } = useModalFocus(true, onClose, {
@@ -229,15 +266,21 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         }
         
         if (savedMoment) {
-          // Replace the temporary moment with the saved one
-          setEditingMoments(prev => prev.map(m => 
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
-          ));
+          // Replace the temporary moment with the saved one and re-sort
+          setEditingMoments(prev => {
+            const updated = prev.map(m => 
+              (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+            );
+            return sortMoments(updated, 'asc');
+          });
           
           // Update internal moments snapshot
-          setInternalMoments(prev => prev.map(m =>
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
-          ));
+          setInternalMoments(prev => {
+            const updated = prev.map(m =>
+              (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+            );
+            return sortMoments(updated, 'asc');
+          });
           
           // Navigate to the newly created moment within the modal
           setTimeout(() => {
@@ -266,15 +309,21 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
         savedMoment = store.entities?.[eventId]?.moments?.[id || moment_id];
         
         if (savedMoment) {
-          // Update with saved data from store
-          setEditingMoments(prev => prev.map(m => 
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
-          ));
+          // Update with saved data from store and re-sort
+          setEditingMoments(prev => {
+            const updated = prev.map(m => 
+              (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+            );
+            return sortMoments(updated, 'asc');
+          });
           
           // Update internal moments snapshot
-          setInternalMoments(prev => prev.map(m =>
-            (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
-          ));
+          setInternalMoments(prev => {
+            const updated = prev.map(m =>
+              (m.id || m.moment_id) === (moment.id || moment.moment_id) ? savedMoment : m
+            );
+            return sortMoments(updated, 'asc');
+          });
         }
       }
       
@@ -590,7 +639,9 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   };
 
   const startTitleEdit = (moment_id, currentTitle) => {
-    setEditingTitle({ moment_id: moment_id, title: currentTitle });
+    // Normalize moment_id to string for consistent comparison
+    const normalizedId = String(moment_id);
+    setEditingTitle({ moment_id: normalizedId, title: currentTitle || '' });
   };
 
   // Ref for scroll container
@@ -655,18 +706,65 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
   // Handle keyboard shortcuts: Enter to save, Escape to discard (for the moment being edited)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const activeElement = document.activeElement;
+      
       // Get latest values from refs
       const editingTitle = editingTitleRef.current;
       const editingMoments = editingMomentsRef.current;
       const changedMoments = changedMomentsRef.current;
       const internalMoments = internalMomentsRef.current;
       
-      // If editing title, let the title input handle it
-      if (editingTitle) {
+      // Check if we're in the title input - handle it specially
+      const isTitleInput = activeElement?.getAttribute('name')?.startsWith('edit-moment-title-') ||
+                           activeElement?.getAttribute('moment_id')?.startsWith('edit-moment-title-');
+      if (isTitleInput && editingTitle) {
+        const momentIdMatch = activeElement?.getAttribute('name')?.match(/edit-moment-title-(.+)/) ||
+                             activeElement?.getAttribute('moment_id')?.match(/edit-moment-title-(.+)/);
+        if (momentIdMatch && momentIdMatch[1]) {
+          const momentId = momentIdMatch[1];
+          const focusedMoment = editingMoments.find(m => String(m.id || m.moment_id) === momentId);
+          
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            // Update the title in local state and mark as changed
+            updateMoment(momentId, { label: editingTitle.title });
+            // Clear editing state
+            setEditingTitle(null);
+            // Get the updated moment (with the new label) and save it
+            // We need to construct it from the current focusedMoment with the new label
+            const updatedMoment = focusedMoment ? { ...focusedMoment, label: editingTitle.title } : null;
+            if (updatedMoment) {
+              // Use setTimeout to ensure state has updated
+              setTimeout(() => {
+                handleSaveMoment(updatedMoment);
+              }, 0);
+            }
+            return;
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            // Reset to original label
+            const originalMoment = internalMoments.find(m => String(m.id || m.moment_id) === momentId);
+            if (originalMoment && originalMoment.label !== editingTitle.title) {
+              setEditingMoments(prev => prev.map(m => 
+                String(m.id || m.moment_id) === momentId 
+                  ? { ...m, label: originalMoment.label }
+                  : m
+              ));
+              setChangedMoments(prev => {
+                const next = new Set(prev);
+                next.delete(momentId);
+                return next;
+              });
+            }
+            setEditingTitle(null);
+            return;
+          }
+        }
+        // For other keys in title input, let it handle normally
         return;
       }
-      
-      const activeElement = document.activeElement;
       
       // Find which moment the focused element belongs to
       let focusedMoment = null;
@@ -832,7 +930,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
                     {/* Inline Editable Title */}
                     <div className="flex-1 min-w-0">
-                      {editingTitle?.moment_id === (moment.id || moment.moment_id) ? (
+                      {editingTitle?.moment_id === String(moment.id || moment.moment_id) ? (
                         <div className="relative">
                           <input
                             type="text"
@@ -841,13 +939,6 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                             value={editingTitle.title}
                             onChange={(e) => setEditingTitle({ ...editingTitle, title: e.target.value })}
                             onBlur={() => handleTitleEdit(moment.id || moment.moment_id, editingTitle.title)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleTitleEdit(moment.id || moment.moment_id, editingTitle.title);
-                              } else if (e.key === 'Escape') {
-                                setEditingTitle(null);
-                              }
-                            }}
                             className={`text-base sm:text-lg font-semibold border-b hover:border-gray-300 focus:outline-none px-1 py-1 w-full ${
                               nameConflicts.get(moment.id || moment.moment_id) 
                                 ? 'border-red-500 focus:border-red-500' 
@@ -865,19 +956,16 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 min-w-0">
-                          <div
-                            onClick={() => startTitleEdit(moment.id || moment.moment_id, moment.label)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                startTitleEdit(moment.moment_id, moment.label);
-                              }
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startTitleEdit(moment.id || moment.moment_id, moment.label || '');
                             }}
-                            role="button"
-                            tabIndex={0}
-                            className="text-base sm:text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors truncate"
+                            className="text-base sm:text-lg font-semibold cursor-pointer hover:bg-gray-50 px-1 py-1 rounded transition-colors truncate text-left bg-transparent border-none m-0"
                           >
                             {moment.label || `${t('moments.newMoment')} ${index + 1}`}
-                          </div>
+                          </button>
                           {nameConflicts.get(moment.id || moment.moment_id) && (
                             <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" title={t('moments.nameAlreadyExists')} />
                           )}
@@ -888,10 +976,16 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
                   {/* Action Buttons */}
                   <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                    {changedMoments.has(moment.id || moment.moment_id) && (
+                    {(changedMoments.has(moment.id || moment.moment_id) || editingTitle?.moment_id === String(moment.id || moment.moment_id)) && (
                       <>
                         <button 
-                          onClick={() => handleSaveMoment(moment)}
+                          onClick={() => {
+                            // If editing title, save it first
+                            if (editingTitle?.moment_id === String(moment.id || moment.moment_id)) {
+                              handleTitleEdit(moment.id || moment.moment_id, editingTitle.title);
+                            }
+                            handleSaveMoment(moment);
+                          }}
                           disabled={nameConflicts.get(moment.id || moment.moment_id)}
                           className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-green-100 text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                           title={nameConflicts.get(moment.id || moment.moment_id) ? t('moments.cannotSaveNameExists') : t('moments.saveMoment')}
@@ -902,6 +996,10 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
                         <button 
                           onClick={() => {
                             const momentId = moment.id || moment.moment_id;
+                            // If editing title, cancel editing first
+                            if (editingTitle?.moment_id === String(momentId)) {
+                              setEditingTitle(null);
+                            }
                             if (String(momentId).startsWith('temp-')) {
                               // Remove temporary moment completely
                               setEditingMoments(prev => prev.filter(m => (m.id || m.moment_id) !== momentId));

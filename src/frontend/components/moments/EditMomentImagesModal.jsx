@@ -4,14 +4,14 @@ import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-rea
 import { sortImagesWithDatePriority, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference } from '../../utils/settings';
-import { imagesAPI, momentsAPI, handleAPIError, optimisticUpdates } from '../../utils/apiService';
+import { momentsAPI } from '../../utils/apiService';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useDataStore, selectors as storeSelectors } from '../../utils/dataManager';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useModalStore } from '../../utils/modalManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
 
-import { formatDateTime } from '../../utils/dateUtils';
+import { formatTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
@@ -43,12 +43,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     return state.entities?.[eventId]?.moments?.[momentId] || null;
   }, [momentId, eventId]));
   
-  // Subscribe to current moment's images from store - use stable selector with EMPTY_SET
-  const currentMomentImageIds = useDataStore(useCallback(state => {
-    if (!momentId) return EMPTY_SET;
-    return state.entities?.[eventId]?.moments?.[momentId]?.images || EMPTY_SET;
-  }, [momentId, eventId]));
-  
   // Subscribe to all moments for getting image-moment relationships
   const allMomentsFromStore = useDataStore(state => storeSelectors.momentsAll(state, eventId));
   
@@ -56,6 +50,18 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   const allImagesWithTimestamps = useMemo(() => {
     return storeImages.filter(img => includeArchived || !img.is_archived);
   }, [storeImages, includeArchived]);
+  
+  // Compute current moment's image IDs from images' moment_id field (not from moment.images Set)
+  const currentMomentImageIds = useMemo(() => {
+    if (!momentId) return EMPTY_SET;
+    const ids = new Set();
+    allImagesWithTimestamps.forEach(img => {
+      if (img && img.moment_id === momentId) {
+        ids.add(img.id);
+      }
+    });
+    return ids;
+  }, [allImagesWithTimestamps, momentId]);
   
   const [imagesToAdd, setImagesToAdd] = useState(new Set());
   const [imagesToRemove, setImagesToRemove] = useState(new Set());
@@ -97,7 +103,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       } catch {}
       
       handleReset();
-      fetchImagesForEditing();
       setError('');
       
       // Listen for logout to auto-close modal
@@ -114,20 +119,6 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
       };
     }
   }, [moment]);
-
-  const fetchImagesForEditing = async () => {
-    try {
-      // Fetch all images with timestamps for moment editing
-      await momentsAPI.getImages(null, eventUrl);
-      // Changes are automatically applied by apiService interceptor
-      // storeImages will update reactively via the subscription
-    } catch (error) {
-      console.error('Error fetching images for editing:', error);
-      if (onToast) {
-        onToast(formatErrorMessage('fetch images', error), 'error');
-      }
-    }
-  };
 
   const handleSaveImages = async () => {
     try {
@@ -228,10 +219,12 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     setSortOrder(prev => toggleSortOrder(prev));
   };
 
-  // Check if an image is currently in the moment
-  const isImageInMoment = (imageId) => {
-    return currentMomentImageIds.has(imageId);
-  };
+  // Check if an image is currently in the moment (using moment_id field)
+  const isImageInMoment = useCallback((imageId) => {
+    if (!momentId) return false;
+    const image = allImagesWithTimestamps.find(img => img.id === imageId);
+    return image?.moment_id === momentId;
+  }, [momentId, allImagesWithTimestamps]);
 
   // Get the effective selection state for an image (considering pending changes)
   const getImageSelectionState = (imageId) => {
@@ -300,11 +293,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     let filteredImages = allImagesWithTimestamps;
     if (filterType === 'in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && currentMomentImageIds.has(img.id)
+        img && img.id && img.moment_id === momentId
       );
     } else if (filterType === 'not-in-moment') {
       filteredImages = filteredImages.filter(img => 
-        img && img.id && !currentMomentImageIds.has(img.id)
+        img && img.id && img.moment_id !== momentId
       );
     } else if (filterType === 'in-period') {
       // Filter images locally based on date_taken and moment date range
@@ -520,7 +513,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   // Memoize filteredImages to prevent infinite loops
   const filteredImages = useMemo(() => getFilteredAndSortedImages(), [
     allImagesWithTimestamps,
-    currentMomentImageIds,
+    momentId,
     filterType,
     sortOrder,
     moment?.start_date,
@@ -757,16 +750,26 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
 
         </div>
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-          <AbsoluteMasonryGrid
-            items={filteredImages}
-            baseSize={120}
-            imageClasses={{}}
-            containerHeight="auto"
-            className="w-full"
+        <div className="flex-1 min-h-0 flex flex-col">
+          {filteredImages.length === 0 ? (
+            <div className="flex items-center justify-center flex-1 text-gray-500 p-3 sm:p-4 md:p-6">
+              {t('moments.noImages')}
+            </div>
+          ) : (
+            <AbsoluteMasonryGrid
+              items={filteredImages}
+              baseSize={120}
+              imageClasses={{}}
+              containerHeight="100%"
+              className="w-full p-3 sm:p-4 md:p-6"
+              isSquareGrid={true}
+              gap={12}
             style={{
               '--grid-scale': 1,
               '--grid-z-index': 1,
+            }}
+            onPinchRef={(node) => {
+              scrollContainerRef.current = node;
             }}
             onItemRef={(image, index, el) => {
               if (el) {
@@ -779,28 +782,41 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
               const isInPeriod = isImageInPeriod(image.id);
               const isFocused = index === focusedImageIndex;
               
-              // Determine border color based on selection state
-              let borderClasses = '';
+              // Determine border color based on selection state - using outline for outer border
+              let borderStyle = {};
+              let borderClasses = 'border border-gray-200';
               switch (selectionState) {
                 case 'marked-for-addition':
-                  borderClasses = 'border-green-500 ring-2 ring-green-200';
+                  borderStyle = {
+                    outline: '4px solid rgb(34, 197, 94)', // green-500
+                    outlineOffset: '-4px',
+                    boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
+                  };
                   break;
                 case 'marked-for-removal':
-                  borderClasses = 'border-red-500 ring-2 ring-red-200';
+                  borderStyle = {
+                    outline: '4px solid rgb(239, 68, 68)', // red-500
+                    outlineOffset: '-4px',
+                    boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' // red-200 ring
+                  };
                   break;
                 case 'in-moment':
-                  borderClasses = 'border-green-500 ring-2 ring-green-200'; // Green border for images staying in moment
+                  borderStyle = {
+                    outline: '4px solid rgb(34, 197, 94)', // green-500
+                    outlineOffset: '-4px',
+                    boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
+                  };
                   break;
                 default:
-                  borderClasses = '';
+                  borderStyle = {};
               }
               
               return (
                 <div
-                  className={`image-item relative cursor-pointer border rounded-lg overflow-hidden hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
+                  className={`image-item relative cursor-pointer border rounded-lg overflow-visible hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
                     isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
                   }`}
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: '100%', height: '100%', ...borderStyle }}
                   onClick={() => toggleImage(image.id)}
                   onFocus={() => setFocusedImageIndex(index)}
                   onKeyDown={(e) => {
@@ -814,30 +830,33 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                   aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
                   data-image-id={image.id}
                 >
-                  <img
-                    src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id))}
-                    alt={image.label || `Image ${image.id}`}
-                    className="w-full h-24 object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-                    }}
-                  />
-                  <div className="p-2 text-xs text-gray-600 truncate">
-                    {image.date_taken ? formatDateTime(image.date_taken) : image.label}
-                  </div>
-                  {momentInfo && (
-                    <div className={`absolute top-2 ${endClass('2')} text-white text-xs px-1 py-0.5 rounded ${
-                      momentInfo.isCurrentMoment ? 'bg-green-500' : 'bg-red-500'
-                    }`}>
-                      {momentInfo.title}
+                  <div className="w-full h-full rounded-lg overflow-hidden">
+                    <img
+                      src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id))}
+                      alt={image.label || `Image ${image.id}`}
+                      className="w-full h-24 object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
+                      }}
+                    />
+                    <div className="p-2 text-xs text-gray-600 truncate">
+                      {image.date_taken ? formatTime(image.date_taken) : image.label}
                     </div>
-                  )}
+                    {momentInfo && (
+                      <div className={`absolute top-2 ${endClass('2')} text-white text-xs px-1 py-0.5 rounded ${
+                        momentInfo.isCurrentMoment ? 'bg-green-500' : 'bg-red-500'
+                      }`}>
+                        {momentInfo.title}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             }}
-          />
+            />
+          )}
         </div>
       </motion.div>
     </div>
