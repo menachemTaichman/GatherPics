@@ -116,7 +116,7 @@ export default function AbsoluteMasonryGrid({
   renderItem,
   renderHeader = null, // Optional function to render header items
   baseSize = 150,
-  gap = 8,
+  gap = 3,
   imageClasses = {},
   containerHeight = '100%',
   className = '',
