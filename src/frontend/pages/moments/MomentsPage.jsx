@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
+import { Image, Minus, Plus, Clock, Calendar, CheckCheck, X, Pencil, Square, CheckSquare, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ImageViewer } from '../../components/images';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { EditMomentsModal, MoveToMomentModal } from '../../components/moments';
@@ -24,7 +24,7 @@ import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useImageHighlight } from '../../hooks/useImageHighlight';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
-import { formatTime as formatTimeOnly, formatDate } from '../../utils/dateUtils';
+import { formatTimeOnly, formatDate } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
@@ -116,6 +116,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [carouselVisible, setCarouselVisible] = useState(false);
   const [currentVisibleMoment, setCurrentVisibleMoment] = useState(null);
+  const carouselRef = useRef(null);
+  const carouselContainerRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   
   // State for image aspect ratio classes
   const [imageClasses, setImageClasses] = useState({});
@@ -724,6 +728,70 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     }
   };
 
+  // Update carousel scroll button visibility
+  useEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    const updateScrollButtons = () => {
+      const scrollLeft = carousel.scrollLeft;
+      const maxScrollLeft = carousel.scrollWidth - carousel.clientWidth;
+      
+      setCanScrollLeft(scrollLeft > 1); // Show left arrow if scrolled right
+      setCanScrollRight(scrollLeft < maxScrollLeft - 1); // -1 for floating point precision
+    };
+
+    updateScrollButtons();
+    carousel.addEventListener('scroll', updateScrollButtons, { passive: true });
+    window.addEventListener('resize', updateScrollButtons);
+    
+    return () => {
+      carousel.removeEventListener('scroll', updateScrollButtons);
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [carouselVisible, moments.length]);
+
+  // Carousel navigation handlers
+  const handleCarouselScrollLeft = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const handleCarouselScrollRight = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  // Handle click outside carousel to close it
+  useEffect(() => {
+    if (!carouselVisible) return;
+
+    const handleClickOutside = (event) => {
+      if (carouselContainerRef.current && !carouselContainerRef.current.contains(event.target)) {
+        // Check if click is on the toggle button in the header (don't close if clicking the button)
+        const toggleButton = event.target.closest('button[aria-label*="carousel" i]') || 
+                            event.target.closest('button[title*="carousel" i]') ||
+                            event.target.closest('button[title*="Hide carousel" i]') ||
+                            event.target.closest('button[title*="Show carousel" i]');
+        if (!toggleButton) {
+          setCarouselVisible(false);
+        }
+      }
+    };
+
+    // Delay to avoid closing immediately when opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [carouselVisible]);
+
   if (storeLoading) return <div className="p-8 text-center" dir={isRTL ? 'rtl' : 'ltr'}>{t('moments.loadingMoments')}</div>;
   if (storeError) return <div className="p-8 text-center text-red-500" dir={isRTL ? 'rtl' : 'ltr'}>{storeError}</div>;
 
@@ -913,58 +981,87 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
       <AnimatePresence>
         {carouselVisible && (
           <motion.div 
+            ref={carouselContainerRef}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
-            className="fixed left-4 right-4 z-40 p-4"
+            className="fixed left-4 right-4 z-40 p-2"
             style={{ top: 'calc(4rem + 9rem)' }} // Position below header (4rem top bar + ~10rem header height)
           >
-            <div className="carousel-container flex gap-4 overflow-x-auto pb-2">
-              {moments.length === 0 && (
-                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                  {t('moments.noMomentsYet')}
-                </div>
-              )}
-              {storeLoading && moments.length > 0 && (
-                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white/80"></div>
-                    <span>{t('moments.loadingPhotos')}</span>
-                  </div>
-                </div>
-              )}
-              {moments.map(moment => (
-                <motion.div 
-                  key={moment.id} 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="relative flex-shrink-0 w-32 sm:w-36 md:w-40 h-28 sm:h-32 flex flex-col items-center justify-center p-2 sm:p-3 cursor-pointer transition-all"
-                  onClick={() => {
-                    handleCarouselMomentClick(moment);
-                  }}
+            <div className="relative bg-white/80 p-2 rounded-lg">
+              {/* Left Arrow */}
+              {canScrollLeft && (
+                <button
+                  onClick={handleCarouselScrollLeft}
+                  className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-6 h-10 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 rounded-md shadow-md hover:shadow-lg flex items-center justify-center transition-all active:scale-95"
+                  aria-label={t('moments.scrollLeft')}
                 >
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500/90 to-purple-600/90 rounded-lg overflow-hidden flex items-center justify-center mb-1 sm:mb-2 shadow-lg ring-2 ring-white/20">
-                    {ImageComponent(
-                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
-                      {
-                        width: 80,
-                        height: 80,
-                        className: 'object-cover w-full h-full',
-                        alt: moment.label
-                      }
-                    )}
+                  <ChevronLeft className="w-4 h-4 text-gray-700 hover:text-gray-900" />
+                </button>
+              )}
+              
+              {/* Right Arrow */}
+              {canScrollRight && (
+                <button
+                  onClick={handleCarouselScrollRight}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-6 h-10 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 rounded-md shadow-md hover:shadow-lg flex items-center justify-center transition-all active:scale-95"
+                  aria-label={t('moments.scrollRight')}
+                >
+                  <ChevronRight className="w-4 h-4 text-gray-700 hover:text-gray-900" />
+                </button>
+              )}
+
+              {/* Carousel Container */}
+              <div 
+                ref={carouselRef}
+                className="carousel-container flex items-center gap-0 overflow-x-scroll overflow-y-hidden scrollbar-hide h-32 sm:h-36"
+              >
+                {moments.length === 0 && (
+                  <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                    {t('moments.noMomentsYet')}
                   </div>
-                  <div className="text-center">
-                    <div className="text-sm sm:text-base font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] truncate max-w-[5rem] sm:max-w-[7rem]">
-                      {moment.label}
-                    </div>
-                    <div className="text-xs text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] truncate max-w-[5rem] sm:max-w-[7rem]">
-                      {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
+                )}
+                {storeLoading && moments.length > 0 && (
+                  <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white/80"></div>
+                      <span>{t('moments.loadingPhotos')}</span>
                     </div>
                   </div>
-                </motion.div>
-              ))}
+                )}
+                {moments.map(moment => (
+                  <motion.div 
+                    key={moment.id} 
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="relative flex-shrink-0 min-w-24 sm:min-w-28 md:min-w-28 w-auto h-32 sm:h-36 md:h-36 flex flex-col items-center justify-center p-2 sm:p-3 cursor-pointer transition-all"
+                    onClick={() => {
+                      handleCarouselMomentClick(moment);
+                    }}
+                  >
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500/90 to-purple-600/90 rounded-lg overflow-hidden flex items-center justify-center mb-1 sm:mb-2 shadow-lg ring-2 ring-white/20">
+                      {ImageComponent(
+                        urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
+                        {
+                          width: 80,
+                          height: 80,
+                          className: 'object-cover w-full h-full',
+                          alt: moment.label
+                        }
+                      )}
+                    </div>
+                    <div className="text-center w-full">
+                      <div className="text-sm sm:text-base font-bold text-gray-900 whitespace-nowrap px-1">
+                        {moment.label}
+                      </div>
+                      <div className="text-xs text-gray-700 whitespace-nowrap px-1">
+                        {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}

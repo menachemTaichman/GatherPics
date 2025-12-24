@@ -119,6 +119,25 @@ export function formatTime(value) {
 }
 
 /**
+ * Format time only in 24-hour format (format: "HH:MM")
+ * @param {string|Date} value - Timestamp string from database or Date object
+ * @returns {string} Formatted time string or empty string if invalid
+ */
+export function formatTimeOnly(value) {
+  if (!value) return '';
+  
+  const date = typeof value === 'string' ? parseDatabaseTimestamp(value) : value;
+  if (!date || Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${hours}:${minutes}`;
+}
+
+/**
  * Format date only (format: "Mon, Jan 1, 2025")
  * @param {string|Date} value - Timestamp string from database or Date object
  * @returns {string} Formatted date string or empty string if invalid
