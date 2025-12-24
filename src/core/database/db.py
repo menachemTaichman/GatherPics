@@ -508,8 +508,8 @@ class DB:
             value_type = DB.resolve_value_type(value_type)
         """Convert a Python value for database storage.
         
-        For PostgreSQL arrays (TEXT[], INTEGER[], etc.), returns the list as-is
-        so psycopg2 can handle the conversion. For JSONB fields, returns JSON string.
+        For TEXT/JSONB columns storing lists/dicts, serializes to JSON string.
+        PostgreSQL arrays are handled directly by psycopg2, not through this method.
         """
         
         if value_type == bool:
@@ -519,10 +519,9 @@ class DB:
         elif value_type == float:
             return str(float(value))
         elif value_type == list:
-            # For PostgreSQL arrays, return list as-is (psycopg2 will handle conversion)
-            # For JSONB fields that store lists, this would need to be handled differently,
-            # but currently all list fields in STRUCTURE are PostgreSQL arrays
-            return value if value is not None else []
+            # For TEXT/JSONB columns storing lists, serialize to JSON string
+            # (PostgreSQL arrays would be handled directly by psycopg2, not through serialize_value)
+            return json.dumps(value if value is not None else [])
         elif value_type == dict:
             # For JSONB fields, serialize to JSON string
             return json.dumps(value if value is not None else {})

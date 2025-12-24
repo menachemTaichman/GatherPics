@@ -335,6 +335,45 @@ def add_preference(preference_group: str, preference_key: str, value_type: str, 
     params = [preference_group, preference_key, value]
     db.execute_query(query, params)
 
+def test_timeit():
+
+    import time
+    class Timeit:
+        def __init__(self, name: str):
+            self.name = name
+        
+        def __enter__(self):
+            self.start = time.time()
+            return self
+        
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.end = time.time()
+            self.elapsed = self.end - self.start
+            print(f'{self.name} took {self.elapsed} seconds')
+            return False
+
+    event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+    # create db instance
+    with Timeit('create db instance'):
+        db = DB(profile_id=dev_profile_id, event_id=event_id)
+
+    # create event instance
+    with Timeit('create event instance'):
+        event = Event(event_id, profile_id=dev_profile_id)
+
+    # create general models instance
+    with Timeit('create general models instance'):
+        general_models = GeneralModels(profile_id=dev_profile_id)
+
+    with Timeit('get_childs'):
+        result = event.models.get_childs('groups', '4573c4a0-ba12-4fa0-b3d8-db26be68221d', 'images')
+        # print(result)
+
+    with Timeit('get_image'):
+        result = event.models.get_entities('images', 'affd55e9-6563-4a66-ac2c-5584dd9de888')
+
+    print('--------------------------------')
+
 entities_tables = ['images', 'groups', 'moments', 'albums']
 relations = [
     ('images', 'albums'),
@@ -353,43 +392,6 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
-
-import time
-class Timeit:
-    def __init__(self, name: str):
-        self.name = name
-    
-    def __enter__(self):
-        self.start = time.time()
-        return self
-    
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.end = time.time()
-        self.elapsed = self.end - self.start
-        print(f'{self.name} took {self.elapsed} seconds')
-        return False
-
-event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
-# create db instance
-with Timeit('create db instance'):
-    db = DB(profile_id=dev_profile_id, event_id=event_id)
-
-# create event instance
-with Timeit('create event instance'):
-    event = Event(event_id, profile_id=dev_profile_id)
-
-# create general models instance
-with Timeit('create general models instance'):
-    general_models = GeneralModels(profile_id=dev_profile_id)
-
-with Timeit('get_childs'):
-    result = event.models.get_childs('groups', '4573c4a0-ba12-4fa0-b3d8-db26be68221d', 'images')
-    # print(result)
-
-with Timeit('get_image'):
-    result = event.models.get_entities('images', 'affd55e9-6563-4a66-ac2c-5584dd9de888')
-
-print('--------------------------------')
 
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
