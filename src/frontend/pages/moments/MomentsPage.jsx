@@ -986,10 +986,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
-            className="fixed left-4 right-4 z-40 p-2"
+            className={`fixed z-40 p-2 ${isRTL ? 'right-4' : 'left-4'}`}
             style={{ top: 'calc(4rem + 9rem)' }} // Position below header (4rem top bar + ~10rem header height)
           >
-            <div className="relative bg-white/80 p-2 rounded-lg">
+            <div className="relative bg-white/80 p-2 rounded-lg w-fit max-w-[calc(100vw-2rem)]">
               {/* Left Arrow */}
               {canScrollLeft && (
                 <button
@@ -1017,50 +1017,50 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 ref={carouselRef}
                 className="carousel-container flex items-center gap-0 overflow-x-scroll overflow-y-hidden scrollbar-hide h-32 sm:h-36"
               >
-                {moments.length === 0 && (
-                  <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                    {t('moments.noMomentsYet')}
+              {moments.length === 0 && (
+                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  {t('moments.noMomentsYet')}
+                </div>
+              )}
+              {storeLoading && moments.length > 0 && (
+                <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white/80"></div>
+                    <span>{t('moments.loadingPhotos')}</span>
                   </div>
-                )}
-                {storeLoading && moments.length > 0 && (
-                  <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white/80"></div>
-                      <span>{t('moments.loadingPhotos')}</span>
-                    </div>
-                  </div>
-                )}
-                {moments.map(moment => (
-                  <motion.div 
-                    key={moment.id} 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                </div>
+              )}
+              {moments.map(moment => (
+                <motion.div 
+                  key={moment.id} 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                     className="relative flex-shrink-0 min-w-24 sm:min-w-28 md:min-w-28 w-auto h-32 sm:h-36 md:h-36 flex flex-col items-center justify-center p-2 sm:p-3 cursor-pointer transition-all"
-                    onClick={() => {
-                      handleCarouselMomentClick(moment);
-                    }}
-                  >
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500/90 to-purple-600/90 rounded-lg overflow-hidden flex items-center justify-center mb-1 sm:mb-2 shadow-lg ring-2 ring-white/20">
-                      {ImageComponent(
-                        urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
-                        {
-                          width: 80,
-                          height: 80,
-                          className: 'object-cover w-full h-full',
-                          alt: moment.label
-                        }
-                      )}
-                    </div>
+                  onClick={() => {
+                    handleCarouselMomentClick(moment);
+                  }}
+                >
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500/90 to-purple-600/90 rounded-lg overflow-hidden flex items-center justify-center mb-1 sm:mb-2 shadow-lg ring-2 ring-white/20">
+                    {ImageComponent(
+                      urlHelpers?.getRepresentativeUrl ? `${urlHelpers.getRepresentativeUrl('moments', moment.id)}?v=${moment.representative_image || 'none'}` : null,
+                      {
+                        width: 80,
+                        height: 80,
+                        className: 'object-cover w-full h-full',
+                        alt: moment.label
+                      }
+                    )}
+                  </div>
                     <div className="text-center w-full">
                       <div className="text-sm sm:text-base font-bold text-gray-900 whitespace-nowrap px-1">
-                        {moment.label}
-                      </div>
-                      <div className="text-xs text-gray-700 whitespace-nowrap px-1">
-                        {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
-                      </div>
+                      {moment.label}
                     </div>
-                  </motion.div>
-                ))}
+                      <div className="text-xs text-gray-700 whitespace-nowrap px-1">
+                      {formatTimeOnly(moment.start_date)} - {formatTimeOnly(moment.end_date)}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
               </div>
             </div>
           </motion.div>
