@@ -283,6 +283,7 @@ function ImageWithErrorFallback({ src, options = {} }) {
   const [shouldLoad, setShouldLoad] = React.useState(false);
   const imgRef = React.useRef(null);
   const observerRef = React.useRef(null);
+  const timeoutRef = React.useRef(null);
   
   const {
     width = 200,
@@ -303,6 +304,10 @@ function ImageWithErrorFallback({ src, options = {} }) {
     if (observerRef.current) {
       observerRef.current.disconnect();
       observerRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
   }, [src]);
 
@@ -329,6 +334,25 @@ function ImageWithErrorFallback({ src, options = {} }) {
       observerRef.current.disconnect();
     }
 
+    // Helper function to check if element is in viewport
+    const checkIfInViewport = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const rootMarginValue = parseInt(LAZY_LOAD_ROOT_MARGIN);
+      return (
+        rect.top < window.innerHeight + rootMarginValue &&
+        rect.bottom > -rootMarginValue &&
+        rect.left < window.innerWidth + rootMarginValue &&
+        rect.right > -rootMarginValue
+      );
+    };
+    
+    // Check immediately if element is already in viewport
+    if (checkIfInViewport(element)) {
+      setShouldLoad(true);
+      return;
+    }
+    
     // Create Intersection Observer with rootMargin to start loading slightly before viewport
     observerRef.current = new IntersectionObserver(
       (entries) => {
@@ -349,6 +373,25 @@ function ImageWithErrorFallback({ src, options = {} }) {
     );
 
     observerRef.current.observe(element);
+    
+    // Also check after a short delay in case the observer doesn't fire immediately
+    // This handles edge cases where elements are in viewport but observer hasn't fired yet
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      // Use a function to get current state
+      setShouldLoad((currentShouldLoad) => {
+        if (!currentShouldLoad && imgRef.current && checkIfInViewport(imgRef.current)) {
+          if (observerRef.current) {
+            observerRef.current.disconnect();
+            observerRef.current = null;
+          }
+          return true;
+        }
+        return currentShouldLoad;
+      });
+    }, 100);
   }, [src, shouldLoad, loading]);
 
   // Cleanup observer when dependencies change
@@ -357,6 +400,10 @@ function ImageWithErrorFallback({ src, options = {} }) {
       if (observerRef.current) {
         observerRef.current.disconnect();
         observerRef.current = null;
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
     };
   }, [src, shouldLoad, loading]);
