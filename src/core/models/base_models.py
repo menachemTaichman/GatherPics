@@ -4,6 +4,8 @@ from abc import ABC
 from enum import Enum
 import re
 
+from src.core.errors import Forbidden
+
 class ChildOperation(Enum):
     ADD = 'ADD'
     REMOVE = 'REMOVE'
@@ -189,10 +191,11 @@ class BaseModels(ABC):
                 join_clause = f' LEFT JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
                 where_clause = f'r.{child_id_field} IS NULL'
 
+        params = [entity_id]
         if child_ids is not None:
-            where_clause += f" AND c.{child_id_field} IN ({','.join(['%s'] * len(child_ids))})"
-        else:
-            child_ids = []
+            id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
+            where_clause += f" AND c.{child_id_field} = ANY(%s::{id_type}[])"
+            params.append(child_ids)
 
         query = f"""SELECT {fields}
         FROM {child_data_table} c
@@ -200,7 +203,7 @@ class BaseModels(ABC):
         WHERE {where_clause}
         """
         
-        valid_childs = self.db.execute_query(query, (entity_id, *child_ids), return_format=return_format)
+        valid_childs = self.db.execute_query(query, params, return_format=return_format)
         if relation_table_fields and not return_ids:
             if not valid_childs:
                 return valid_childs, {}
@@ -373,6 +376,11 @@ class BaseModels(ABC):
         ctx_relation_table = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
         id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
+
+        if not self.is_accessible(parent, entity_id):
+            raise Forbidden(f"Permission denied: the parent is not accessible")
+        if not self.is_accessible(child_table, child_ids):
+            raise Forbidden(f"Permission denied: some of the childs are not accessible")
 
         detached_parents = {}
         if exclusive:

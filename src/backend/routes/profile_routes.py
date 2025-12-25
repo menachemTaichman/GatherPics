@@ -541,11 +541,15 @@ def manage_profile_accessibility(event_id, profile_id):
 
     affected_ids, added = event.models.edit_accessibility(profile_id, entity_type, entity_ids, set_accessible=set_accessible)
     if added:
+        from src.backend.helpers import Timeit
+        # print(f'entity_ids: {entity_ids}')
+        with Timeit('get_childs'):
+            entities = event.models.get_childs('events_profiles_ctx', profile_id, entity_type, entity_ids)
         changes = [{
             'type': 'RELATION_ADD',
             'relation': f'profile.{entity_type}',
             'parentId': profile_id,
-            'entities': event.models.get_childs('events_profiles_ctx', profile_id, entity_type, entity_ids)
+            'entities': entities
         }]
     else:
         changes = [{

@@ -271,6 +271,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile dose not have permission to manage create events permissions';
             END IF;
             
+            -- the user will create one at a time, so we can keep this inefficient check
             IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM current_profile_events) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
@@ -315,6 +316,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile dose not have permission to manage create events permissions';
             END IF;
             
+            -- the user will update one at a time, so we can keep this inefficient check
             IF NEW.restricted_to_event IS NOT NULL AND NEW.restricted_to_event NOT IN (SELECT event_id FROM current_profile_events) THEN
                 RAISE EXCEPTION 'Permission denied: the event is not accessible';
             END IF;
@@ -747,6 +749,7 @@ steps = [
             inserted_profile_id UUID;
             inserted_event_id UUID;
         BEGIN
+            -- the user will create one at a time, so we can keep this inefficient check
             IF NEW.profile_id NOT IN (
                 SELECT profile_id FROM profiles_ctx WHERE is_editable
             ) THEN
@@ -959,14 +962,6 @@ steps = [
             inserted_profile_id UUID;
             inserted_image_id UUID;
         BEGIN
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the image is not accessible';
-            END IF;
-
             INSERT INTO profiles_images (profile_id, image_id)
             VALUES (NEW.profile_id, NEW.image_id)
             ON CONFLICT DO NOTHING
@@ -1007,15 +1002,6 @@ steps = [
             inserted_profile_id UUID;
             inserted_group_id UUID;
         BEGIN
-            
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the group is not accessible';
-            END IF;
-
             INSERT INTO profiles_groups (profile_id, group_id)
             VALUES (NEW.profile_id, NEW.group_id)
             ON CONFLICT DO NOTHING
@@ -1056,15 +1042,6 @@ steps = [
             inserted_profile_id UUID;
             inserted_album_id UUID;
         BEGIN
-            
-            IF NEW.profile_id NOT IN (SELECT profile_id FROM events_profiles_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the profile is not accessible';
-            END IF;
-            
-            IF NEW.album_id NOT IN (SELECT album_id FROM albums_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
-            END IF;
-
             INSERT INTO profiles_albums (profile_id, album_id)
             VALUES (NEW.profile_id, NEW.album_id)
             ON CONFLICT DO NOTHING
@@ -1166,10 +1143,12 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to upload images';
             END IF;
             
+            -- upload added directly to raw images table, so we can keep this inefficient check
             IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the image is not accessible';
             END IF;
             
+            -- upload added directly to raw groups table, so we can keep this inefficient check
             IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;
@@ -1216,10 +1195,6 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
             
-            IF NEW.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the target group is not accessible';
-            END IF;
-
             UPDATE faces SET group_id = NEW.group_id WHERE face_id = OLD.face_id
             RETURNING face_id INTO updated_face_id;
             
@@ -1697,14 +1672,6 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the profile does not have permission to edit entities';
             END IF;
 
-            IF NEW.image_id NOT IN (SELECT image_id FROM images_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the image is not accessible';
-            END IF;
-
-            IF NEW.album_id NOT IN (SELECT album_id FROM albums_ctx) THEN
-                RAISE EXCEPTION 'Permission denied: the album is not accessible';
-            END IF;
-
             INSERT INTO albums_images (album_id, image_id)
             VALUES (NEW.album_id, NEW.image_id)
             ON CONFLICT DO NOTHING
@@ -1926,6 +1893,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: cannot upload and delete images';
             END IF;
             
+            -- the user will ask one at a time, so we can keep this inefficient check
             IF OLD.profile_id IS DISTINCT FROM cur_profile_uuid('profile_id') AND OLD.profile_id NOT IN (
                 SELECT profile_id FROM events_profiles_ctx
             ) THEN
@@ -2495,6 +2463,7 @@ steps = [
                 RAISE EXCEPTION 'Permission denied: the access request group is closed';
             END IF;
             
+            -- the user will ask one at a time, so we can keep this inefficient check
             IF NEW.approved IS TRUE AND OLD.group_id NOT IN (SELECT group_id FROM groups_ctx) THEN
                 RAISE EXCEPTION 'Permission denied: the group is not accessible';
             END IF;

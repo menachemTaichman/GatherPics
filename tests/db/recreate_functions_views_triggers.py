@@ -366,7 +366,7 @@ def main():
     # ========================================
     DEFAULT_DRY_RUN = False  # Set to True to default to dry-run mode
     DEFAULT_DATABASE = DEFAULT_DB_NAME  # Set to override default database name
-    DEFAULT_USE_PORT_9000 = True  # Set to True to use port 9000 instead of 5432
+    DEFAULT_USE_PORT_9000 = False  # Set to True to use port 9000 instead of 5432
     DEFAULT_DB_PORT = '9000' if DEFAULT_USE_PORT_9000 else '5432'
     DEFAULT_DROP_FIRST = True  # Set to False to skip dropping existing objects first
     

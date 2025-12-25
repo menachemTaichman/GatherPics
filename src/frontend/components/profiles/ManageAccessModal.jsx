@@ -56,9 +56,20 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         setSpecifyStatus(null);
         setActualStatus(null);
         
+        // Handle 403 errors - if entities are not accessible, this is informational, not an error
         if (err.response?.status === 403) {
-          const errorMsg = err.response?.data?.error || 'Some of the entities are not accessible';
-          showToast(errorMsg, 'error');
+          const errorMsg = err.response?.data?.error;
+          const errorId = err.response?.data?.error_id;
+          
+          // Silently handle "Some of the entities are not accessible" error (expected case)
+          // This happens when checking accessibility for entities that may not be accessible
+          if (errorMsg === 'Some of the entities are not accessible' || errorId === 3472) {
+            // Just log, don't show toast - this is expected when some entities aren't accessible
+            return;
+          }
+          
+          // Show toast for other 403 errors
+          showToast(errorMsg || 'Permission denied', 'error');
         }
       }
     };
@@ -101,9 +112,29 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         }
       } catch (refreshErr) {
         console.error('Failed to refresh status:', refreshErr);
+        // Silently handle "Some of the entities are not accessible" error in refresh
+        if (refreshErr.response?.status === 403) {
+          const errorMsg = refreshErr.response?.data?.error;
+          const errorId = refreshErr.response?.data?.error_id;
+          if (errorMsg === 'Some of the entities are not accessible' || errorId === 3472) {
+            // Expected case when some entities aren't accessible, just return
+            return;
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to grant access:', err);
+      
+      // Handle "Some of the entities are not accessible" error
+      if (err.response?.status === 403) {
+        const errorMsg = err.response?.data?.error;
+        const errorId = err.response?.data?.error_id;
+        if (errorMsg === 'Some of the entities are not accessible' || errorId === 3472) {
+          showToast('Some of the selected entities are not accessible', 'error');
+          return;
+        }
+      }
+      
       // Use error handler for friendly messages, especially for db.py constraint errors
       const errorMsg = getErrorExplanation(err);
       showToast(entityType === 'group' ? formatErrorMessage('grant group access', err) : errorMsg, 'error');
@@ -147,9 +178,29 @@ function ProfileAccessRow({ profile, entityType, entityIds, eventUrl, showToast 
         }
       } catch (refreshErr) {
         console.error('Failed to refresh status:', refreshErr);
+        // Silently handle "Some of the entities are not accessible" error in refresh
+        if (refreshErr.response?.status === 403) {
+          const errorMsg = refreshErr.response?.data?.error;
+          const errorId = refreshErr.response?.data?.error_id;
+          if (errorMsg === 'Some of the entities are not accessible' || errorId === 3472) {
+            // Expected case when some entities aren't accessible, just return
+            return;
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to deny access:', err);
+      
+      // Handle "Some of the entities are not accessible" error
+      if (err.response?.status === 403) {
+        const errorMsg = err.response?.data?.error;
+        const errorId = err.response?.data?.error_id;
+        if (errorMsg === 'Some of the entities are not accessible' || errorId === 3472) {
+          showToast('Some of the selected entities are not accessible', 'error');
+          return;
+        }
+      }
+      
       // Use error handler for friendly messages, especially for db.py constraint errors (3354-3355)
       // When denying group access for profiles with upload permissions, the db constraint will raise an error
       const errorMsg = getErrorExplanation(err);

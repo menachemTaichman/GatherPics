@@ -598,10 +598,10 @@ class EventModels(BaseModels):
                 s.is_accessible
                 FROM {entity}_def s
                 INNER JOIN {ctx_table} at ON s.{id_field} = at.{id_field}
-                WHERE s.{id_field} IN ({','.join(['%s'] * len(ids))})
+                WHERE s.{id_field} = ANY(%s::uuid[])
                 AND s.profile_id = %s
         """
-        result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, [ids, profile_id], return_format=ReturnFormat.LIST_TUPLES)
         if len(result) != len(ids):
             raise Forbidden("Some of the entities are not accessible")
 
@@ -613,11 +613,11 @@ class EventModels(BaseModels):
                 a.{id_field},
                 a.is_accessible
                 FROM {entity}_eff a
-                WHERE a.{id_field} IN ({','.join(['%s'] * len(ids))})
+                WHERE a.{id_field} = ANY(%s::uuid[])
                 AND a.event_id = cur_event_profile_uuid('event_id')
                 AND a.profile_id = %s
         """
-        result = self.db.execute_query(query, ids + [profile_id], return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, [ids, profile_id], return_format=ReturnFormat.LIST_TUPLES)
 
         actual_accessible_ids = [id for id, is_accessible in result if is_accessible == True]
         actual_inaccessible_ids = [id for id, is_accessible in result if is_accessible == False]
@@ -691,6 +691,22 @@ class EventModels(BaseModels):
         """
         if not group_ids:
             raise ValueError("group_ids parameter is required")
+        
+        # Check if all groups are in groups_to_access_requests_ctx
+        query_check = f"""
+            SELECT NOT EXISTS (
+                SELECT 1
+                FROM unnest(%s::uuid[]) AS g(group_id)
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM groups_to_access_requests_ctx v
+                    WHERE v.group_id = g.group_id
+                )
+            );
+        """
+        valid = self.db.execute_query(query_check, (group_ids,), return_format=ReturnFormat.VALUE)
+        if not valid:
+            raise Forbidden(f"Permission denied: some of the groups are not accessible for access requests")
         
         request_id = self.add('my_access_requests', data)
 

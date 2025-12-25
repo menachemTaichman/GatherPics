@@ -259,7 +259,7 @@ steps = [
             pi.image_id IS NOT NULL AS is_accessible
         FROM images i
         JOIN events_profiles ep ON i.event_id = ep.event_id
-        INNER JOIN profiles_images pi ON 
+        LEFT JOIN profiles_images pi ON 
             i.image_id = pi.image_id 
             AND ep.profile_id = pi.profile_id
         WHERE NOT ep.all_images;
@@ -321,7 +321,7 @@ steps = [
             pa.album_id IS NOT NULL AS is_accessible
         FROM albums a
         JOIN events_profiles ep ON a.event_id = ep.event_id
-        INNER JOIN profiles_albums pa ON 
+        LEFT JOIN profiles_albums pa ON 
             a.album_id = pa.album_id 
             AND ep.profile_id = pa.profile_id
         WHERE NOT ep.all_albums;

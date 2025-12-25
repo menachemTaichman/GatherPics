@@ -1,6 +1,5 @@
 import os
 import logging
-
 from src.core.services.event import Event, ChildOperation
 from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
@@ -335,22 +334,23 @@ def add_preference(preference_group: str, preference_key: str, value_type: str, 
     params = [preference_group, preference_key, value]
     db.execute_query(query, params)
 
-def test_timeit():
+import time
+class Timeit:
+    def __init__(self, name: str):
+        self.name = name
+    
+    def __enter__(self):
+        self.start = time.time()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end = time.time()
+        self.elapsed = self.end - self.start
+        print(f'{self.name} took {self.elapsed} seconds')
+        return False
 
-    import time
-    class Timeit:
-        def __init__(self, name: str):
-            self.name = name
-        
-        def __enter__(self):
-            self.start = time.time()
-            return self
-        
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.end = time.time()
-            self.elapsed = self.end - self.start
-            print(f'{self.name} took {self.elapsed} seconds')
-            return False
+
+def test_timeit():
 
     event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
     # create db instance
@@ -392,7 +392,26 @@ ids = {
     'profiles': ['89cb4967-0eba-48af-99cc-5e87407fb639'],
 }
 
+# test_timeit()
 
+event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+event = Event(event_id, profile_id=dev_profile_id)
+
+count = 379
+image_ids = event.models.db.execute_query(f'SELECT image_id FROM images_ctx LIMIT {count};', return_format=ReturnFormat.LIST_VALUES)
+album_id = '4942f79e-487c-4eac-b53a-d2c7ae8817dc'
+operation = ChildOperation.REMOVE
+with Timeit(f'edit_childs with {count} images to {operation}'):
+    # result = event.models.edit_childs('events_profiles_ctx', '0b54fd8b-722e-4449-996d-2044553616ac', 'images', image_ids, operation=operation)
+    print('-')
+    # result = event.models.edit_childs('albums', album_id, 'images', image_ids, operation=operation)
+    # print(result)
+
+print('--------------------------------')
+with Timeit('get_childs'):
+    result = event.models.get_childs('events_profiles_ctx', '0b54fd8b-722e-4449-996d-2044553616ac', 'images', image_ids)
+
+print('--------------------------------')
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
 # result = find_incomplete_images(event_id, test_prod=True)
