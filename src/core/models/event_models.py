@@ -9,6 +9,26 @@ class EventModels(BaseModels):
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         self.db = DB(event_id=event_id, profile_id=profile_id, public_code=public_code)
 
+    def is_exists(self, table: str, fields: Dict, exclude_id: str = None) -> str | None:
+        """Check if a record exists."""
+        
+        # all tables with event_id field
+        event_tables = [
+            'images',
+            'groups',
+            'moments',
+            'albums',
+            'uploads',
+            'access_requests',
+            'events_profiles',
+            'rekognition_usaged',
+            'errors',
+            'audit_logs',
+        ]
+        if table in event_tables:
+            fields['event_id'] = self.db.event_id
+        return super().is_exists(table, fields, exclude_id)
+
     def get_representative(self, entity: str, entity_id: str) -> tuple[str, str]:
         """Get representative of an entity.
         Args:
