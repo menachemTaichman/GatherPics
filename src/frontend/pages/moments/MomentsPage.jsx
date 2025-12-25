@@ -121,6 +121,14 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   
+  // Ref to track if URL update is programmatic (to prevent infinite loops)
+  const isUpdatingUrlRef = useRef(false);
+  
+  // Ref to track initial URL restoration
+  const __initialRestorationComplete = useRef(false);
+  const __pendingMomentFromUrl = useRef(null);
+  const __processedUrlRef = useRef(null); // Track which URL we've already processed
+  
   // State for image aspect ratio classes
   const [imageClasses, setImageClasses] = useState({});
   const imageClassesRef = useRef(imageClasses);
@@ -403,6 +411,50 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     };
   }, [sortedImages, moments, momentIndexes, currentVisibleMoment]);
 
+  // Update URL when current visible moment changes
+  useEffect(() => {
+    if (!currentVisibleMoment || !eventUrl) return;
+    
+    const searchParams = new URLSearchParams(location.search);
+    const currentMomentParam = searchParams.get('moment');
+    
+    // Use label instead of ID for URL
+    const momentLabel = currentVisibleMoment.label || '';
+    
+    // Only update URL if the moment has changed
+    // URLSearchParams.get() already decodes both + and %20 to spaces, so we can compare directly
+    const decodedCurrentParam = currentMomentParam || null;
+    if (decodedCurrentParam !== momentLabel) {
+      // Build query string manually to ensure spaces are encoded as %20, not +
+      const pairs = [];
+      
+      // Keep existing params except 'moment'
+      searchParams.forEach((value, key) => {
+        if (key !== 'moment') {
+          pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+        }
+      });
+      
+      // Add moment param with %20 encoding
+      if (momentLabel) {
+        pairs.unshift(`moment=${encodeURIComponent(momentLabel)}`);
+      }
+      
+      const newSearch = pairs.length ? `?${pairs.join('&')}` : '';
+      const newPath = `${location.pathname}${newSearch}`;
+      
+      // Mark that we're updating the URL programmatically
+      isUpdatingUrlRef.current = true;
+      
+      // Use replace to avoid cluttering browser history
+      navigate(newPath, { replace: true });
+      
+      // Reset the flag after a short delay to allow location to update
+      setTimeout(() => {
+        isUpdatingUrlRef.current = false;
+      }, 100);
+    }
+  }, [currentVisibleMoment, eventUrl, location.pathname, location.search, navigate]);
 
   const [showEditMomentsModal, setShowEditMomentsModal] = useState(false);
 
@@ -503,14 +555,154 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   // Note: Timeline elements are automatically registered/unregistered through setMomentRef callback
   // No need to call refreshElements() as it clears all registered elements unnecessarily
 
+  // Initialize moment from URL on first load or when URL changes
+  useEffect(() => {
+    const currentUrl = location.search;
+    
+    // If we've already processed this URL, skip
+    if (__processedUrlRef.current === currentUrl) {
+      return;
+    }
+    
+    const searchParams = new URLSearchParams(location.search);
+    const momentLabelFromUrl = searchParams.get('moment');
+    
+    // Mark this URL as processed
+    __processedUrlRef.current = currentUrl;
+    
+    // Reset restoration state for new URL
+    __initialRestorationComplete.current = false;
+    
+    if (momentLabelFromUrl) {
+      // Store the moment label for later restoration when moments are loaded
+      __pendingMomentFromUrl.current = momentLabelFromUrl;
+    } else {
+      // No moment in URL, mark restoration as complete immediately
+      __pendingMomentFromUrl.current = null;
+      __initialRestorationComplete.current = true;
+    }
+  }, [location.search]); // Run when URL changes
+
   // Handle navigation from Face Detail to scroll to specific moment
   useEffect(() => {
-    if (location.state?.scrollToMoment && moments.length > 0 && sortedImages.length > 0) {
+    if (moments.length === 0 || sortedImages.length === 0) return;
+    
+    // Skip if we're programmatically updating the URL (to prevent infinite loops)
+    if (isUpdatingUrlRef.current) return;
+    
+    // Check for moment in location state (from Face Detail navigation)
+    if (location.state?.scrollToMoment) {
       const momentId = location.state.scrollToMoment;
       window.history.replaceState({}, document.title);
-      handleJumpToMoment({ id: momentId });
+      // Use gridRef directly to avoid dependency on handleJumpToMoment
+      if (gridRef.current && gridRef.current.scrollToMoment) {
+        const headerId = `header-${momentId}`;
+        gridRef.current.scrollToMoment(headerId);
+      }
+      return;
     }
   }, [location.state, moments, sortedImages]);
+
+  // Restore moment from URL after moments and grid are ready
+  useEffect(() => {
+    // Skip if restoration is already complete - this prevents infinite loops
+    if (__initialRestorationComplete.current) {
+      return;
+    }
+    
+    // Don't wait for perfect conditions - attempt restoration with whatever we have
+    if (!__pendingMomentFromUrl.current) {
+      // Nothing to restore, mark complete
+      __initialRestorationComplete.current = true;
+      return;
+    }
+    
+    // If moments aren't loaded yet, wait
+    if (moments.length === 0 || sortedImages.length === 0) {
+      return;
+    }
+    
+    // If grid isn't ready yet, wait
+    if (!gridRef.current || !gridRef.current.scrollToMoment) {
+      return;
+    }
+    
+    // Skip if we're programmatically updating the URL (to prevent infinite loops)
+    if (isUpdatingUrlRef.current) {
+      return;
+    }
+    
+    const momentLabelFromUrl = __pendingMomentFromUrl.current;
+    // URLSearchParams.get() already decodes + to spaces, but we need to handle %20 too
+    // If the raw URL contains %20, it will be preserved, but if it contains +, it's already decoded
+    // So we can use the value directly (URLSearchParams handles both)
+    const decodedLabel = momentLabelFromUrl;
+    
+    // Find moment by label
+    const momentFromUrl = moments.find(m => m.label === decodedLabel);
+    
+    if (momentFromUrl) {
+      // Scroll to the moment with retry mechanism (only if not already complete)
+      if (__initialRestorationComplete.current) {
+        return;
+      }
+      
+      const scrollToMomentWithRetry = (momentId, attempt = 0) => {
+        // Stop if restoration was completed (e.g., by carousel click)
+        if (__initialRestorationComplete.current) {
+          return;
+        }
+        
+        const MAX_ATTEMPTS = 10;
+        
+        const headerId = `header-${momentId}`;
+        
+        if (gridRef.current && gridRef.current.scrollToMoment) {
+          // Wait a few attempts for layout to be calculated, then try scrolling
+          // scrollToMoment uses layout data, not DOM elements, so we don't need to wait for DOM
+          if (attempt < 5) {
+            setTimeout(() => scrollToMomentWithRetry(momentId, attempt + 1), 400);
+            return;
+          }
+          
+          try {
+            // Call scrollToMoment - it will return early if layout not ready, but that's OK
+            // We'll mark complete anyway to stop retrying
+            gridRef.current.scrollToMoment(headerId);
+            
+            // Mark as complete to stop retrying - even if scroll didn't work, we tried
+            __pendingMomentFromUrl.current = null;
+            __initialRestorationComplete.current = true;
+          } catch (error) {
+            __pendingMomentFromUrl.current = null;
+            __initialRestorationComplete.current = true;
+          }
+          return;
+        }
+        
+        if (attempt < MAX_ATTEMPTS) {
+          setTimeout(() => scrollToMomentWithRetry(momentId, attempt + 1), 300);
+        } else {
+          // Give up after max attempts
+          __pendingMomentFromUrl.current = null;
+          __initialRestorationComplete.current = true;
+        }
+      };
+      
+      // Only scroll if we don't already have a current visible moment, or if it's different
+      if (!currentVisibleMoment || currentVisibleMoment.id !== momentFromUrl.id) {
+        scrollToMomentWithRetry(momentFromUrl.id);
+      } else {
+        // Already at the right moment, just mark as complete
+        __pendingMomentFromUrl.current = null;
+        __initialRestorationComplete.current = true;
+      }
+    } else {
+      // Moment not found, mark restoration complete anyway
+      __pendingMomentFromUrl.current = null;
+      __initialRestorationComplete.current = true;
+    }
+  }, [moments, sortedImages, currentVisibleMoment]);
 
   const handleSaveMoments = async (updatedMoment) => {
     try {
