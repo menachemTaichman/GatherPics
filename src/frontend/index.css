@@ -187,14 +187,93 @@
 
 }
 
-/* Image highlight animation */
-@keyframes pulse-glow {
-  0%, 100% { 
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); 
+/* Diagonal sweep animation - LTR: top-left to bottom-right */
+@keyframes sweep-diagonal-ltr {
+  0% {
+    transform: translate(-150%, -150%);
+    opacity: 1;
   }
-  50% { 
-    box-shadow: 0 0 20px 8px rgba(34, 197, 94, 0.4); 
+  99% {
+    opacity: 1;
   }
+  100% {
+    transform: translate(150%, 150%);
+    opacity: 0;
+  }
+}
+
+/* Diagonal sweep animation - RTL: top-right to bottom-left */
+@keyframes sweep-diagonal-rtl {
+  0% {
+    transform: translate(150%, -150%);
+    opacity: 1;
+  }
+  99% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-150%, 150%);
+    opacity: 0;
+  }
+}
+
+.image-highlight-shimmer {
+  position: relative;
+  overflow: hidden;
+  border: 5px solid rgb(34, 197, 94);
+  border-radius: 0;
+}
+
+.image-highlight-shimmer::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    135deg,
+    transparent 30%,
+    rgba(74, 222, 128, 0.8) 45%,
+    rgba(34, 197, 94, 1) 50%,
+    rgba(74, 222, 128, 0.8) 55%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 999;
+  will-change: transform, opacity;
+  opacity: 0;
+  /* Default to LTR animation */
+  animation: sweep-diagonal-ltr 0.8s linear 2;
+}
+
+/* LTR direction - override default */
+html[dir="ltr"] .image-highlight-shimmer::before {
+  animation: sweep-diagonal-ltr 0.8s linear 2;
+}
+
+/* RTL direction - override default */
+html[dir="rtl"] .image-highlight-shimmer::before {
+  animation: sweep-diagonal-rtl 0.8s linear 2;
+}
+/* Moment header highlight animation */
+@keyframes flash-highlight {
+  0% { 
+    background-color: rgba(66, 135, 245, 0.0); 
+    transform: scale(1); 
+  }
+  20% { 
+    background-color: rgba(66, 135, 245, 0.2); 
+    transform: scale(1.02); 
+  }
+  100% { 
+    background-color: rgba(66, 135, 245, 0.0); 
+    transform: scale(1); 
+  }
+}
+
+.moment-header-highlighted {
+  animation: flash-highlight 1.5s ease-out forwards;
 }
 
 /* Autofill detection animation */

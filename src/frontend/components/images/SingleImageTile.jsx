@@ -82,12 +82,8 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   const shouldHideTimestamp = hideTimestampsInGallery || 
     (isMobile ? imageSize <= 0.42 : imageSize <= 0.51);
   
-  // Apply highlight styles
-  const highlightStyle = isHighlighted ? {
-    animation: 'pulse-glow 1.5s ease-in-out infinite',
-    border: '3px solid rgb(34, 197, 94)',
-    borderRadius: '0'
-  } : {};
+  // Apply highlight styles - use class for shimmer effect
+  const highlightClassName = isHighlighted ? 'image-highlight-shimmer' : '';
   
   // Generate alt text if not provided
   const generatedAltText = altText || (() => {
@@ -120,8 +116,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   return (
     <div 
       ref={ref}
-      className={`relative group cursor-pointer h-full photo-card ${aspectClass} focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:border-2 focus-visible:border-primary-500 focus-visible:z-20`} 
-      style={highlightStyle}
+      className={`relative group cursor-pointer h-full photo-card ${aspectClass} ${highlightClassName} focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:border-2 focus-visible:border-primary-500 focus-visible:z-20`}
       onClick={(e) => {
         if (!e.target.closest('input[type="checkbox"]')) {
           onOpen && onOpen();
