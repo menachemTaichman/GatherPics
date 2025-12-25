@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useDataStore } from './dataManager';
+import { useDataStore, STORAGE_KEYS } from './dataManager';
 import { resolveEventId } from './eventResolver';
 import jwtService from './jwtService';
 
@@ -104,9 +104,64 @@ api.interceptors.response.use(
     // Apply changes to store if present
     if (response.data && response.data.changes) {
       const store = useDataStore.getState();
-      const changes = Array.isArray(response.data.changes) 
+      let changes = Array.isArray(response.data.changes) 
         ? response.data.changes 
         : [];
+      
+      // Special handling for currentProfile API: merge events field intelligently
+      const isCurrentProfileEndpoint = response.config.url?.includes('/api/profiles/current') && 
+                                        response.config.method === 'get';
+      
+      if (isCurrentProfileEndpoint) {
+        changes = changes.map((ch) => {
+          // Only transform localStorage UPSERT changes for currentProfile
+          if (ch.type === 'UPSERT' && 
+              ch.entity === 'localStorage' && 
+              ch.items?.currentProfile) {
+            
+            try {
+              // Get existing currentProfile from localStorage
+              const storageKey = STORAGE_KEYS.CURRENT_PROFILE;
+              const existingRaw = localStorage.getItem(storageKey);
+              const existing = existingRaw ? JSON.parse(existingRaw) : {};
+              
+              // Extract events from new data
+              const newProfile = ch.items.currentProfile;
+              const newEvents = newProfile.events || {};
+              const existingEvents = existing.events || {};
+              
+              // Merge events: preserve all existing events, update/merge the ones in new data
+              const mergedEvents = { ...existingEvents };
+              Object.keys(newEvents).forEach((eventId) => {
+                // If event already exists, merge the data; otherwise, add it
+                if (mergedEvents[eventId]) {
+                  mergedEvents[eventId] = { ...mergedEvents[eventId], ...newEvents[eventId] };
+                } else {
+                  mergedEvents[eventId] = newEvents[eventId];
+                }
+              });
+              
+              // Merge all other fields (non-events) from new data into existing
+              const { events: _, ...otherFields } = newProfile;
+              const mergedProfile = { ...existing, ...otherFields, events: mergedEvents };
+              
+              // Return transformed change with merged profile
+              return {
+                ...ch,
+                items: {
+                  ...ch.items,
+                  currentProfile: mergedProfile
+                }
+              };
+            } catch (e) {
+              console.warn('Failed to merge currentProfile events:', e);
+              // Fall back to original change on error
+              return ch;
+            }
+          }
+          return ch;
+        });
+      }
       
       // Extract event_id from request URL
       const eventIdMatch = response.config.url?.match(/\/events\/([^\/]+)/);
