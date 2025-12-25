@@ -71,7 +71,8 @@ import { SingleImageTile } from '../../components/images';
 import { GroupsFilter } from '../../components/groups';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { useImageHighlight } from '../../hooks/useImageHighlight';
+import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
+import { useFaceImageMapping } from '../../hooks/useFaceImageMapping';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
@@ -283,13 +284,11 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const suppressSpinnerRef = useRef(false);
   const restoreScrollYRef = useRef(null);
   const smoothNextGroupLoad = useRef(false);
-  
-  // Image highlight hook for navigation
-  const { isHighlighted, registerImageRef } = useImageHighlight();
   const skipNextAnimation = useRef(false);
   
   // Refs for arrow key navigation
   const imageTileRefs = useRef([]);
+  const gridRef = useRef(null);
 
   // Subscribe to normalized groups list
   const currentGroups = useGroupsList(eventId);
@@ -695,6 +694,92 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     
     return out;
   }, [group?.id, group?.isPlaceholder, relatedImages, sortBy, sortOrder, placeholderImages, showCrops, groupFaces, filterImages, filterGroups, filterMode, onlySelected, includeArchived]);
+
+  // Centralized mapping between image IDs and face IDs in faces mode
+  const faceImageMapping = useFaceImageMapping({
+    showCrops,
+    sortedImages,
+    eventId,
+    currentGroupId: group?.id,
+  });
+
+  // Image viewer grid sync hook - combines grid scrolling, focus after close, and image highlight
+  // Must be called after sortedImages, gridRef, imageTileRefs, and viewerOpen are defined
+  const { onImageChange: baseOnImageChange, highlightedIds, registerImageRef, setCurrentImageId } = useImageViewerGridSync({
+    gridRef,
+    sortedImages,
+    imageTileRefs,
+    viewerOpen
+  });
+
+  // Convert highlightImages to highlightFaces in faces mode before useImageHighlight processes it
+  // This ensures useImageHighlight receives the correct IDs to scroll to (like MomentsPage)
+  const processedHighlightKeyRef = useRef(null);
+  useEffect(() => {
+    // Only process once per location.key change to avoid re-scrolling
+    if (processedHighlightKeyRef.current === location.key) {
+      return;
+    }
+    
+    // Skip if no highlightImages in state or already have highlightFaces
+    if (!location.state?.highlightImages || location.state?.highlightFaces) {
+      processedHighlightKeyRef.current = location.key;
+      return;
+    }
+    
+    if (showCrops) {
+      // In faces mode, convert image IDs to face IDs using centralized mapping
+      const imageIds = location.state.highlightImages;
+      if (!Array.isArray(imageIds) || imageIds.length === 0) {
+        processedHighlightKeyRef.current = location.key;
+        return;
+      }
+      
+      const faceIds = faceImageMapping.imageIdsToFaceIds(imageIds);
+      
+      // If we found face IDs, update location state to use highlightFaces
+      // Use navigate with replace to trigger useImageHighlight to re-run with new state
+      // The ref check above prevents infinite loops
+      if (faceIds.length > 0) {
+        navigate(location.pathname + location.search, {
+          replace: true,
+          state: {
+            ...location.state,
+            highlightFaces: faceIds,
+            highlightImages: undefined, // Remove to avoid confusion
+          }
+        });
+      }
+    }
+    
+    // Mark as processed for this location.key
+    processedHighlightKeyRef.current = location.key;
+    // Only depend on location.key and highlightImages to avoid re-running on other changes
+    // faceImageMapping functions are memoized and stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key, location.state?.highlightImages, showCrops]);
+
+  // Wrapper for onImageChange that handles face-to-image mapping in faces mode
+  const onImageChange = useCallback((imageId, imageIndex) => {
+    if (showCrops) {
+      // In faces mode, convert image ID to face ID using centralized mapping
+      const faceId = faceImageMapping.imageIdToFaceId(imageId);
+      if (faceId) {
+        const faceIndex = faceImageMapping.getFaceIndexForImage(imageId);
+        if (faceIndex >= 0) {
+          // Call base handler with face ID instead of image ID
+          baseOnImageChange(faceId, faceIndex);
+          // Track the face ID for refocus on close
+          if (setCurrentImageId) {
+            setCurrentImageId(faceId);
+          }
+        }
+      }
+    } else {
+      // In images mode, use image ID directly
+      baseOnImageChange(imageId, imageIndex);
+    }
+  }, [showCrops, faceImageMapping, baseOnImageChange, setCurrentImageId]);
 
   // Update refs array when sortedImages changes
   useEffect(() => {
@@ -1352,6 +1437,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     const store = useDataStore.getState();
     const face = showCrops ? (store.entities?.[eventId]?.faces || {})[itemId] : null;
     const targetImageId = showCrops && face ? face.image_id : (sortedImages[index]?.id || null);
+    
+    // In faces mode, track the face ID for refocus on close using centralized mapping
+    if (showCrops && itemId && setCurrentImageId) {
+      setCurrentImageId(itemId);
+    }
+    
     if (targetImageId) {
       // Build viewer image list with same semantics as ImageViewer
       const allGroupsLocal = [group.id, ...filterGroups].filter(Boolean);
@@ -1840,6 +1931,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           <>
             <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
               <AbsoluteMasonryGrid
+                ref={gridRef}
                 items={sortedImages}
                 baseSize={Math.max(60, 266 * imageSize)}
                 imageClasses={imageClasses}
@@ -1916,7 +2008,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                         showCropBadge={false}
                         eventUrl={eventUrl}
                         urlHelpers={urlHelpers}
-                        isHighlighted={isHighlighted(itemId)}
+                        isHighlighted={highlightedIds?.has(itemId)}
                         showFavoriteButton={!isFacesMode}
                         showArchiveButton={!isFacesMode}
                         showRepresentativeButton={isFacesMode}
@@ -1997,7 +2089,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
 
       {/* Modals */}
       {viewerOpen && (
-        <ImageViewer {...viewerProps} isUnassociatedGroup={isUnassociatedGroup} />
+        <ImageViewer {...viewerProps} onImageChange={onImageChange} isUnassociatedGroup={isUnassociatedGroup} />
       )}
 
       {/* Merge Conflict Modal */}

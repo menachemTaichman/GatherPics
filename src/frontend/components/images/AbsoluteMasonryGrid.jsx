@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 
 // --- האלגוריתם שלך נשאר ללא שינוי ---
 const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false) => {
@@ -111,7 +111,7 @@ const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
  *    - Higher values (3.0-5.0): Smoother scrolling, more pre-rendering, more DOM elements
  *    - To test: Pass `bufferMultiplier={1.0}` or `bufferMultiplier={5.0}` to AbsoluteMasonryGrid
  */
-export default function AbsoluteMasonryGrid({
+const AbsoluteMasonryGrid = forwardRef(({
   items = [],
   renderItem,
   renderHeader = null, // Optional function to render header items
@@ -129,10 +129,11 @@ export default function AbsoluteMasonryGrid({
   isSquareGrid = false, // <--- Prop חדש למצב ריבועי
   isListLayout = false, // <--- Prop חדש למצב רשימה
   listItemHeight = 80, // <--- גובה פריט במצב רשימה
-}) {
+}, ref) => {
   const internalContainerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 800 });
   const [scrollTop, setScrollTop] = useState(0);
+  const [highlightedId, setHighlightedId] = useState(null);
 
   // --- הלב של התיקון: מיזוג Refs ---
   const setMultiRef = useCallback((node) => {
@@ -182,6 +183,83 @@ export default function AbsoluteMasonryGrid({
     return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid);
   }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight]);
 
+  // --- Expose scrollToItem and scrollToMoment methods via ref ---
+  useImperativeHandle(ref, () => ({
+    /**
+     * Smart scrolling function to scroll to a specific item
+     * Implements "nearest" logic within a virtualized environment
+     * Uses distance-based scrolling: instant jump if far, smooth scroll if close
+     */
+    scrollToItem: (itemId) => {
+      const container = internalContainerRef.current;
+      if (!container) return;
+
+      // 1. Find the calculated position of the item (even if it's not in the DOM)
+      const itemLayout = layout.find(item => item.id === itemId);
+      if (!itemLayout) return;
+
+      // 2. Calculate boundaries
+      const itemTop = itemLayout.top;
+      const itemBottom = itemLayout.top + itemLayout.height;
+      const containerTop = container.scrollTop;
+      const containerBottom = container.scrollTop + container.clientHeight;
+      
+      // Leave some padding so it's not stuck to the edge
+      const padding = 20;
+      const HUGE_DISTANCE_THRESHOLD = 3000; // Threshold for instant scroll (in pixels)
+
+      // 3. Nearest logic - only scroll if necessary
+      if (itemTop < containerTop + padding) {
+        // Image is "above" the visible area -> scroll up
+        const targetTop = Math.max(0, itemTop - padding);
+        const distance = Math.abs(targetTop - containerTop);
+        const behavior = distance > HUGE_DISTANCE_THRESHOLD ? 'auto' : 'smooth';
+        container.scrollTo({ top: targetTop, behavior });
+      } else if (itemBottom > containerBottom - padding) {
+        // Image is "below" the visible area -> scroll down
+        const targetTop = itemBottom - container.clientHeight + padding;
+        const distance = Math.abs(targetTop - containerTop);
+        const behavior = distance > HUGE_DISTANCE_THRESHOLD ? 'auto' : 'smooth';
+        container.scrollTo({ top: targetTop, behavior });
+      }
+      // Otherwise: image is already on screen, do nothing!
+    },
+    
+    /**
+     * Scroll to a moment header with visual highlight effect
+     * @param {string} headerId - The header ID (e.g., "header-{momentId}")
+     */
+    scrollToMoment: (headerId) => {
+      const container = internalContainerRef.current;
+      if (!container) return;
+
+      const itemLayout = layout.find(item => item.id === headerId && item.isHeader);
+      if (!itemLayout) return; // Header not found
+
+      const targetTop = itemLayout.top;
+      const currentScroll = container.scrollTop;
+      const distance = Math.abs(targetTop - currentScroll);
+      const HUGE_DISTANCE_THRESHOLD = 3000; // Threshold for instant scroll (in pixels)
+
+      // Scroll logic
+      if (distance > HUGE_DISTANCE_THRESHOLD) {
+        // Large distance: instant jump ("Teleport")
+        container.scrollTo({ top: targetTop, behavior: 'auto' });
+      } else {
+        // Reasonable distance: smooth scroll
+        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      }
+
+      // Visual effect ("Cue"): highlight the header
+      setHighlightedId(headerId);
+      
+      // Clear highlight after animation duration
+      setTimeout(() => {
+        setHighlightedId(null);
+      }, 1500);
+    }
+  }), [layout]); // Depend on layout to have up-to-date information
+
   // 3. הווירטואליזציה האמיתית
   const visibleItems = useMemo(() => {
     if (!layout.length) return [];
@@ -201,9 +279,11 @@ export default function AbsoluteMasonryGrid({
 
   // שינוי 2: קומפוננטה פנימית עם Memo כדי למנוע רינדורים מיותרים בזמן גלילה
   // זה קריטי כי renderItem שלך מוגדר כפונקציה בתוך ה-Parent ולכן מתחדש כל הזמן
-  const MemoizedItem = useMemo(() => React.memo(({ itemLayout, renderItem, renderHeader, onItemRef }) => {
+  const MemoizedItem = useMemo(() => React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId }) => {
     // Handle header items differently
     if (itemLayout.isHeader) {
+      const isHighlighted = highlightedId === itemLayout.id;
+      
       return (
         <div
           style={{
@@ -213,7 +293,10 @@ export default function AbsoluteMasonryGrid({
             width: `${itemLayout.width}px`,
             height: `${itemLayout.height}px`,
             zIndex: 10, // Headers should be above images
+            transition: 'background-color 0.5s ease',
+            backgroundColor: isHighlighted ? 'rgba(66, 135, 245, 0.2)' : 'transparent',
           }}
+          className={isHighlighted ? 'moment-header-highlighted' : ''}
         >
           {renderHeader ? renderHeader(itemLayout.data) : (
             <div style={{ width: '100%', height: '100%', padding: '8px' }}>
@@ -289,10 +372,15 @@ export default function AbsoluteMasonryGrid({
              renderItem={renderItem}
              renderHeader={renderHeader}
              onItemRef={onItemRef}
+             highlightedId={highlightedId}
           />
         ))}
       </div>
     </div>
   );
-}
+});
+
+AbsoluteMasonryGrid.displayName = 'AbsoluteMasonryGrid';
+
+export default AbsoluteMasonryGrid;
 

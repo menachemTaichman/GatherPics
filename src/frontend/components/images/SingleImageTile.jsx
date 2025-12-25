@@ -116,7 +116,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   return (
     <div 
       ref={ref}
-      className={`relative group cursor-pointer h-full photo-card ${aspectClass} ${highlightClassName} focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:border-2 focus-visible:border-primary-500 focus-visible:z-20`}
+      className={`relative group cursor-pointer h-full photo-card ${aspectClass} ${highlightClassName} focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:border-4 focus-visible:border-primary-500 focus-visible:z-20`}
       onClick={(e) => {
         if (!e.target.closest('input[type="checkbox"]')) {
           onOpen && onOpen();

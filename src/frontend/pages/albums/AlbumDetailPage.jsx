@@ -34,7 +34,7 @@ import { albumsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 import { ConfirmDelete } from '../../components/modals';
-import { useImageHighlight } from '../../hooks/useImageHighlight';
+import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { PermissionGate } from '../../components/common';
@@ -193,11 +193,18 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     filteredIds: null,
   });
   
-  // Image highlight hook for navigation
-  const { isHighlighted, registerImageRef } = useImageHighlight();
-  
   // Refs for arrow key navigation
   const imageTileRefs = useRef([]);
+  const gridRef = useRef(null);
+  
+  // Image viewer grid sync hook - combines grid scrolling, focus after close, and image highlight
+  // Must be called after sortedImages, gridRef, imageTileRefs, and viewerOpen are defined
+  const { onImageChange, highlightedIds, registerImageRef } = useImageViewerGridSync({
+    gridRef,
+    sortedImages,
+    imageTileRefs,
+    viewerOpen
+  });
 
   // Find album by label
   useEffect(() => {
@@ -857,6 +864,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
         ) : (
           <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
             <AbsoluteMasonryGrid
+              ref={gridRef}
               items={sortedImages}
               baseSize={Math.max(60, 266 * imageSize)}
               imageClasses={imageClasses}
@@ -899,7 +907,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                       showCropBadge={false}
                       eventUrl={eventUrl}
                       urlHelpers={urlHelpers}
-                      isHighlighted={isHighlighted(image.id)}
+                      isHighlighted={highlightedIds?.has(image.id)}
                       photoIndex={actualIndex !== -1 ? actualIndex : 0}
                       contextType="Album"
                       contextLabel={album?.label}
@@ -939,7 +947,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
 
       {/* Modals */}
       {viewerOpen && (
-        <ImageViewer {...viewerProps} includeArchivedOverride={includeArchived} />
+        <ImageViewer {...viewerProps} onImageChange={onImageChange} includeArchivedOverride={includeArchived} />
       )}
 
       {/* Delete Confirmation Modal */}

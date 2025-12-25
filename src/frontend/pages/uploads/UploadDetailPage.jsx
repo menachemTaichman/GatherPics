@@ -23,6 +23,8 @@ import UploadFormModal from '../../components/uploads/UploadFormModal';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import useImageSelection from '../../hooks/useImageSelection';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
+import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
+import { useFaceImageMapping } from '../../hooks/useFaceImageMapping';
 import { shallow } from 'zustand/shallow';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
@@ -89,6 +91,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   // Refs for arrow key navigation (separate for each mode)
   const imageTileRefs = useRef([]);
+  const gridRef = useRef(null);
   const groupFaceTileRefs = useRef({}); // Map of groupId -> ref array
   const momentImageTileRefs = useRef({}); // Map of momentId -> ref array
 
@@ -157,6 +160,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       setExpandedGroup(null);
       // Clear group selection when closing
       clearGroupSelection();
+      // Clear refs when collapsing to avoid stale refs
+      if (groupFaceTileRefs.current[groupId]) {
+        groupFaceTileRefs.current[groupId] = [];
+      }
     } else {
       setExpandedGroup(groupId);
     }
@@ -167,6 +174,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       setExpandedMoment(null);
       // Clear moment selection when closing
       clearMomentSelection();
+      // Clear refs when collapsing to avoid stale refs
+      if (momentImageTileRefs.current[momentId]) {
+        momentImageTileRefs.current[momentId] = [];
+      }
     } else {
       setExpandedMoment(momentId);
     }
@@ -309,6 +320,207 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     urlHelpers,
     filteredIds: null,
   });
+  
+  // Track which mode/section we're viewing for proper refocus
+  const currentViewerContextRef = useRef({ mode: null, groupId: null, momentId: null });
+  
+  // Subscribe to entities early (needed for getRefsForImage)
+  const entities = useDataStore((state) => state.entities, shallow);
+  
+  // Helper to get faces of a group filtered by this upload, sorted by image date
+  const getGroupFacesInUpload = useCallback((groupId) => {
+    const group = entities?.[eventId]?.groups?.[groupId];
+    if (!group) return [];
+    
+    const facesSet = group.faces;
+    if (!facesSet || !(facesSet instanceof Set)) return [];
+    
+    const facesMap = entities?.[eventId]?.faces || {};
+    const imagesMap = entities?.[eventId]?.images || {};
+    
+    const faces = Array.from(facesSet)
+      .map(faceId => facesMap[faceId])
+      .filter(face => {
+        if (!face) return false;
+        const image = imagesMap[face.image_id];
+        return image && String(image.upload_id) === String(uploadId);
+      });
+    
+    // Sort faces by their image's date_taken (matching GroupDetailPage behavior)
+    return faces.sort((a, b) => {
+      const imgA = imagesMap[a.image_id];
+      const imgB = imagesMap[b.image_id];
+      
+      if (!imgA || !imgB) return 0;
+      
+      const dateA = imgA.date_taken ? new Date(imgA.date_taken).getTime() : 0;
+      const dateB = imgB.date_taken ? new Date(imgB.date_taken).getTime() : 0;
+      
+      // Use sortDir (asc/desc) for sorting
+      if (sortDir === 'asc') {
+        return dateA - dateB;
+      } else {
+        return dateB - dateA;
+      }
+    });
+  }, [entities, uploadId, eventId, sortDir]);
+
+  // Helper to get images of a moment filtered by this upload
+  const getMomentImagesInUpload = useCallback((momentId) => {
+    const moment = entities?.[eventId]?.moments?.[momentId];
+    if (!moment) return [];
+    
+    const imagesSet = moment.images;
+    if (!imagesSet || !(imagesSet instanceof Set)) return [];
+    
+    const imagesMap = entities?.[eventId]?.images || {};
+    
+    return Array.from(imagesSet)
+      .map(imageId => imagesMap[imageId])
+      .filter(image => image && String(image.upload_id) === String(uploadId))
+      .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
+  }, [entities, uploadId, eventId]);
+  
+  // Function to get refs for an image based on current context (for multi-grid support)
+  const getRefsForImage = useCallback((imageId) => {
+    if (!imageId) return null;
+    
+    // Normalize imageId to string for comparison
+    const normalizedImageId = String(imageId);
+    const context = currentViewerContextRef.current;
+    
+    // Check images mode (default fallback if context is not set)
+    if (!context || context.mode === 'images' || !context.mode) {
+      const imageIndex = uploadImages.findIndex(img => String(img.id) === normalizedImageId);
+      if (imageIndex >= 0 && imageTileRefs.current && imageTileRefs.current[imageIndex]) {
+        return { refs: imageTileRefs.current, index: imageIndex };
+      }
+    }
+    
+    // Check groups mode
+    if (context && context.mode === 'groups' && context.groupId) {
+      // Use the same helper function to ensure arrays match
+      const groupFaces = getGroupFacesInUpload(context.groupId);
+      
+      // First, check if the ID is a faceId (for refocus after close)
+      let faceIndex = groupFaces.findIndex(face => String(face.id) === normalizedImageId);
+      
+      // If not found as faceId, check if it's an imageId
+      if (faceIndex === -1) {
+        faceIndex = groupFaces.findIndex(face => String(face.image_id) === normalizedImageId);
+      }
+      
+      if (faceIndex >= 0 && groupFaceTileRefs.current[context.groupId] && groupFaceTileRefs.current[context.groupId][faceIndex]) {
+        return { refs: groupFaceTileRefs.current[context.groupId], index: faceIndex };
+      }
+    }
+    
+    // Check moments mode
+    if (context && context.mode === 'moments' && context.momentId) {
+      // Use the same helper function to ensure arrays match
+      const momentImages = getMomentImagesInUpload(context.momentId);
+      const imageIndex = momentImages.findIndex(img => String(img.id) === normalizedImageId);
+      if (imageIndex >= 0 && momentImageTileRefs.current[context.momentId] && momentImageTileRefs.current[context.momentId][imageIndex]) {
+        return { refs: momentImageTileRefs.current[context.momentId], index: imageIndex };
+      }
+    }
+    
+    // Fallback: try images mode even if context suggests otherwise (in case context was lost)
+    if (context && context.mode !== 'images') {
+      const imageIndex = uploadImages.findIndex(img => String(img.id) === normalizedImageId);
+      if (imageIndex >= 0 && imageTileRefs.current && imageTileRefs.current[imageIndex]) {
+        return { refs: imageTileRefs.current, index: imageIndex };
+      }
+    }
+    
+    return null;
+  }, [uploadImages, imageTileRefs, entities, eventId, uploadId, getGroupFacesInUpload, getMomentImagesInUpload]);
+  
+  // Image viewer grid sync hook - combines grid scrolling, focus after close, and image highlight
+  // Use uploadImages for the main images grid, but support multi-grid via getRefsForImage
+  const { onImageChange: baseOnImageChange, highlightedIds, registerImageRef, setCurrentImageId } = useImageViewerGridSync({
+    gridRef,
+    sortedImages: uploadImages,
+    imageTileRefs,
+    viewerOpen,
+    getRefsForImage
+  });
+
+  // Wrapper for onImageChange that handles face-to-image mapping in groups mode
+  // When ImageViewer navigates, it sends imageId, but in groups mode we need to scroll to the face
+  const onImageChange = useCallback((imageId, imageIndex) => {
+    const context = currentViewerContextRef.current;
+    
+    // In groups mode, convert imageId to faceId and scroll to the face
+    if (context && context.mode === 'groups' && context.groupId) {
+      const groupFaces = getGroupFacesInUpload(context.groupId);
+      
+      // Find the face that belongs to this image
+      const matchingFaces = groupFaces.filter(face => String(face.image_id) === String(imageId));
+      
+      if (matchingFaces.length > 0) {
+        // Use the first matching face
+        const faceToUse = matchingFaces[0];
+        const faceId = faceToUse.id;
+        
+        // Find the index of this face in the groupFaces array
+        const faceIndex = groupFaces.findIndex(f => String(f.id) === String(faceId));
+        
+        if (faceIndex >= 0) {
+          // Track the faceId for refocus on close
+          if (setCurrentImageId) {
+            setCurrentImageId(faceId);
+          }
+          
+          // Scroll to the face element using getRefsForImage
+          // getRefsForImage expects imageId and will find the face by image_id
+          // Use a small delay to ensure the element is rendered
+          setTimeout(() => {
+            const refs = getRefsForImage(imageId);
+            if (refs && refs.refs && refs.refs[refs.index]) {
+              const element = refs.refs[refs.index];
+              
+              // Find the scrollable container
+              let scrollContainer = null;
+              let parent = element.parentElement;
+              while (parent && parent !== document.body) {
+                const style = window.getComputedStyle(parent);
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                  scrollContainer = parent;
+                  break;
+                }
+                parent = parent.parentElement;
+              }
+              
+              if (scrollContainer) {
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                const currentScrollTop = scrollContainer.scrollTop;
+                const elementTopInContent = (elementRect.top - containerRect.top) + currentScrollTop;
+                const containerHeight = scrollContainer.clientHeight;
+                const elementHeight = elementRect.height;
+                const targetScroll = elementTopInContent - (containerHeight / 2) + (elementHeight / 2);
+                const finalScroll = Math.max(0, Math.min(targetScroll, scrollContainer.scrollHeight - containerHeight));
+                
+                scrollContainer.scrollTo({ top: finalScroll, behavior: 'smooth' });
+              } else {
+                // Fallback to scrollIntoView
+                element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+              }
+            }
+          }, 50);
+          
+          return;
+        }
+      }
+    }
+    
+    // For images mode or moments mode, use imageId directly
+    baseOnImageChange(imageId, imageIndex);
+    if (setCurrentImageId) {
+      setCurrentImageId(imageId);
+    }
+  }, [baseOnImageChange, setCurrentImageId, getGroupFacesInUpload, getRefsForImage]);
 
   // Fetch group data when group is expanded (scope already added by dynamic scopes)
   const fetchGroupData = useCallback(async (groupId) => {
@@ -347,11 +559,26 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
   // Open image viewer for main photos tab
   const openImageViewerInUpload = (imageId, index) => {
-    openViewer({ index, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir });
+    // Track context for refocus
+    currentViewerContextRef.current = { mode: 'images', groupId: null, momentId: null };
+    setCurrentImageId(imageId);
+    
+    // Find the actual index in the sorted uploadImages list (matching viewer's sorting)
+    const sortedImageIds = uploadImages.map(img => img.id);
+    const actualIndex = sortedImageIds.indexOf(imageId);
+    if (actualIndex === -1) {
+      // Fallback to provided index if not found
+      openViewer({ index, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir });
+    } else {
+      openViewer({ index: actualIndex, parent: uploadId, entity: 'upload', sortBy: 'date', sortOrder: sortDir });
+    }
   };
 
   // Open image viewer for a group (showing only images from this upload)
   const openImageViewerInGroup = (groupId, faceId) => {
+    // Track context for refocus
+    currentViewerContextRef.current = { mode: 'groups', groupId, momentId: null };
+    
     const faces = getGroupFacesInUpload(groupId);
     const imageIds = faces.map(f => f.image_id);
     const face = entities?.[eventId]?.faces?.[faceId];
@@ -360,16 +587,21 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     const index = imageIds.indexOf(face.image_id);
     if (index === -1) return;
     
+    setCurrentImageId(face.image_id);
     openViewer({ index, parent: groupId, entity: 'group', sortBy: 'date', sortOrder: 'asc', filterByUploadId: uploadId });
   };
 
   // Open image viewer for a moment (showing only images from this upload)
   const openImageViewerInMoment = (momentId, imageId) => {
+    // Track context for refocus
+    currentViewerContextRef.current = { mode: 'moments', groupId: null, momentId };
+    
     const images = getMomentImagesInUpload(momentId);
     const imageIds = images.map(img => img.id);
     const index = imageIds.indexOf(imageId);
     if (index === -1) return;
     
+    setCurrentImageId(imageId);
     openViewer({ index, parent: momentId, entity: 'moment', sortBy: 'date', sortOrder: 'asc', filterByUploadId: uploadId });
   };
   
@@ -532,45 +764,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
       imageTileRefs.current = imageTileRefs.current.slice(0, uploadImages.length);
     }
   }, [uploadImages.length, mode]);
-
-  // Subscribe to entities to make component reactive
-  const entities = useDataStore((state) => state.entities, shallow);
-
-  // Helper to get faces of a group filtered by this upload
-  const getGroupFacesInUpload = useCallback((groupId) => {
-    const group = entities?.[eventId]?.groups?.[groupId];
-    if (!group) return [];
-    
-    const facesSet = group.faces;
-    if (!facesSet || !(facesSet instanceof Set)) return [];
-    
-    const facesMap = entities?.[eventId]?.faces || {};
-    const imagesMap = entities?.[eventId]?.images || {};
-    
-    return Array.from(facesSet)
-      .map(faceId => facesMap[faceId])
-      .filter(face => {
-        if (!face) return false;
-        const image = imagesMap[face.image_id];
-        return image && String(image.upload_id) === String(uploadId);
-      });
-  }, [entities, uploadId, eventId]);
-
-  // Helper to get images of a moment filtered by this upload
-  const getMomentImagesInUpload = useCallback((momentId) => {
-    const moment = entities?.[eventId]?.moments?.[momentId];
-    if (!moment) return [];
-    
-    const imagesSet = moment.images;
-    if (!imagesSet || !(imagesSet instanceof Set)) return [];
-    
-    const imagesMap = entities?.[eventId]?.images || {};
-    
-    return Array.from(imagesSet)
-      .map(imageId => imagesMap[imageId])
-      .filter(image => image && String(image.upload_id) === String(uploadId))
-      .sort((a, b) => new Date(a.date_taken || 0) - new Date(b.date_taken || 0));
-  }, [entities, uploadId, eventId]);
 
   // Handle keyboard shortcuts and arrow key navigation
   useEffect(() => {
@@ -1170,6 +1363,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
               ) : (
                 <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
                   <AbsoluteMasonryGrid
+                    ref={gridRef}
                     items={uploadImages}
                     baseSize={Math.max(60, 266 * imageSize)}
                     imageClasses={imageClasses}
@@ -1181,8 +1375,13 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       '--grid-z-index': 1,
                     }}
                     onItemRef={(img, index, el) => {
-                      if (el && imageTileRefs.current[index] !== el) {
-                        imageTileRefs.current[index] = el;
+                      if (el) {
+                        registerImageRef(img.id, el);
+                        // Store ref for arrow key navigation - find actual index
+                        const actualIndex = uploadImages.findIndex(uploadImg => uploadImg.id === img.id);
+                        if (actualIndex !== -1 && imageTileRefs.current[actualIndex] !== el) {
+                          imageTileRefs.current[actualIndex] = el;
+                        }
                       }
                     }}
                     renderItem={(img, index, isPortrait, setRef) => {
@@ -1204,6 +1403,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                             eventUrl={eventUrl}
                             urlHelpers={urlHelpers}
+                            isHighlighted={highlightedIds?.has(img.id)}
                             showFavoriteButton={false}
                             showArchiveButton={false}
                             photoIndex={index}
@@ -1370,8 +1570,18 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                       if (!groupFaceTileRefs.current[group.id]) {
                                         groupFaceTileRefs.current[group.id] = [];
                                       }
-                                      if (el && groupFaceTileRefs.current[group.id][faceIndex] !== el) {
-                                        groupFaceTileRefs.current[group.id][faceIndex] = el;
+                                      if (el) {
+                                        // Store ref for arrow key navigation - find actual index in groupFaces array
+                                        const actualIndex = groupFaces.findIndex(f => f.id === face.id);
+                                        if (actualIndex !== -1) {
+                                          // Ensure array is large enough
+                                          if (groupFaceTileRefs.current[group.id].length < actualIndex + 1) {
+                                            groupFaceTileRefs.current[group.id].length = actualIndex + 1;
+                                          }
+                                          if (groupFaceTileRefs.current[group.id][actualIndex] !== el) {
+                                            groupFaceTileRefs.current[group.id][actualIndex] = el;
+                                          }
+                                        }
                                       }
                                     }}
                                     renderItem={(face, faceIndex, isPortrait, setRef) => {
@@ -1561,8 +1771,18 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                       if (!momentImageTileRefs.current[moment.id]) {
                                         momentImageTileRefs.current[moment.id] = [];
                                       }
-                                      if (el && momentImageTileRefs.current[moment.id][imgIndex] !== el) {
-                                        momentImageTileRefs.current[moment.id][imgIndex] = el;
+                                      if (el) {
+                                        // Store ref for arrow key navigation - find actual index in momentImages array
+                                        const actualIndex = momentImages.findIndex(m => m.id === img.id);
+                                        if (actualIndex !== -1) {
+                                          // Ensure array is large enough
+                                          if (momentImageTileRefs.current[moment.id].length < actualIndex + 1) {
+                                            momentImageTileRefs.current[moment.id].length = actualIndex + 1;
+                                          }
+                                          if (momentImageTileRefs.current[moment.id][actualIndex] !== el) {
+                                            momentImageTileRefs.current[moment.id][actualIndex] = el;
+                                          }
+                                        }
                                       }
                                     }}
                                     renderItem={(img, imgIndex, isPortrait, setRef) => {
@@ -1697,7 +1917,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
 
       {/* Image Viewer */}
       {viewerOpen && (
-        <ImageViewer {...viewerProps} />
+        <ImageViewer {...viewerProps} onImageChange={onImageChange} />
       )}
 
       {/* Manage Access Modal */}

@@ -21,7 +21,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { sortMoments, sortImages, toggleSortOrder } from '../../utils/sorting';
 import { getImageCount } from '../../utils/settings';
 import { ImageComponent } from '../../hooks/useImage.jsx';
-import { useImageHighlight } from '../../hooks/useImageHighlight';
+import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { formatTimeOnly, formatDate } from '../../utils/dateUtils';
@@ -158,10 +158,26 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     urlHelpers,
   });
   
-  const { addImages, open } = useBucketStore();
+  // Refs for grid scrolling
+  const gridRef = useRef(null);
   
-  // Image highlight hook for navigation
-  const { highlightedIds, registerImageRef } = useImageHighlight();
+  // Map to store DOM element references for each image (for PhotoSwipe zoom-out animation)
+  const itemsRefs = useRef(new Map());
+  
+  // Callback to register/unregister image DOM elements
+  // For PhotoSwipe zoom-out animation, we need the actual img element, not the wrapper div
+  const handleItemRef = useCallback((itemData, index, node) => {
+    if (node && itemData && !itemData.isHeader) {
+      // Try to find the img element within the node (SingleImageTile passes the wrapper div)
+      const imgElement = node.querySelector('img');
+      // Use the img element if found, otherwise fall back to the node itself
+      itemsRefs.current.set(itemData.id, imgElement || node);
+    } else if (itemData && !itemData.isHeader) {
+      itemsRefs.current.delete(itemData.id);
+    }
+  }, []);
+  
+  const { addImages, open } = useBucketStore();
   
   // Selection mode and state
   const selectionMode = usePreference('general.select', false);
@@ -202,6 +218,32 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     
     return sorted;
   }, [storeImages, moments, includeArchived, isAuthenticated, momentIdSignature, momentSortOrder]);
+  
+  // Image viewer grid sync hook - combines grid scrolling, focus after close, and image highlight
+  // Must be called after sortedImages is defined
+  const { onImageChange: handleImageChangeBase, highlightedIds, registerImageRef, setCurrentImageId } = useImageViewerGridSync({
+    gridRef,
+    sortedImages,
+    imageTileRefs,
+    viewerOpen
+  });
+  
+  // Enhanced handleImageChange that also updates PhotoSwipe element reference
+  const handleImageChange = useCallback((imageId, index) => {
+    // Use the base handler for grid scrolling and tracking
+    handleImageChangeBase(imageId, index);
+    setCurrentImageId(imageId);
+    
+    // Update PhotoSwipe element reference for zoom-out animation
+    // Use a small timeout to allow the grid to render the image after scrolling
+    setTimeout(() => {
+      const thumbnailEl = itemsRefs.current.get(imageId);
+      if (thumbnailEl) {
+        // This will be used by ImageViewer to update PhotoSwipe
+        // We'll pass the refs map to ImageViewer
+      }
+    }, 50);
+  }, [handleImageChangeBase, setCurrentImageId]);
   
   // Calculate moment indexes (first index of each moment in sortedImages)
   const momentIndexes = useMemo(() => {
@@ -679,6 +721,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     
     if (currentIndex === -1) return;
     
+    // Track the image ID for refocus on close
+    setCurrentImageId(imageId);
+    
     // Don't pass filteredIds - let ImageViewer construct the list with proper sorting
     // Use a special parent value that signals "all moments"
     openViewer({ 
@@ -691,40 +736,19 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   };
 
   const handleJumpToMoment = (momentInfo) => {
-    // Navigate to first index of the moment
-    const moment = moments.find(m => m.id === momentInfo.id);
-    if (moment) {
-      const firstIndex = momentIndexes.get(moment.id);
-      if (firstIndex !== undefined && firstIndex < sortedImages.length) {
-        // Scroll to the first image of the moment in the grid
-        setTimeout(() => {
-          const imageElement = imageTileRefs.current[firstIndex];
-          if (imageElement && gridContainerRef.current) {
-            const containerRect = gridContainerRef.current.getBoundingClientRect();
-            const elementRect = imageElement.getBoundingClientRect();
-            const scrollTop = gridContainerRef.current.scrollTop;
-            const targetScroll = scrollTop + elementRect.top - containerRect.top + 100; // 20px offset from top
-            gridContainerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
-          }
-        }, 100);
-      }
+    // Use the grid's scrollToMoment method to scroll to the moment header
+    if (gridRef.current && gridRef.current.scrollToMoment) {
+      const headerId = `header-${momentInfo.id}`;
+      gridRef.current.scrollToMoment(headerId);
     }
   };
   
-  // Handle carousel navigation to jump to first index of moment
+  // Handle carousel navigation to jump to moment header
   const handleCarouselMomentClick = (moment) => {
-    const firstIndex = momentIndexes.get(moment.id);
-    if (firstIndex !== undefined && firstIndex < sortedImages.length) {
-      setTimeout(() => {
-        const imageElement = imageTileRefs.current[firstIndex];
-        if (imageElement && gridContainerRef.current) {
-          const containerRect = gridContainerRef.current.getBoundingClientRect();
-          const elementRect = imageElement.getBoundingClientRect();
-          const scrollTop = gridContainerRef.current.scrollTop;
-          const targetScroll = scrollTop + elementRect.top - containerRect.top - 20; // 20px offset from top
-          gridContainerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
-        }
-      }, 100);
+    // Use the grid's scrollToMoment method to scroll to the moment header
+    if (gridRef.current && gridRef.current.scrollToMoment) {
+      const headerId = `header-${moment.id}`;
+      gridRef.current.scrollToMoment(headerId);
     }
   };
 
@@ -1096,6 +1120,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             {/* Photos Grid */}
             <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
               <AbsoluteMasonryGrid
+                ref={gridRef}
                 items={itemsWithHeaders}
                 baseSize={Math.max(80, 266 * imageSize)}
                 imageClasses={imageClasses}
@@ -1205,6 +1230,8 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     if (actualIndex !== -1 && imageTileRefs.current[actualIndex] !== el) {
                       imageTileRefs.current[actualIndex] = el;
                     }
+                    // Store ref for PhotoSwipe zoom-out animation
+                    handleItemRef(image, index, el);
                   }
                 }}
                 renderItem={(image, index, isPortrait, setRef) => {
@@ -1275,9 +1302,15 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
         />
       )}
 
-      {viewerOpen && (
-        <ImageViewer {...viewerProps} />
-      )}
+      <AnimatePresence>
+        {viewerOpen && (
+          <ImageViewer 
+            {...viewerProps} 
+            onImageChange={handleImageChange}
+            itemsRefs={itemsRefs.current}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Floating Selection Controls */}
       <FloatingSelectionControls

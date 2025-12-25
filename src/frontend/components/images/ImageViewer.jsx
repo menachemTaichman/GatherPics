@@ -192,7 +192,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false, onImageChange = null }) {
   const { t } = useTranslation();
   const permissions = usePermissions(); // <-- add this near the top of the component
   const { isRTL, ms, me, startClass, endClass } = useRTL();
@@ -743,28 +743,40 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
     if (!onNavigate || !filteredImages || filteredImages.length === 0) return;
     
     let targetDirection = 'next';
+    let targetIndex = effectiveIndex;
     
     if (direction === 'prev') {
       targetDirection = 'prev';
       if (effectiveIndex === 0 && filteredImages.length > 1) {
         // Wrap from first to last
-        onNavigate('jump', filteredImages.length - 1);
+        targetIndex = filteredImages.length - 1;
+        onNavigate('jump', targetIndex);
       } else if (effectiveIndex > 0) {
+        targetIndex = effectiveIndex - 1;
         onNavigate('prev');
       }
     } else if (direction === 'next') {
       targetDirection = 'next';
       if (effectiveIndex === filteredImages.length - 1 && filteredImages.length > 1) {
         // Wrap from last to first
-        onNavigate('jump', 0);
+        targetIndex = 0;
+        onNavigate('jump', targetIndex);
       } else if (effectiveIndex < filteredImages.length - 1) {
+        targetIndex = effectiveIndex + 1;
         onNavigate('next');
       }
     } else if (direction === 'jump' && typeof index === 'number') {
       const clamped = Math.min(Math.max(0, index), Math.max(0, filteredImages.length - 1));
+      targetIndex = clamped;
       // Determine direction based on index diff
       targetDirection = clamped > effectiveIndex ? 'next' : 'prev';
       onNavigate('jump', clamped);
+    }
+    
+    // Trigger grid scroll if callback is provided
+    if (onImageChange && filteredImages[targetIndex]) {
+      const currentImage = filteredImages[targetIndex];
+      onImageChange(currentImage.id, targetIndex);
     }
     
     lastNavDirectionRef.current = targetDirection;
@@ -1034,17 +1046,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     const pswp = new PhotoSwipe(options);
 
-    // Initialize Vaul Swipe Up Logic
+    // Initialize Swipe Logic (for both mobile and desktop)
     let startY = 0;
     
     pswp.on('pointerDown', (e) => {
-      if (isMobileRef.current && e.originalEvent) {
+      if (e.originalEvent) {
         startY = e.originalEvent.clientY;
       }
     });
 
     pswp.on('pointerUp', (e) => {
-      if (!isMobileRef.current || !e.originalEvent) return;
+      if (!e.originalEvent) return;
       
       // 1. Check if zoomed in (if so, return and do nothing)
       if (pswp.currSlide && pswp.currSlide.pan.x !== pswp.currSlide.bounds.center.x) return;
@@ -1054,9 +1066,12 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
       // 2. Threshold check (50px)
       if (diff > 50) {
-        setDrawerOpen(true);
+        // Swipe Up -> Open drawer (mobile only, desktop has toggle handle)
+        if (isMobileRef.current) {
+          setDrawerOpen(true);
+        }
       } else if (diff < -50) {
-        // Swipe Down -> Close Viewer
+        // Swipe Down -> Close Viewer (both mobile and desktop)
         // Trigger exit animation by unmounting via onClose (which unmounts ImageViewer)
         // Note: The AnimatePresence in parent will handle the exit animation
         // We can add a custom class or state if we want to change the exit animation style specifically for swipe
@@ -1080,8 +1095,13 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
       const newIndex = fromRTLIndex(pswpNewIndex);
       if (newIndex !== effectiveIndex && onNavigate) {
         onNavigate('jump', newIndex);
+        
+        // Trigger grid scroll if callback is provided
+        if (onImageChange && filteredImages[newIndex]) {
+          const currentImage = filteredImages[newIndex];
+          onImageChange(currentImage.id, newIndex);
+        }
       }
-      
     });
 
     // Store trigger function for face rectangle updates
@@ -1092,6 +1112,15 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
     // Initialize PhotoSwipe
     pswp.init();
+    
+    // Scroll to initial image when viewer opens
+    if (onImageChange && filteredImages[currentIndex]) {
+      const currentImage = filteredImages[currentIndex];
+      // Small delay to ensure PhotoSwipe is fully initialized
+      setTimeout(() => {
+        onImageChange(currentImage.id, currentIndex);
+      }, 100);
+    }
 
     // CRITICAL: Aggressively remove PhotoSwipe's focus listener to prevent stack overflow with Vaul
     // Even with trapFocus: false, PhotoSwipe might still attach listeners in some versions
@@ -1566,7 +1595,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
         skipPswpCloseRef.current = false;
       }
     };
-  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL, toRTLIndex, fromRTLIndex, handleModalClose]);
+  }, [imageId, effectiveIndex, pswpItems, onNavigate, isRTL, toRTLIndex, fromRTLIndex, handleModalClose, onImageChange, filteredImages]);
 
   // Sync PhotoSwipe when index changes externally
   useEffect(() => {
@@ -2181,13 +2210,17 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   }, []);
 
   return (
-    <AnimatePresence>
-      <div 
-        key="image-viewer-modal" 
-        className={`fixed inset-0 ${isMobile ? 'bg-transparent' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50 modal-overlay overflow-hidden`}
+    <>
+      <motion.div
+        key="image-viewer-modal"
+        ref={modalRef}
+        className={`fixed inset-0 ${isMobile ? 'bg-transparent' : 'bg-transparent'} flex items-center justify-center z-50 modal-overlay overflow-hidden`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.15 } }}
+        transition={{ duration: 0.15 }}
       >
         <motion.div
-          ref={modalRef}
           className={`bg-transparent min-h-0 image-viewer-modal overflow-hidden ${isMobile ? 'mx-0 my-0 w-full h-full' : 'w-full h-full'}`}
           style={isMobile ? {
             width: '100vw',
@@ -2198,14 +2231,22 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
             width: '100vw',
             height: '100vh'
           }}
-          initial={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
+          initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: isMobile ? 1 : 0.95 }}
+          exit={{ 
+            opacity: 0, 
+            scale: 0.85,
+            transition: { duration: 0.15, ease: 'easeIn' }
+          }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
           tabIndex={-1}
         >
 
           {/* Content */}
-          <div dir={isRTL ? 'rtl' : 'ltr'} className="flex h-full min-h-0 overflow-hidden">
+          <div 
+            dir={isRTL ? 'rtl' : 'ltr'} 
+            className="flex h-full min-h-0 overflow-hidden"
+          >
             {/* PhotoSwipe root element */}
             <div ref={pswpRef} className="pswp" />
             {loading && (
@@ -2599,7 +2640,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           </Drawer.Root>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
 
       {/* Transfer Faces Modal */}
       {showTransferModal && selectedFaceForTransfer && (
@@ -2663,7 +2704,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           caption={t('imageViewer.thisActionCannotBeUndone')}
         />
       )}
-    </AnimatePresence>
+    </>
   );
 }
 
@@ -2682,7 +2723,7 @@ function arePropsEqual(prev, next) {
   const prevFilteredLen = Array.isArray(prev.filteredIds) ? prev.filteredIds.length : prev.filteredIds;
   const nextFilteredLen = Array.isArray(next.filteredIds) ? next.filteredIds.length : next.filteredIds;
   if (prevFilteredLen !== nextFilteredLen) { return false; }
-  // Ignore function identity differences
+  // Ignore function identity differences (onImageChange is a function)
   return true;
 }
 
