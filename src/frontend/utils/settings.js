@@ -18,6 +18,12 @@ export const setIsApplyingApiChanges = (value) => {
   isApplyingApiChanges = value;
 };
 
+// Debounce map for API calls - tracks pending timeouts per preference path
+const pendingApiCalls = new Map();
+
+// Debounce delay in milliseconds (300ms should be enough to batch rapid updates)
+const DEBOUNCE_DELAY = 300;
+
 // Default values for all settings
 const DEFAULT_PREFERENCES = {
   general: {
@@ -151,20 +157,33 @@ export const setPreference = async (path, value) => {
   // Sync to backend if user is not public
   // Skip API call if we're currently applying changes from API (prevents infinite loops)
   if (!isApplyingApiChanges) {
-    try {
-      const pathParts = path.split('.');
-      if (pathParts.length >= 2) {
-        const preferenceGroup = pathParts[0];
-        const preferenceKey = pathParts.slice(1).join('.');
-        
-        await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
+    const pathParts = path.split('.');
+    if (pathParts.length >= 2) {
+      const preferenceGroup = pathParts[0];
+      const preferenceKey = pathParts.slice(1).join('.');
+      
+      // Clear any pending API call for this preference path
+      if (pendingApiCalls.has(path)) {
+        clearTimeout(pendingApiCalls.get(path));
       }
-    } catch (error) {
-      // Silently fail - profile is public or not logged in
-      // The preference is still saved locally, which is fine
-      if (error.response?.status !== 403) {
-        console.warn('Failed to sync preference to backend:', error);
-      }
+      
+      // Schedule a debounced API call
+      const timeoutId = setTimeout(async () => {
+        try {
+          await profilesAPI.updatePreference(preferenceGroup, preferenceKey, value);
+        } catch (error) {
+          // Silently fail - profile is public or not logged in
+          // The preference is still saved locally, which is fine
+          if (error.response?.status !== 403) {
+            console.warn('Failed to sync preference to backend:', error);
+          }
+        } finally {
+          // Clean up the pending call entry
+          pendingApiCalls.delete(path);
+        }
+      }, DEBOUNCE_DELAY);
+      
+      pendingApiCalls.set(path, timeoutId);
     }
   }
 };

@@ -26,7 +26,7 @@ export default function useImageActions({
 }) {
   const eventId = useEventId(eventUrl);
   const { showToast } = useToast();
-  const { addImages, removeFromQueue, queue, open } = useBucketStore();
+  const { addImages, queue, open } = useBucketStore();
   const { t } = useTranslation();
   const navigate = useNavigate();
   
@@ -171,8 +171,9 @@ export default function useImageActions({
     if (imageIdsArray.length === 0) return;
     
     if (allInBucket) {
-      // Remove all from bucket
-      imageIdsArray.forEach(id => removeFromQueue(id));
+      // Remove all from bucket - use batch operation to avoid multiple API calls
+      const { removeManyFromQueue } = useBucketStore.getState();
+      removeManyFromQueue(imageIdsArray);
       showToast(`${imageIdsArray.length} ${t('imageActions.removedFromBucket')}`, 'success');
     } else {
       // Add all to bucket
