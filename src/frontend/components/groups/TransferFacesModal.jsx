@@ -242,7 +242,7 @@ export default function TransferFacesModal({
       // Store has already been updated by apiService interceptor
       // Trust the result and read from the updated store
       const transferredCount = result.len_added || selectedFaces.length;
-      const imageText = transferredCount === 1 ? t('transferFaces.photo') : t('transferFaces.photos');
+      const imageText = transferredCount === 1 ? t('transferFaces.face') : t('transferFaces.faces');
       const targetGroupId = result.target_group_id;
       
       // Get the target group name - try multiple sources
