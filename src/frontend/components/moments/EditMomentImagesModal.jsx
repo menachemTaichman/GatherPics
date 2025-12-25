@@ -15,6 +15,7 @@ import { formatTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
+import { useImageComponent } from '../../hooks/useImage.jsx';
 
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
@@ -831,16 +832,15 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                   data-image-id={image.id}
                 >
                   <div className="w-full h-full rounded-lg overflow-hidden">
-                    <img
-                      src={image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id))}
-                      alt={image.label || `Image ${image.id}`}
-                      className="w-full h-24 object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="%23e5e7eb"/><text x="50%" y="50%" text-anchor="middle" dy=".35em" font-size="80" fill="%239ca3af">?</text></svg>';
-                      }}
-                    />
+                    {useImageComponent(
+                      image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id)),
+                      {
+                        width: 200,
+                        height: 200,
+                        className: 'w-full h-24 object-cover',
+                        alt: image.label || `Image ${image.id}`
+                      }
+                    )}
                     <div className="p-2 text-xs text-gray-600 truncate">
                       {image.date_taken ? formatTime(image.date_taken) : image.label}
                     </div>

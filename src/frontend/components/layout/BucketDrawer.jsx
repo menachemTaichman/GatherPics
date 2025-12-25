@@ -11,6 +11,8 @@ import { RemovableThumbnail } from '../common';
 import { useRTL } from '../../hooks/useRTL';
 import { downloadAsZip } from '../../utils/downloadHelper';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
+import { useEventId } from '../../utils/storeUtils';
+import { useImageComponent } from '../../hooks/useImage.jsx';
 
 export default function BucketDrawer() {
   const [note, setNote] = useState('');
@@ -360,22 +362,20 @@ export default function BucketDrawer() {
 }
 
 function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' }) {
-  const [imageUrl, setImageUrl] = useState('');
   const { t } = useTranslation();
   const { isRTL } = useRTL();
-
-  useEffect(() => {
-    const loadUrl = async () => {
-      try {
-        const url = await urlHelpers.getRelativeThumbnailUrl(eventUrl, imageId);
-        setImageUrl(url);
-      } catch (error) {
-        console.error('Failed to load thumbnail URL:', error);
-        setImageUrl('');
-      }
-    };
-    loadUrl();
-  }, [eventUrl, imageId]);
+  const eventId = useEventId(eventUrl);
+  
+  // Construct thumbnail URL synchronously if we have eventId, otherwise use a lazy function
+  // This avoids eager API calls - useImageComponent will handle lazy loading with Intersection Observer
+  const getThumbnailUrl = useMemo(() => {
+    if (eventId) {
+      // Use sync version if we have eventId
+      return `/api/events/${eventId}/thumb/${imageId}.webp`;
+    }
+    // Return null if eventId not available yet - useImageComponent will handle it
+    return null;
+  }, [eventId, imageId]);
 
   const { removeFromQueue, removeDownloaded, removeUploaded, addToQueue } = useBucketStore.getState();
   
@@ -398,7 +398,7 @@ function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' 
   if (removeFrom === 'queue') {
     return (
       <RemovableThumbnail
-        imageUrl={imageUrl}
+        imageUrl={getThumbnailUrl}
         alt={imageId}
         onRemove={handleRemove}
         size={size}
@@ -408,13 +408,15 @@ function BucketThumb({ eventUrl, imageId, size = 'medium', removeFrom = 'queue' 
   }
 
   // For already downloaded/uploaded items, show special dual-button layout
+  // Use useImageComponent for lazy loading with Intersection Observer
   return (
     <div className="group relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 hover:border-blue-300 transition-all">
-      <img
-        src={imageUrl}
-        className="w-full h-full object-cover"
-        alt={imageId}
-      />
+      {useImageComponent(getThumbnailUrl, {
+        width: 48,
+        height: 48,
+        className: 'w-full h-full object-cover',
+        alt: imageId
+      })}
       {/* Add back to queue button (top-end in LTR, top-start in RTL) */}
       <button
         onClick={handleAddBack}

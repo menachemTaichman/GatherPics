@@ -487,18 +487,18 @@ export default function AccountModal({ hideButton = false }) {
                         {/* Include Archived */}
                         <PermissionGate requires="hasArchiveAlbum" eventUrl={eventUrl}>
                           <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
                                 <Archive className="w-5 h-5 text-gray-600" />
                               </div>
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <p className="font-medium text-gray-900">{t('account.includeArchived')}</p>
                                 <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
                               </div>
                             </div>
                             <button
                               onClick={() => handleIncludeArchivedChange(!includeArchived)}
-                              className={`w-10 h-6 rounded-full relative transition-colors ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
+                              className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
                               aria-pressed={includeArchived}
                               title={t('account.includeArchived')}
                               aria-label={t('account.includeArchived')}
@@ -510,18 +510,18 @@ export default function AccountModal({ hideButton = false }) {
                         
                         {/* Hide Timestamps in Gallery */}
                         <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
                               <Clock className="w-5 h-5 text-gray-600" />
                             </div>
-                            <div>
+                            <div className="min-w-0 flex-1">
                               <p className="font-medium text-gray-900">{t('account.hideTimestampsInGallery')}</p>
                               <p className="text-sm text-gray-500">{t('account.hideTimestampsInGalleryDescription')}</p>
                             </div>
                           </div>
                           <button
                             onClick={() => handleHideTimestampsInGalleryChange(!hideTimestampsInGallery)}
-                            className={`w-10 h-6 rounded-full relative transition-colors ${hideTimestampsInGallery ? 'bg-primary-600' : 'bg-gray-300'}`}
+                            className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${hideTimestampsInGallery ? 'bg-primary-600' : 'bg-gray-300'}`}
                             aria-pressed={hideTimestampsInGallery}
                             title={t('account.hideTimestampsInGallery')}
                             aria-label={t('account.hideTimestampsInGallery')}

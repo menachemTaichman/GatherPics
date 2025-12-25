@@ -151,6 +151,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   const canGrantCanManageEvent = Boolean(currentProfileEventPermissions?.can_manage_event);
   const canGrantCanDeleteEvent = Boolean(currentProfileEventPermissions?.can_delete_event);
   
+  
   // Apply scopes for profile relations
   useApplyScopes(profile?.id ? [
     { entity: 'event_profile', id: String(profile.id), eventId: selectedEventId || eventId },
@@ -199,6 +200,7 @@ export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, u
   // Also disabled when is_public is true (public profiles cannot have edit permissions)
   const requiresCanEdit = Boolean(editingProfile?.can_upload_and_delete_images);
   const disableCanEdit = Boolean(editingProfile?.is_public);
+  
   
   // Get permissions for the selected event (not the URL event)
   // This ensures PermissionGate checks permissions for the event being edited
@@ -516,6 +518,7 @@ const isProfileEditable = useMemo(() => {
     setSelectedEventToAdd('');
     setEventToRemove(null);
   }, [initialEventId, eventId, isCurrentProfileRestricted, currentProfileRestrictedEventId]);
+
 
   // Initialize editing state from merged profile data (only once when modal opens)
   useEffect(() => {
@@ -865,7 +868,6 @@ const isProfileEditable = useMemo(() => {
       lastProcessedEventProfileRef.current = null;
     }
   }, [isOpen, eventProfile, selectedEventId]); // Removed initialEventSpecificState from deps to prevent infinite loop
-
 
   const checkNameConflict = async (label) => {
     if (!label || !label.trim()) {
@@ -1386,7 +1388,7 @@ const isProfileEditable = useMemo(() => {
   const dynamicUrlHelpers = useMemo(() => {
     // If we have selectedEventId, create urlHelpers for it
     if (selectedEventId) {
-      return {
+      const urlHelpersObj = {
         getDisplayImageUrl: (imageId) => {
           if (!selectedEventId) return null;
           return `${API_BASE}/api/events/${selectedEventId}/display/${imageId}.webp`;
@@ -1459,6 +1461,7 @@ const isProfileEditable = useMemo(() => {
           window.location.href = `/${targetEventUrl}/feedbacks`;
         },
       };
+      return urlHelpersObj;
     }
     // Fallback to prop urlHelpers if available
     return urlHelpers || null;
@@ -1933,16 +1936,18 @@ const isProfileEditable = useMemo(() => {
                         <p className="text-sm text-gray-500">{t('editProfile.canCreateNewEvents')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanCreateEvents && !disableCanCreateEvents ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanCreateEvents ? (Boolean(editingProfile?.is_public) ? t('editProfile.publicProfilesCannotCreateEvents') : t('editProfile.restrictedProfilesCannotCreateEvents')) : undefined}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(editingProfile.can_create_events)}
-                            onChange={(e) => handleFieldChange('can_create_events', Boolean(e.target.checked))}
-                            disabled={!canGrantCanCreateEvents || disableCanCreateEvents}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                        </label>
+                        <button
+                          onClick={() => {
+                            if (!canGrantCanCreateEvents || disableCanCreateEvents) return;
+                            handleFieldChange('can_create_events', !Boolean(editingProfile.can_create_events));
+                          }}
+                          disabled={!canGrantCanCreateEvents || disableCanCreateEvents}
+                          className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.can_create_events) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantCanCreateEvents || disableCanCreateEvents ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          aria-pressed={Boolean(editingProfile.can_create_events)}
+                          title={disableCanCreateEvents ? (Boolean(editingProfile?.is_public) ? t('editProfile.publicProfilesCannotCreateEvents') : t('editProfile.restrictedProfilesCannotCreateEvents')) : undefined}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.can_create_events) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                        </button>
                         {disableCanCreateEvents && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
                             {Boolean(editingProfile?.is_public) 
@@ -2004,19 +2009,18 @@ const isProfileEditable = useMemo(() => {
                             <span>{t('editProfile.changePassword')}</span>
                           </button>
                         )}
-                        <label
-                          className={`relative inline-flex items-center ${disablePublicToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                        <button
+                          onClick={() => {
+                            if (disablePublicToggle) return;
+                            handleFieldChange('is_public', !Boolean(editingProfile.is_public));
+                          }}
+                          disabled={disablePublicToggle}
+                          className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.is_public) ? 'bg-blue-600' : 'bg-gray-300'} ${disablePublicToggle ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          aria-pressed={Boolean(editingProfile.is_public)}
                           title={disablePublicToggle ? publicToggleTooltip : undefined}
                         >
-                          <input
-                            type="checkbox"
-                            checked={Boolean(editingProfile.is_public)}
-                            onChange={(e) => handleFieldChange('is_public', Boolean(e.target.checked))}
-                            className="sr-only peer"
-                            disabled={disablePublicToggle}
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                        </label>
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.is_public) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                        </button>
                       </div>
                       {disablePublicToggle && (
                         <p className="mt-1 text-xs text-gray-500 text-right">
@@ -2244,19 +2248,18 @@ const isProfileEditable = useMemo(() => {
                           <p className="text-sm text-gray-500">{t('editProfile.canUpdateEventSettings')}</p>
                         </div>
                         <div className="flex flex-col items-end">
-                          <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanManageEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(editingProfile.can_manage_event)}
-                              onChange={(e) => handleFieldChange('can_manage_event', Boolean(e.target.checked))}
-                              className="sr-only peer"
-                              disabled={disableEventManagementToggles || !canGrantCanManageEvent}
-                            />
-                            <div
-                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}
-                              title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotManageEvents') : !canGrantCanManageEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
-                            ></div>
-                          </label>
+                          <button
+                            onClick={() => {
+                              if (disableEventManagementToggles || !canGrantCanManageEvent) return;
+                              handleFieldChange('can_manage_event', !Boolean(editingProfile.can_manage_event));
+                            }}
+                            disabled={disableEventManagementToggles || !canGrantCanManageEvent}
+                            className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.can_manage_event) ? 'bg-blue-600' : 'bg-gray-300'} ${disableEventManagementToggles || !canGrantCanManageEvent ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                            aria-pressed={Boolean(editingProfile.can_manage_event)}
+                            title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotManageEvents') : !canGrantCanManageEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
+                          >
+                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.can_manage_event) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                          </button>
                           {disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
                               {t('editProfile.publicProfilesCannotManageEvents')}
@@ -2279,19 +2282,18 @@ const isProfileEditable = useMemo(() => {
                           <p className="text-sm text-gray-500">{t('editProfile.canPermanentlyDeleteThisEventAndAllRelatedData')}</p>
                         </div>
                         <div className="flex flex-col items-end">
-                          <label className={`relative inline-flex items-center ${disableEventManagementToggles || !canGrantCanDeleteEvent ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(editingProfile.can_delete_event)}
-                              onChange={(e) => handleFieldChange('can_delete_event', Boolean(e.target.checked))}
-                              className="sr-only peer"
-                              disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
-                            />
-                            <div
-                              className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}
-                              title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotDeleteEvents') : !canGrantCanDeleteEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
-                            ></div>
-                          </label>
+                          <button
+                            onClick={() => {
+                              if (disableEventManagementToggles || !canGrantCanDeleteEvent) return;
+                              handleFieldChange('can_delete_event', !Boolean(editingProfile.can_delete_event));
+                            }}
+                            disabled={disableEventManagementToggles || !canGrantCanDeleteEvent}
+                            className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.can_delete_event) ? 'bg-blue-600' : 'bg-gray-300'} ${disableEventManagementToggles || !canGrantCanDeleteEvent ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                            aria-pressed={Boolean(editingProfile.can_delete_event)}
+                            title={disableEventManagementToggles ? t('editProfile.publicProfilesCannotDeleteEvents') : !canGrantCanDeleteEvent ? t('editProfile.youDoNotHavePermissionToGrantThis') : undefined}
+                          >
+                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.can_delete_event) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                          </button>
                           {disableEventManagementToggles && (
                             <p className="mt-1 text-xs text-gray-500 text-right">
                               {t('editProfile.publicProfilesCannotDeleteEvents')}
@@ -2315,12 +2317,10 @@ const isProfileEditable = useMemo(() => {
                         <p className="text-sm text-gray-500">{t('editProfile.canUploadNewPhotosAndDeleteExistingOnes')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanUploadAndDeleteImages && !disableCanUploadAndDeleteImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanUploadAndDeleteImages ? canUploadAndDeleteImagesDisabledReason : undefined}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(editingProfile.can_upload_and_delete_images)}
-                          onChange={(e) => {
-                            const newValue = Boolean(e.target.checked);
+                        <button
+                          onClick={() => {
+                            if (!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages) return;
+                            const newValue = !Boolean(editingProfile.can_upload_and_delete_images);
                             handleFieldChange('can_upload_and_delete_images', newValue);
                             // If enabling upload, also enable can_edit and all_groups (constraint)
                             if (Boolean(newValue)) {
@@ -2328,11 +2328,13 @@ const isProfileEditable = useMemo(() => {
                               handleFieldChange('all_groups', true);
                             }
                           }}
-                            disabled={!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                        </label>
+                          disabled={!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages}
+                          className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.can_upload_and_delete_images) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantCanUploadAndDeleteImages || disableCanUploadAndDeleteImages ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          aria-pressed={Boolean(editingProfile.can_upload_and_delete_images)}
+                          title={disableCanUploadAndDeleteImages ? canUploadAndDeleteImagesDisabledReason : undefined}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.can_upload_and_delete_images) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                        </button>
                         {disableCanUploadAndDeleteImages && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
                             {canUploadAndDeleteImagesDisabledReason}
@@ -2348,23 +2350,23 @@ const isProfileEditable = useMemo(() => {
                         <p className="text-sm text-gray-500">{t('editProfile.canEditAlbumsGroupsMomentsAndTransferFaces')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantCanEdit && !requiresCanEdit && !disableCanEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableCanEdit ? t('editProfile.publicProfilesCannotHaveEditPermissions') : requiresCanEdit ? t('editProfile.requiredWhenUploadDeletePhotosIsEnabled') : undefined}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(editingProfile.can_edit)}
-                            onChange={(e) => {
-                              const newValue = Boolean(e.target.checked);
-                              // If disabling can_edit while can_upload_and_delete_images is enabled, also disable upload
-                              if (!newValue && Boolean(editingProfile.can_upload_and_delete_images)) {
-                                handleFieldChange('can_upload_and_delete_images', false);
-                              }
-                              handleFieldChange('can_edit', Boolean(newValue));
-                            }}
-                            disabled={!canGrantCanEdit || requiresCanEdit || disableCanEdit}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                        </label>
+                        <button
+                          onClick={() => {
+                            if (!canGrantCanEdit || requiresCanEdit || disableCanEdit) return;
+                            const newValue = !Boolean(editingProfile.can_edit);
+                            // If disabling can_edit while can_upload_and_delete_images is enabled, also disable upload
+                            if (!newValue && Boolean(editingProfile.can_upload_and_delete_images)) {
+                              handleFieldChange('can_upload_and_delete_images', false);
+                            }
+                            handleFieldChange('can_edit', newValue);
+                          }}
+                          disabled={!canGrantCanEdit || requiresCanEdit || disableCanEdit}
+                          className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.can_edit) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantCanEdit || requiresCanEdit || disableCanEdit ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          aria-pressed={Boolean(editingProfile.can_edit)}
+                          title={disableCanEdit ? t('editProfile.publicProfilesCannotHaveEditPermissions') : requiresCanEdit ? t('editProfile.requiredWhenUploadDeletePhotosIsEnabled') : undefined}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.can_edit) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                        </button>
                         {disableCanEdit && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
                             {t('editProfile.publicProfilesCannotHaveEditPermissions')}
@@ -2399,16 +2401,17 @@ const isProfileEditable = useMemo(() => {
                         </div>
                         <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllPhotosExceptListedBelow')}</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantAllImages ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editingProfile.all_images)}
-                          onChange={(e) => handleFieldChange('all_images', Boolean(e.target.checked))}
-                          disabled={!canGrantAllImages}
-                          className="sr-only peer"
-                        />
-                        <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                      </label>
+                      <button
+                        onClick={() => {
+                          if (!canGrantAllImages) return;
+                          handleFieldChange('all_images', !Boolean(editingProfile.all_images));
+                        }}
+                        disabled={!canGrantAllImages}
+                        className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.all_images) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantAllImages ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        aria-pressed={Boolean(editingProfile.all_images)}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.all_images) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                      </button>
                     </div>
 
                     {/* All Albums */}
@@ -2434,16 +2437,17 @@ const isProfileEditable = useMemo(() => {
                         </div>
                         <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllAlbumsExceptListedBelow')}</p>
                       </div>
-                      <label className={`relative inline-flex items-center ${canGrantAllAlbums ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editingProfile.all_albums)}
-                          onChange={(e) => handleFieldChange('all_albums', Boolean(e.target.checked))}
-                          disabled={!canGrantAllAlbums}
-                          className="sr-only peer"
-                        />
-                        <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                      </label>
+                      <button
+                        onClick={() => {
+                          if (!canGrantAllAlbums) return;
+                          handleFieldChange('all_albums', !Boolean(editingProfile.all_albums));
+                        }}
+                        disabled={!canGrantAllAlbums}
+                        className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.all_albums) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantAllAlbums ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        aria-pressed={Boolean(editingProfile.all_albums)}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.all_albums) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                      </button>
                     </div>
 
                     {/* All Groups */}
@@ -2470,23 +2474,23 @@ const isProfileEditable = useMemo(() => {
                         <p className="text-sm text-gray-500">{t('editProfile.ifOnAccessAllGroupsExceptListedBelow')}</p>
                       </div>
                       <div className="flex flex-col items-end">
-                        <label className={`relative inline-flex items-center ${canGrantAllGroups && !disableAllGroups ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`} title={disableAllGroups ? allGroupsDisabledReason : undefined}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(editingProfile.all_groups)}
-                          onChange={(e) => {
-                            const newValue = Boolean(e.target.checked);
-                            // If disabling all_groups (restricting groups) while can_upload_and_delete_images is enabled, also disable upload
+                        <button
+                          onClick={() => {
+                            if (!canGrantAllGroups || disableAllGroups) return;
+                            const newValue = !Boolean(editingProfile.all_groups);
+                            // If disabling all_groups while can_upload_and_delete_images is enabled, also disable upload
                             if (!newValue && Boolean(editingProfile.can_upload_and_delete_images)) {
                               handleFieldChange('can_upload_and_delete_images', false);
                             }
-                            handleFieldChange('all_groups', Boolean(newValue));
+                            handleFieldChange('all_groups', newValue);
                           }}
-                            disabled={!canGrantAllGroups || disableAllGroups}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:bg-blue-600 ${isRTL ? 'peer-checked:after:-translate-x-full' : 'peer-checked:after:translate-x-full'} peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px]' : 'after:left-[2px]'} after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                        </label>
+                          disabled={!canGrantAllGroups || disableAllGroups}
+                          className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(editingProfile.all_groups) ? 'bg-blue-600' : 'bg-gray-300'} ${!canGrantAllGroups || disableAllGroups ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          aria-pressed={Boolean(editingProfile.all_groups)}
+                          title={disableAllGroups ? allGroupsDisabledReason : undefined}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(editingProfile.all_groups) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                        </button>
                         {disableAllGroups && (
                           <p className="mt-1 text-xs text-gray-500 text-right">
                             {allGroupsDisabledReason}
@@ -2746,14 +2750,14 @@ const isProfileEditable = useMemo(() => {
 
 // ProfileImageThumb component for grid display
 function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove, title }) {
-  const getUrl = () => {
+  const imageUrl = useMemo(() => {
     if (!urlHelpers) return null;
     return urlHelpers.getRelativeThumbnailUrl(imageId);
-  };
+  }, [urlHelpers, imageId]);
 
   return (
     <RemovableThumbnail
-      imageUrl={getUrl()}
+      imageUrl={imageUrl}
       alt={imageId}
       onRemove={onRemove}
       size="medium"
@@ -2764,14 +2768,14 @@ function ProfileImageThumb({ imageId, eventUrl, urlHelpers, onRemove, title }) {
 
 // ProfileAlbumThumb component for grid display
 function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove, title }) {
-  const getUrl = () => {
+  const imageUrl = useMemo(() => {
     if (!urlHelpers || !urlHelpers.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('albums', album.id)}?v=${album.representative_image || 'none'}`;
-  };
+  }, [urlHelpers, album.id, album.representative_image]);
 
   return (
     <RemovableThumbnail
-      imageUrl={getUrl()}
+      imageUrl={imageUrl}
       alt={album.label}
       onRemove={onRemove}
       text={album.label}
@@ -2785,14 +2789,14 @@ function ProfileAlbumThumb({ album, eventUrl, urlHelpers, onRemove, title }) {
 
 // ProfileGroupThumb component for grid display
 function ProfileGroupThumb({ group, eventUrl, urlHelpers, onRemove, title }) {
-  const getUrl = () => {
+  const imageUrl = useMemo(() => {
     if (!urlHelpers || !urlHelpers.getRepresentativeUrl) return null;
     return `${urlHelpers.getRepresentativeUrl('groups', group.id)}?v=${group.representative_face || 'none'}`;
-  };
+  }, [urlHelpers, group.id, group.representative_face]);
 
   return (
     <RemovableThumbnail
-      imageUrl={getUrl()}
+      imageUrl={imageUrl}
       alt={group.label}
       onRemove={onRemove}
       text={group.label}

@@ -1,4 +1,4 @@
-import { ImageComponent } from '../../hooks/useImage.jsx';
+import { useImageComponent } from '../../hooks/useImage.jsx';
 
 /**
  * A reusable thumbnail component with a centered remove button on hover
@@ -49,6 +49,15 @@ export default function RemovableThumbnail({
   // Ensure imageUrl is a string or null, handle function case
   const resolvedImageUrl = typeof imageUrl === 'function' ? imageUrl() : imageUrl;
 
+  // Use useImageComponent hook for proper lazy loading (like BucketDrawer)
+  const imageComponent = useImageComponent(resolvedImageUrl || '', {
+    width: size === 'small' ? 48 : size === 'tiny' ? 28 : 200,
+    height: size === 'small' ? 48 : size === 'tiny' ? 28 : 200,
+    className: finalImageClass,
+    alt: alt,
+    iconType: iconType
+  });
+
   return (
     <button
       onClick={(e) => {
@@ -59,11 +68,7 @@ export default function RemovableThumbnail({
       title={title}
     >
       {/* Image */}
-      {ImageComponent(resolvedImageUrl || '', {
-        className: finalImageClass,
-        alt: alt,
-        iconType: iconType
-      })}
+      {imageComponent}
 
       {/* Optional text overlay (for albums) */}
       {text && (
