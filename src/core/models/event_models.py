@@ -633,8 +633,7 @@ class EventModels(BaseModels):
                 FROM {entity}_def s
                 INNER JOIN {ctx_table} at ON s.{id_field} = at.{id_field}
                 INNER JOIN entity_ids ei ON s.{id_field} = ei.{id_field}
-                WHERE s.{id_field} = ANY(%s::uuid[])
-                AND s.profile_id = %s
+                WHERE s.profile_id = %s
         """
         result = self.db.execute_query(query, [ids, profile_id], return_format=ReturnFormat.LIST_TUPLES)
         if len(result) != len(ids):
