@@ -838,19 +838,28 @@ class DB:
             with self.conn.cursor() as cursor:
                 cursor.execute(full_query, params)
             self.conn.commit()
-    
+
     def close(self):
         """Return the connection to the pool. Must be called when done with this DB instance."""
         if self.conn:
             try:
+                self.conn.rollback()
+                
+                self.conn.autocommit = True
+                
                 with self.conn.cursor() as cursor:
                     cursor.execute("DISCARD ALL")
-                self.conn.commit()
+                    
             except Exception:
                 pass
+            finally:
+                try:
+                    self.conn.autocommit = False
+                except Exception:
+                    pass
 
-            self.connection_pool.putconn(self.conn)
-            self.conn = None
+                self.connection_pool.putconn(self.conn)
+                self.conn = None
     
     def __enter__(self):
         """Support for context manager protocol: with DB(...) as db:"""
