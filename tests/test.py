@@ -397,24 +397,14 @@ ids = {
 event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 event = Event(event_id, profile_id=dev_profile_id)
 
-with Timeit('test_gets_methods'):
-    test_gets_methods(entities_tables, ids, relations)
-
-
-count = 379
-image_ids = event.models.db.execute_query(f'SELECT image_id FROM images_ctx LIMIT {count};', return_format=ReturnFormat.LIST_VALUES)
-album_id = '4942f79e-487c-4eac-b53a-d2c7ae8817dc'
-operation = ChildOperation.REMOVE
-with Timeit(f'edit_childs with {count} images to {operation}'):
-    # result = event.models.edit_childs('events_profiles_ctx', '0b54fd8b-722e-4449-996d-2044553616ac', 'images', image_ids, operation=operation)
-    print('-')
-    # result = event.models.edit_childs('albums', album_id, 'images', image_ids, operation=operation)
-    # print(result)
-
+result1 = event.models.get_entities('images')
+print(result1)
 print('--------------------------------')
-with Timeit('get_childs'):
-    result = event.models.get_childs('events_profiles_ctx', '0b54fd8b-722e-4449-996d-2044553616ac', 'images', image_ids)
 
+public_profile_id = '0b54fd8b-722e-4449-996d-2044553616ac'
+public_event = Event(event_id, profile_id=public_profile_id)
+result2 = public_event.models.get_entities('images')
+print(result2)
 print('--------------------------------')
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'

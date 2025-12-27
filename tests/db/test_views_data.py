@@ -59,122 +59,122 @@ class TestDBPerformance(unittest.TestCase):
                 event = Event(cls.EVENT_ID, profile_id=cls.PROFILE_ID)
                 
                 # Follow the trigger process manually, but delete data in proper order
-                with db.get_connection() as conn:
-                    with conn.cursor() as cursor:
-                        # Set profile and event context
-                        cursor.execute("SELECT set_profile_context(%s, %s)", ('profile_id', str(cls.PROFILE_ID)))
-                        cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', str(cls.EVENT_ID)))
-                        conn.commit()
-                        
-                        # Check if another event is in deletion
-                        cursor.execute("SELECT cur_transaction('temp_event_in_deletion')")
-                        result = cursor.fetchone()
-                        event_in_deletion = result[0] if result else None
-                        if event_in_deletion:
-                            print(f"Warning: Another event ({event_in_deletion}) is in deletion.")
-                        
-                        # Set transaction context for event deletion
-                        cursor.execute("SELECT set_transaction_context('temp_event_in_deletion', %s)", (str(cls.EVENT_ID),))
-                        conn.commit()
-                        
-                        # Delete in proper order to avoid foreign key violations
-                        # Delete junction tables first (before referenced tables)
-                        
-                        # Delete access_requests_groups (references access_requests and groups)
-                        cursor.execute("""
-                            DELETE FROM access_requests_groups 
-                            WHERE access_request_id IN (
-                                SELECT access_request_id FROM access_requests WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} access_requests_groups")
-                        
-                        # Delete access_requests (references events)
-                        cursor.execute("DELETE FROM access_requests WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} access_requests")
-                        
-                        # Delete profiles_images (junction table - delete BEFORE images)
-                        cursor.execute("""
-                            DELETE FROM profiles_images 
-                            WHERE image_id IN (
-                                SELECT image_id FROM images WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} profiles_images")
-                        
-                        # Delete profiles_groups (junction table - delete BEFORE groups)
-                        cursor.execute("""
-                            DELETE FROM profiles_groups 
-                            WHERE group_id IN (
-                                SELECT group_id FROM groups WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} profiles_groups")
-                        
-                        # Delete profiles_albums (junction table - delete BEFORE albums)
-                        cursor.execute("""
-                            DELETE FROM profiles_albums 
-                            WHERE album_id IN (
-                                SELECT album_id FROM albums WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} profiles_albums")
-                        
-                        # Delete albums_images (junction table - delete BEFORE albums and images)
-                        cursor.execute("""
-                            DELETE FROM albums_images 
-                            WHERE album_id IN (
-                                SELECT album_id FROM albums WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} albums_images")
-                        
-                        # Delete faces (references images and groups)
-                        cursor.execute("""
-                            DELETE FROM faces 
-                            WHERE image_id IN (
-                                SELECT image_id FROM images WHERE event_id = %s
-                            )
-                        """, (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} faces")
-                        
-                        # Delete images (references events, moments, uploads)
-                        cursor.execute("DELETE FROM images WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} images")
-                        
-                        # Delete groups (references events)
-                        cursor.execute("DELETE FROM groups WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} groups")
-                        
-                        # Delete albums (references events)
-                        cursor.execute("DELETE FROM albums WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} albums")
-                        
-                        # Delete moments (references events)
-                        cursor.execute("DELETE FROM moments WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} moments")
-                        
-                        # Delete uploads (references events)
-                        cursor.execute("DELETE FROM uploads WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} uploads")
-                        
-                        # Delete events_profiles (references events and profiles)
-                        cursor.execute("DELETE FROM events_profiles WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} events_profiles")
-                        
-                        # Delete rekognition_usaged (references events)
-                        cursor.execute("DELETE FROM rekognition_usaged WHERE event_id = %s", (cls.EVENT_ID,))
-                        print(f"  Deleted {cursor.rowcount} rekognition_usaged")
-                        
-                        # Delete profiles where restricted_to_event = event_id
-                        cursor.execute("DELETE FROM profiles WHERE restricted_to_event = %s", (cls.EVENT_ID,))
-                        deleted_profiles = cursor.rowcount
-                        if deleted_profiles > 0:
-                            print(f"  Deleted {deleted_profiles} profiles restricted to event")
-                        
-                        # Delete from events table (last)
-                        cursor.execute("DELETE FROM events WHERE event_id = %s", (cls.EVENT_ID,))
-                        conn.commit()
+                # Use the DB instance's dedicated connection
+                with db.conn.cursor() as cursor:
+                    # Set profile and event context
+                    cursor.execute("SELECT set_profile_context(%s, %s)", ('profile_id', str(cls.PROFILE_ID)))
+                    cursor.execute("SELECT set_event_profile_context(%s, %s)", ('event_id', str(cls.EVENT_ID)))
+                    db.conn.commit()
+                    
+                    # Check if another event is in deletion
+                    cursor.execute("SELECT cur_transaction('temp_event_in_deletion')")
+                    result = cursor.fetchone()
+                    event_in_deletion = result[0] if result else None
+                    if event_in_deletion:
+                        print(f"Warning: Another event ({event_in_deletion}) is in deletion.")
+                    
+                    # Set transaction context for event deletion
+                    cursor.execute("SELECT set_transaction_context('temp_event_in_deletion', %s)", (str(cls.EVENT_ID),))
+                    db.conn.commit()
+                    
+                    # Delete in proper order to avoid foreign key violations
+                    # Delete junction tables first (before referenced tables)
+                    
+                    # Delete access_requests_groups (references access_requests and groups)
+                    cursor.execute("""
+                        DELETE FROM access_requests_groups 
+                        WHERE access_request_id IN (
+                            SELECT access_request_id FROM access_requests WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} access_requests_groups")
+                    
+                    # Delete access_requests (references events)
+                    cursor.execute("DELETE FROM access_requests WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} access_requests")
+                    
+                    # Delete profiles_images (junction table - delete BEFORE images)
+                    cursor.execute("""
+                        DELETE FROM profiles_images 
+                        WHERE image_id IN (
+                            SELECT image_id FROM images WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} profiles_images")
+                    
+                    # Delete profiles_groups (junction table - delete BEFORE groups)
+                    cursor.execute("""
+                        DELETE FROM profiles_groups 
+                        WHERE group_id IN (
+                            SELECT group_id FROM groups WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} profiles_groups")
+                    
+                    # Delete profiles_albums (junction table - delete BEFORE albums)
+                    cursor.execute("""
+                        DELETE FROM profiles_albums 
+                        WHERE album_id IN (
+                            SELECT album_id FROM albums WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} profiles_albums")
+                    
+                    # Delete albums_images (junction table - delete BEFORE albums and images)
+                    cursor.execute("""
+                        DELETE FROM albums_images 
+                        WHERE album_id IN (
+                            SELECT album_id FROM albums WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} albums_images")
+                    
+                    # Delete faces (references images and groups)
+                    cursor.execute("""
+                        DELETE FROM faces 
+                        WHERE image_id IN (
+                            SELECT image_id FROM images WHERE event_id = %s
+                        )
+                    """, (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} faces")
+                    
+                    # Delete images (references events, moments, uploads)
+                    cursor.execute("DELETE FROM images WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} images")
+                    
+                    # Delete groups (references events)
+                    cursor.execute("DELETE FROM groups WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} groups")
+                    
+                    # Delete albums (references events)
+                    cursor.execute("DELETE FROM albums WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} albums")
+                    
+                    # Delete moments (references events)
+                    cursor.execute("DELETE FROM moments WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} moments")
+                    
+                    # Delete uploads (references events)
+                    cursor.execute("DELETE FROM uploads WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} uploads")
+                    
+                    # Delete events_profiles (references events and profiles)
+                    cursor.execute("DELETE FROM events_profiles WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} events_profiles")
+                    
+                    # Delete rekognition_usaged (references events)
+                    cursor.execute("DELETE FROM rekognition_usaged WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} rekognition_usaged")
+                    
+                    # Delete profiles where restricted_to_event = event_id
+                    cursor.execute("DELETE FROM profiles WHERE restricted_to_event = %s", (cls.EVENT_ID,))
+                    deleted_profiles = cursor.rowcount
+                    if deleted_profiles > 0:
+                        print(f"  Deleted {deleted_profiles} profiles restricted to event")
+                    
+                    # Delete from events table (last)
+                    cursor.execute("DELETE FROM events WHERE event_id = %s", (cls.EVENT_ID,))
+                    db.conn.commit()
                 
                 # Also call Event.delete_event to clean up files and rekognition collection
                 try:

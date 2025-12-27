@@ -74,6 +74,19 @@ app.register_blueprint(settings_bp)
 from src.backend.error_handlers import register_error_handlers
 register_error_handlers(app)
 
+# Database connection cleanup
+@app.teardown_appcontext
+def close_db(error):
+    """Close all DB instances created during this request."""
+    from flask import g
+    db_instances = getattr(g, 'db_instances', [])
+    for db in db_instances:
+        try:
+            db.close()
+        except Exception:
+            # Ignore errors during cleanup
+            pass
+
 # Production build serving - only register if DIST_DIR exists and we're in production
 IS_PRODUCTION = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'
 if IS_PRODUCTION and DIST_DIR and os.path.exists(DIST_DIR) and os.path.exists(os.path.join(DIST_DIR, 'index.html')):

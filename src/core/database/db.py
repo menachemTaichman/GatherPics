@@ -721,26 +721,51 @@ class DB:
         }
 
     def __init__(self, *, event_id: str | None = None, profile_id: str | None = None, public_code: str | None = None):
-        """Initialize database connection."""
+        """Initialize database connection.
+        
+        Each DB instance holds a single connection for its entire lifetime.
+        The connection has context variables set and is reused for all queries.
+        Must call close() or use as context manager to return connection to pool.
+        """
         self.event_id = event_id
         self.connection_pool = self._get_connection_pool()
+        
+        # Get a connection from the pool and keep it for the lifetime of this instance
+        self.conn = self.connection_pool.getconn()
 
         self.profile_context = self.current_profile_fields()
         self.event_profile_context = self.current_event_profile_fields()
         
+        # Handle public_code lookup (before setting profile_id)
         if not profile_id and public_code:
             if not event_id:
+                self.close()
                 raise Forbidden('Access denied: no event ID provided')
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            with self.conn.cursor() as cursor:
                 cursor.execute('SELECT profile_id FROM profiles WHERE public_access_code = %s', (public_code,))
                 result = cursor.fetchone()
                 if result:
-                    self.profile_id = result[0]
+                    profile_id = result[0]
                 else:
+                    self.close()
                     raise Forbidden(f'Access denied: public access code {public_code} is invalid')
+            self.conn.commit()
 
+        # Set profile_id (this populates profile_context and event_profile_context via the setter)
         self.profile_id = profile_id
+        
+        # Set context variables on this specific connection
+        self._set_context_on_connection()
+        
+        # Store DB instance in Flask g for teardown cleanup
+        try:
+            from flask import g
+            if not hasattr(g, 'db_instances'):
+                g.db_instances = []
+            g.db_instances.append(self)
+        except RuntimeError:
+            # Not in Flask request context (e.g., tests, scripts)
+            pass
 
     @property
     def profile_id(self) -> str | None:
@@ -782,52 +807,70 @@ class DB:
                             val = event_profile.get(field, default_val)
                             self.event_profile_context[field] = val
 
-    @contextmanager
-    def get_connection(self):
-        """Context manager for database connections with optimized profile context setting."""
-        conn = self.connection_pool.getconn()
-        try:
-            with conn.cursor() as cursor:
-                sql_commands = []
-                params = []
+    def _set_context_on_connection(self):
+        """Set context variables on self.conn (the instance's dedicated connection)."""
+        sql_commands = []
+        params = []
 
-                for key, value in self.profile_context.items():
-                    val_str = str(value) if value is not None else ''
-                    sql_commands.append("SELECT set_profile_context(%s, %s);")
-                    params.extend([key, val_str])
+        for key, value in self.profile_context.items():
+            val_str = str(value) if value is not None else ''
+            sql_commands.append("SELECT set_profile_context(%s, %s);")
+            params.extend([key, val_str])
 
-                for key, value in self.event_profile_context.items():
-                    val_str = str(value) if value is not None else ''
-                    sql_commands.append("SELECT set_event_profile_context(%s, %s);")
-                    params.extend([key, val_str])
+        for key, value in self.event_profile_context.items():
+            val_str = str(value) if value is not None else ''
+            sql_commands.append("SELECT set_event_profile_context(%s, %s);")
+            params.extend([key, val_str])
 
-                if self.event_id and 'event_id' not in self.event_profile_context:
-                    sql_commands.append("SELECT set_event_profile_context(%s, %s);")
-                    params.extend(['event_id', str(self.event_id)])
+        if self.event_id and 'event_id' not in self.event_profile_context:
+            sql_commands.append("SELECT set_event_profile_context(%s, %s);")
+            params.extend(['event_id', str(self.event_id)])
 
-                if sql_commands:
-                    full_query = "\n".join(sql_commands)
-                    cursor.execute(full_query, params)
-                
-            yield conn
-        finally:
-            # Connection pool automatically rolls back uncommitted transactions on putconn
-            # Session variables are overwritten on every connection use, so no explicit cleanup needed
-            self.connection_pool.putconn(conn)
+        if sql_commands:
+            full_query = "\n".join(sql_commands)
+            with self.conn.cursor() as cursor:
+                cursor.execute(full_query, params)
+            self.conn.commit()
+    
+    def close(self):
+        """Return the connection to the pool. Must be called when done with this DB instance."""
+        if self.conn:
+            try:
+                with self.conn.cursor() as cursor:
+                    cursor.execute("DISCARD ALL")
+                self.conn.commit()
+            except Exception:
+                pass
+
+            self.connection_pool.putconn(self.conn)
+            self.conn = None
+    
+    def __enter__(self):
+        """Support for context manager protocol: with DB(...) as db:"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Support for context manager protocol: automatically close on exit"""
+        self.close()
+    
 
     def execute_query(self, query: str, params: tuple | list = (), return_format: ReturnFormat | None = None) -> Any:
         """Execute any SQL query and return results according to return_format.
 
         Supports SELECT and action queries (INSERT, UPDATE, DELETE, UPSERT)
         with optional RETURNING clause.
+        
+        Uses the instance's dedicated connection (self.conn) which already has context set.
         """
+        if not self.conn:
+            raise DatabaseError("Database connection is closed. Cannot execute query.")
+        
         results = None
         row_count = None
         has_resultset = False
 
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            with self.conn.cursor() as cursor:
                 cursor.execute(query, params)
                 has_resultset = cursor.description is not None
                 if has_resultset:
@@ -837,8 +880,7 @@ class DB:
                     row_count = cursor.rowcount
                     rows = []
                     columns = []
-                conn.commit()
-                cursor.close()
+            self.conn.commit()
         
         except psycopg2_errors.Error as e:
             error_str = str(e)
