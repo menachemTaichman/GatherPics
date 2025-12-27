@@ -3,10 +3,21 @@ from psycopg2 import pool
 from typing import Any
 import json
 import ast
-from contextlib import contextmanager
 import os
+import socket
 from enum import Enum
 from src.core.errors import Forbidden, DatabaseError, PolicyError
+
+# Load environment variables from .env file if it exists (development only)
+# In production (AWS), environment variables are already set
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
+
+environment = os.getenv('ENVIRONMENT', 'DEVELOPMENT')
+hostname = os.getenv('HOSTNAME') or socket.gethostname()
+app_instance_name = os.getenv('APP_INSTANCE_NAME') or 'GatherPics'
+application_name = f'{app_instance_name}_{environment}_{hostname}'
 
 class ReturnFormat(Enum):
     VALUE = 'value'
@@ -31,11 +42,6 @@ class DB:
     def _get_connection_pool(cls):
         """Get or create the shared connection pool."""
         if cls._connection_pool is None:
-            # Load environment variables from .env file if it exists (development only)
-            # In production (AWS), environment variables are already set
-            if os.path.exists('.env'):
-                from dotenv import load_dotenv
-                load_dotenv()
             
             cls._connection_pool = pool.SimpleConnectionPool(
                 minconn=1,
@@ -44,7 +50,8 @@ class DB:
                 database=os.getenv('DB_NAME', 'photo_app_db'),
                 user=os.getenv('DB_USER', 'postgres'),
                 password=os.getenv('DB_PASSWORD', ''),
-                port=os.getenv('DB_PORT', '5432')
+                port=os.getenv('DB_PORT', '5432'),
+                options=f"-c application_name={application_name}"
             )
         return cls._connection_pool
     
@@ -852,7 +859,6 @@ class DB:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Support for context manager protocol: automatically close on exit"""
         self.close()
-    
 
     def execute_query(self, query: str, params: tuple | list = (), return_format: ReturnFormat | None = None) -> Any:
         """Execute any SQL query and return results according to return_format.
