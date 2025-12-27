@@ -1,7 +1,10 @@
 import { BlobReader, ZipWriter, Reader } from '@zip.js/zip.js';
-import * as streamSaver from 'streamsaver';
+import streamSaver from 'streamsaver';
+import jwtService from './jwtService';
 
 // Configure StreamSaver mitm
+// Note: The external mitm proxy may make an unauthorized verification request (401 error in logs)
+// This is harmless - the actual download requests include auth headers and succeed
 if (typeof window !== 'undefined') {
   streamSaver.mitm = 'https://jimmywarting.github.io/StreamSaver.js/mitm.html';
 }
@@ -95,7 +98,17 @@ export async function downloadAsZip(filesOrPromise, zipFilename = 'images.zip', 
       try {
         // 4. Use FETCH (GET) instead of HttpReader (HEAD)
         // This solves the 403 Forbidden issue
-        const response = await fetch(file.url);
+        // Include authorization header for API endpoints (local storage)
+        const token = jwtService.getTokenSync();
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(file.url, {
+          credentials: 'include', // Include cookies as fallback
+          headers: headers
+        });
         
         if (!response.ok) {
           throw new Error(`HTTP error ${response.status}`);
