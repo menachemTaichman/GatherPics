@@ -296,6 +296,9 @@ def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)
         query = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
             SELECT
                 i.image_id,
                 i.image_id,
@@ -304,17 +307,22 @@ def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
                 i.status,
                 COUNT(f.face_id) as faces_count
             FROM images i
+            INNER JOIN image_ids ii ON i.image_id = ii.image_id
             LEFT JOIN faces f ON i.image_id = f.image_id
-            WHERE i.image_id IN ({','.join(['%s'] * len(image_ids))})
             GROUP BY i.image_id, i.event_id, i.label, i.status;
         """
-        images_details = event.models.db.execute_query(query, image_ids, return_format=ReturnFormat.DICT_DICTS)
+        images_details = event.models.db.execute_query(query, (image_ids,), return_format=ReturnFormat.DICT_DICTS)
         image_ids = list(images_details.keys())
         
         query = f"""
-            SELECT face_id FROM faces WHERE image_id IN ({','.join(['%s'] * len(image_ids))});
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            SELECT f.face_id 
+            FROM faces f
+            INNER JOIN image_ids ii ON f.image_id = ii.image_id;
         """
-        face_ids = event.models.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_VALUES)
+        face_ids = event.models.db.execute_query(query, (image_ids,), return_format=ReturnFormat.LIST_VALUES)
         delete_aws_rekognition_faces_task.delay(event_id, profile_id, face_ids)
 
         paths = []
@@ -350,10 +358,15 @@ def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
             )
 
             query = f"""
-                DELETE FROM images WHERE image_id IN ({','.join(['%s'] * len(deleted))});
-                RETURNING image_id;
+                WITH image_ids AS (
+                    SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+                )
+                DELETE FROM images i
+                USING image_ids ii
+                WHERE i.image_id = ii.image_id
+                RETURNING i.image_id;
             """
-            deleted_image_ids = event.models.db.execute_query(query, deleted, return_format=ReturnFormat.LIST_VALUES)
+            deleted_image_ids = event.models.db.execute_query(query, (list(deleted),), return_format=ReturnFormat.LIST_VALUES)
 
             query = f"""
                 ANALYZE images; ANALYZE faces; ANALYZE groups;

@@ -182,20 +182,31 @@ class EventModels(BaseModels):
 
         affected_uploads_to_moments = {}
         query = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
             SELECT DISTINCT ai.upload_id, ai.moment_id
             FROM images_ctx ai
-            WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
-            AND ai.moment_id IS NOT NULL
+            INNER JOIN image_ids ii ON ai.image_id = ii.image_id
+            WHERE ai.moment_id IS NOT NULL
         """
-        result = self.db.execute_query(query, image_ids, return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, (image_ids,), return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, moment_id in result:
             affected_uploads_to_moments.setdefault(upload_id, []).append(moment_id)
 
         valid_image_ids = list(self.get_entities('images', image_ids).keys())
         detached_moments = self.get_parents('images', valid_image_ids, 'moments')
         ctx_images = 'images_ctx'
-        query = f"UPDATE {ctx_images} SET moment_id = NULL WHERE image_id IN ({','.join(['%s'] * len(valid_image_ids))})"
-        self.db.execute_query(query, valid_image_ids)
+        query = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            UPDATE {ctx_images} AS ai
+            SET moment_id = NULL
+            FROM image_ids ii
+            WHERE ai.image_id = ii.image_id
+        """
+        self.db.execute_query(query, (valid_image_ids,))
         
         updated_uploads_to_moments = {}
         removed_uploads_to_moments = {}
@@ -231,13 +242,16 @@ class EventModels(BaseModels):
 
         affected_uploads_to_moments = {}
         query = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
             SELECT DISTINCT ai.upload_id, ai.moment_id
             FROM images_ctx ai
-            WHERE ai.image_id IN ({','.join(['%s'] * len(image_ids))})
-            AND ai.moment_id IS NOT NULL
+            INNER JOIN image_ids ii ON ai.image_id = ii.image_id
+            WHERE ai.moment_id IS NOT NULL
             AND ai.moment_id <> %s
         """
-        result = self.db.execute_query(query, image_ids + [moment_id], return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, (image_ids, moment_id), return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, affected_moment_id in result:
             affected_uploads_to_moments.setdefault(upload_id, []).append(affected_moment_id)
 
@@ -291,13 +305,16 @@ class EventModels(BaseModels):
         if isinstance(image_ids, str):
             image_ids = [image_ids]
 
-        image_placeholders = ','.join(['%s'] * len(image_ids))
         query = f"""
-            SELECT f.face_id FROM {ctx_faces} f 
-            WHERE f.image_id IN ({image_placeholders}) 
-            AND f.group_id = %s
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            SELECT f.face_id 
+            FROM {ctx_faces} f 
+            INNER JOIN image_ids ii ON f.image_id = ii.image_id
+            WHERE f.group_id = %s
         """
-        return self.db.execute_query(query, image_ids + [group_id], return_format=ReturnFormat.LIST_VALUES)
+        return self.db.execute_query(query, (image_ids, group_id), return_format=ReturnFormat.LIST_VALUES)
 
     def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
@@ -312,22 +329,23 @@ class EventModels(BaseModels):
         if not base_image_ids or not group_ids:
             return []
 
-        group_id_placeholders = ','.join(['%s'] * len(group_ids))
-        image_placeholders = ','.join(['%s'] * len(base_image_ids))
         ctx_groups = 'groups_ext'
         ctx_faces = 'faces_ctx'
 
         query = f'''
+            WITH base_image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            ),
             SELECT g.group_id, g.label, g.images_count, g.active_images_count
             FROM {ctx_groups} g
             JOIN {ctx_faces} f ON g.group_id = f.group_id
-            WHERE f.image_id IN ({image_placeholders})
-            AND g.group_id NOT IN ({group_id_placeholders})
+            INNER JOIN base_image_ids bii ON f.image_id = bii.image_id
+            WHERE g.group_id NOT IN (SELECT unnest(%s::uuid[]) AS group_id)
             GROUP BY g.group_id, g.label, g.images_count, g.active_images_count
             HAVING COUNT(f.face_id) > 0
             ORDER BY COUNT(DISTINCT f.image_id) DESC, g.label ASC
         '''
-        query_params = base_image_ids + group_ids
+        query_params = (base_image_ids, group_ids)
 
         return self.db.execute_query(query, query_params, return_format=ReturnFormat.LIST_AND_DICT_DICTS)
 
@@ -346,14 +364,17 @@ class EventModels(BaseModels):
         """
         affected_uploads_to_groups = {}
         query = f"""
+            WITH face_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS face_id
+            )
             SELECT DISTINCT i.upload_id, f.group_id
             FROM uploads_faces_ctx ufc
+            INNER JOIN face_ids fi ON ufc.face_id = fi.face_id
             INNER JOIN faces f ON ufc.face_id = f.face_id
             INNER JOIN images i ON f.image_id = i.image_id
-            WHERE ufc.face_id IN ({','.join(['%s'] * len(face_ids))})
-            AND f.group_id <> %s
+            WHERE f.group_id <> %s
         """
-        result = self.db.execute_query(query, face_ids + [target_group_id], return_format=ReturnFormat.LIST_TUPLES)
+        result = self.db.execute_query(query, (face_ids, target_group_id), return_format=ReturnFormat.LIST_TUPLES)
         for upload_id, group_id in result:
             affected_uploads_to_groups.setdefault(upload_id, []).append(group_id)
 
@@ -435,11 +456,16 @@ class EventModels(BaseModels):
         if isinstance(image_ids, str):
             image_ids = [image_ids]
 
-        placeholders = ','.join(['%s'] * len(image_ids))
         query = f"""
-            UPDATE images SET status = %s WHERE image_id IN ({placeholders});
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            UPDATE images AS i
+            SET status = %s
+            FROM image_ids ii
+            WHERE i.image_id = ii.image_id
         """
-        self.db.execute_query(query, [status] + image_ids)
+        self.db.execute_query(query, (image_ids, status))
     
     def get_ready_face_ids_in_upload(self, upload_id: int) -> list[str]:
         """Get ready face ids from images in an upload.
@@ -476,15 +502,17 @@ class EventModels(BaseModels):
         if not image_ids:
             return {}
 
-        placeholders = ','.join('%s' for _ in image_ids)
         query = f"""
-            WITH matched AS (
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            ),
+            matched AS (
                 SELECT i.image_id, m.moment_id
                 FROM images AS i
+                INNER JOIN image_ids ii ON i.image_id = ii.image_id
                 JOIN moments AS m
                 ON i.event_id = m.event_id
                 AND i.date_taken BETWEEN m.start_date AND m.end_date
-                WHERE i.image_id IN ({placeholders})
             )
             UPDATE images
             SET moment_id = (
@@ -493,20 +521,23 @@ class EventModels(BaseModels):
                 WHERE m.image_id = images.image_id
                 LIMIT 1
             )
-            WHERE image_id IN ({placeholders})
-            AND moment_id IS NULL
+            FROM image_ids ii
+            WHERE images.image_id = ii.image_id
+            AND images.moment_id IS NULL
         """
 
-        params = image_ids + image_ids
-        self.db.execute_query(query, params)
+        self.db.execute_query(query, (image_ids,))
 
         result_query = f"""
-            SELECT image_id, moment_id
-            FROM images
-            WHERE image_id IN ({placeholders})
-            AND moment_id IS NOT NULL
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            SELECT i.image_id, i.moment_id
+            FROM images i
+            INNER JOIN image_ids ii ON i.image_id = ii.image_id
+            WHERE i.moment_id IS NOT NULL
         """
-        rows = self.db.execute_query(result_query, image_ids, return_format=ReturnFormat.LIST_DICTS)
+        rows = self.db.execute_query(result_query, (image_ids,), return_format=ReturnFormat.LIST_DICTS)
 
         assigned = {}
         for row in rows:
@@ -593,11 +624,15 @@ class EventModels(BaseModels):
         id_field = self.db.get_id_field(entity)
         ctx_table = f'{entity}_ctx'
         query = f"""
+            WITH entity_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS {id_field}
+            )
             SELECT
                 s.{id_field},
                 s.is_accessible
                 FROM {entity}_def s
                 INNER JOIN {ctx_table} at ON s.{id_field} = at.{id_field}
+                INNER JOIN entity_ids ei ON s.{id_field} = ei.{id_field}
                 WHERE s.{id_field} = ANY(%s::uuid[])
                 AND s.profile_id = %s
         """
@@ -609,11 +644,14 @@ class EventModels(BaseModels):
         specify_inaccessible_ids = [id for id, is_accessible in result if is_accessible == False]
 
         query = f"""
+            WITH entity_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS {id_field}
+            )
             SELECT
                 a.{id_field},
                 a.is_accessible
                 FROM {entity}_eff a
-                WHERE a.{id_field} = ANY(%s::uuid[])
+                INNER JOIN entity_ids ei ON a.{id_field} = ei.{id_field}
                 AND a.event_id = cur_event_profile_uuid('event_id')
                 AND a.profile_id = %s
         """
@@ -694,9 +732,12 @@ class EventModels(BaseModels):
         
         # Check if all groups are in groups_to_access_requests_ctx
         query_check = f"""
+            WITH param_groups AS (
+                SELECT unnest(%s::uuid[]) AS group_id
+            )
             SELECT NOT EXISTS (
                 SELECT 1
-                FROM unnest(%s::uuid[]) AS g(group_id)
+                FROM param_groups g
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM groups_to_access_requests_ctx v

@@ -397,6 +397,10 @@ ids = {
 event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 event = Event(event_id, profile_id=dev_profile_id)
 
+with Timeit('test_gets_methods'):
+    test_gets_methods(entities_tables, ids, relations)
+
+
 count = 379
 image_ids = event.models.db.execute_query(f'SELECT image_id FROM images_ctx LIMIT {count};', return_format=ReturnFormat.LIST_VALUES)
 album_id = '4942f79e-487c-4eac-b53a-d2c7ae8817dc'

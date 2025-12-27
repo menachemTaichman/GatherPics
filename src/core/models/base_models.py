@@ -75,11 +75,17 @@ class BaseModels(ABC):
         id_field = self.db.get_id_field(table)
         if not isinstance(entity_ids, list):
             entity_ids = [entity_ids]
+        id_type = self.db.STRUCTURE()[table].get('id_type', 'UUID')
         query = f"""
             SELECT set_transaction_context('include_pending_images', 'true');
-            SELECT COUNT(*) FROM {ctx_table} WHERE {id_field} IN ({','.join(['%s'] * len(entity_ids))})
+            WITH entity_ids AS (
+                SELECT DISTINCT unnest(%s::{id_type}[]) AS {id_field}
+            )
+            SELECT COUNT(*) 
+            FROM {ctx_table} t
+            INNER JOIN entity_ids ei ON t.{id_field} = ei.{id_field}
             """
-        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.VALUE)
+        results = self.db.execute_query(query, (entity_ids,), return_format=ReturnFormat.VALUE)
         query = f"""
             SELECT set_transaction_context('include_pending_images', 'false');
             """
@@ -97,25 +103,36 @@ class BaseModels(ABC):
             if single item is provided, return the entity data
         """
         ext_table = f'{table}_ext'
-        fields = self.db.get_view_fields(table, include_details=include_details)
-        where_clause = ''
+        fields = self.db.get_view_fields(table, as_table='ext', include_details=include_details)
         single_item = False
 
         if not (entity_ids is None or isinstance(entity_ids, list)):
             entity_ids = [entity_ids]
             single_item = True
         
+        id_type = self.db.STRUCTURE()[table].get('id_type', 'UUID')
+        id_field_name = self.db.get_id_field(table)
+        
         if entity_ids:
-            where_clause += f"WHERE {self.db.get_id_field(table)} IN ({','.join(['%s'] * len(entity_ids))})"
+            cte_clause = f"""
+            WITH entity_ids AS (
+                SELECT DISTINCT unnest(%s::{id_type}[]) AS {id_field_name}
+            )
+            """
+            join_clause = f"INNER JOIN entity_ids ei ON ext.{id_field_name} = ei.{id_field_name}"
+            query = f"""{cte_clause}SELECT {fields}
+            FROM {ext_table} ext
+            {join_clause}
+            """
+            params = (entity_ids,)
         else:
-            entity_ids = []
-
-        query = f"""
+            query = f"""
             SELECT {fields}
-            FROM {ext_table}
-            {where_clause}
-        """
-        results = self.db.execute_query(query, entity_ids, return_format=ReturnFormat.DICT_DICTS)
+            FROM {ext_table} ext
+            """
+            params = ()
+
+        results = self.db.execute_query(query, params, return_format=ReturnFormat.DICT_DICTS)
 
         serialized_instructions = self.db.STRUCTURE()[table].get('serializable', {})
         if serialized_instructions:
@@ -167,6 +184,7 @@ class BaseModels(ABC):
         exclusive = relation_table == child_table
         ctx_relation = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
+        id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
 
         if return_ids:
             child_data_table = f'{child_table}_ctx'
@@ -191,13 +209,19 @@ class BaseModels(ABC):
                 join_clause = f' LEFT JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field} AND r.{id_field} = %s'
                 where_clause = f'r.{child_id_field} IS NULL'
 
-        params = [entity_id]
+        params = []
+        cte_clause = ''
         if child_ids is not None:
-            id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
-            where_clause += f" AND c.{child_id_field} = ANY(%s::{id_type}[])"
+            cte_clause = f"""
+            WITH child_ids AS (
+                SELECT DISTINCT unnest(%s::{id_type}[]) AS {child_id_field}
+            )
+            """
+            join_clause = f' INNER JOIN child_ids ci ON c.{child_id_field} = ci.{child_id_field}' + join_clause
             params.append(child_ids)
-
-        query = f"""SELECT {fields}
+        
+        params.append(entity_id)
+        query = f"""{cte_clause}SELECT {fields}
         FROM {child_data_table} c
         {join_clause}
         WHERE {where_clause}
@@ -209,12 +233,16 @@ class BaseModels(ABC):
                 return valid_childs, {}
             valid_child_ids = list(valid_childs.keys())
             ext_relation = f'{relation_table}_ext'
-            query = f"""SELECT {relation_table_fields}
+            query = f"""
+            WITH child_ids AS (
+                SELECT DISTINCT unnest(%s::{id_type}[]) AS {child_id_field}
+            )
+            SELECT {relation_table_fields}
             FROM {ext_relation} r
+            INNER JOIN child_ids ci ON r.{child_id_field} = ci.{child_id_field}
             WHERE r.{id_field} = %s
-            AND r.{child_id_field} IN ({','.join(['%s'] * len(valid_child_ids))})
             """
-            childs_data = self.db.execute_query(query, (entity_id, *valid_child_ids), return_format=ReturnFormat.DICT_DICTS)
+            childs_data = self.db.execute_query(query, (valid_child_ids, entity_id), return_format=ReturnFormat.DICT_DICTS)
             return valid_childs, childs_data
 
         return valid_childs
@@ -254,6 +282,7 @@ class BaseModels(ABC):
 
         for parent in parents:
             id_field = self.db.get_id_field(parent)
+            id_type = self.db.STRUCTURE()[child].get('id_type', 'UUID')
             relation, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
             ctx_relation = f'{relation}_ctx' if not bypass_ctx else relation
             
@@ -261,13 +290,17 @@ class BaseModels(ABC):
                 fields = f'r.{id_field}, r.{child_id_field}'
             else:
                 fields = f'DISTINCT r.{id_field}'
+            
             query = f"""
+                WITH entity_ids AS (
+                    SELECT DISTINCT unnest(%s::{id_type}[]) AS {child_id_field}
+                )
                 SELECT {fields}
                 FROM {ctx_relation} r
-                WHERE r.{child_id_field} IN ({','.join(['%s'] * len(params))})
-                AND r.{id_field} IS NOT NULL
+                INNER JOIN entity_ids ei ON r.{child_id_field} = ei.{child_id_field}
+                WHERE r.{id_field} IS NOT NULL
             """
-            parent_ids = self.db.execute_query(query, params, return_format=return_format)
+            parent_ids = self.db.execute_query(query, (params,), return_format=return_format)
             if return_format == ReturnFormat.LIST_TUPLES:
                 parent_dict = {}
                 for parent_id, child_id in parent_ids:

@@ -471,12 +471,16 @@ class Event():
                     logger.verbose(f"Updating existing group: group_id={largest_group_id}, adding {len(add_faces)} faces")
                 
                 # Update faces directly in upload pipeline
-                face_placeholders = ','.join(['%s'] * len(add_faces))
                 query = f"""
-                    UPDATE faces SET group_id = %s
-                    WHERE face_id IN ({face_placeholders})
+                    WITH face_ids AS (
+                        SELECT DISTINCT unnest(%s::uuid[]) AS face_id
+                    )
+                    UPDATE faces AS f
+                    SET group_id = %s
+                    FROM face_ids fi
+                    WHERE f.face_id = fi.face_id
                 """
-                self.models.db.execute_query(query, [largest_group_id] + add_faces)
+                self.models.db.execute_query(query, (add_faces, largest_group_id))
                 groups_related += 1
 
         logger.info(f"Face clustering completed: groups_created={groups_created}")
