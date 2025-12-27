@@ -203,6 +203,18 @@ class FileHelper:
         """
         return self.storage.list_files(prefix, suffix)
     
+    def list_event_files(self, event_id: str) -> list[str]:
+        """
+        List all files in an event (all subdirectories).
+        
+        Args:
+            event_id: Event ID
+            
+        Returns:
+            List of file paths (relative to storage root) for all files in the event
+        """
+        return self.storage.list_event_files(event_id)
+    
     def save_image(
         self,
         image,

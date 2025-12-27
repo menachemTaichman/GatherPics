@@ -255,6 +255,13 @@ export default function EditEventModal({
       return;
     }
     if (baseEvent) {
+      // Don't show/edit events that are being deleted
+      if (baseEvent.status === 'DELETING') {
+        setEventDraft(null);
+        setEventError(t('editEventModal.eventIsBeingDeleted'));
+        emitToast(t('editEventModal.eventIsBeingDeleted'), 'error');
+        return;
+      }
       setEventError('');
       setEventDraft(buildEventDraft(baseEvent));
       setNameConflict(false);
@@ -266,7 +273,7 @@ export default function EditEventModal({
       setCheckingName(false);
       setCheckingUrl(false);
     }
-  }, [isCreateMode, baseEvent, buildEventDraft]);
+  }, [isCreateMode, baseEvent, buildEventDraft, emitToast, t]);
 
   useEffect(() => {
     return () => {

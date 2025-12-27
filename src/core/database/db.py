@@ -133,6 +133,7 @@ class DB:
                     'moments_count',
                     'total_size',
                     'created_at',
+                    'status',
                 ],
                 'details_fields': [
                     'archive_album_id',

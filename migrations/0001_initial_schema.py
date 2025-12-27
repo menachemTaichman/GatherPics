@@ -57,7 +57,8 @@ steps = [
             unassociated_group_id UUID,
             representative_image UUID,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_by UUID
+            created_by UUID,
+            status TEXT NOT NULL DEFAULT 'READY'
         );
         
         -- profiles
@@ -712,8 +713,14 @@ step(
             'FAILED',
             'DELETING'
         ));
+        
+        -- Add status constraint to events table
+        ALTER TABLE events
+        ADD CONSTRAINT events_status_check
+        CHECK (status IN ('READY', 'DELETING'));
         """,
         """
+        ALTER TABLE events DROP CONSTRAINT IF EXISTS events_status_check;
         ALTER TABLE images DROP CONSTRAINT IF EXISTS images_status_check;
         ALTER TABLE uploads DROP CONSTRAINT IF EXISTS uploads_status_check;
         """

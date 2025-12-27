@@ -176,11 +176,11 @@ class TestDBPerformance(unittest.TestCase):
                     cursor.execute("DELETE FROM events WHERE event_id = %s", (cls.EVENT_ID,))
                     db.conn.commit()
                 
-                # Also call Event.delete_event to clean up files and rekognition collection
-                try:
-                    Event.delete_event(cls.EVENT_ID)
-                except Exception as e:
-                    print(f"  Warning: Could not clean up event files: {e}")
+                # # Also call Event.delete_event to clean up files and rekognition collection
+                # try:
+                #     Event.delete_event(cls.EVENT_ID)
+                # except Exception as e:
+                #     print(f"  Warning: Could not clean up event files: {e}")
                         
                 print(f"Deleted existing event: {cls.EVENT_ID}")
         except Exception as e:

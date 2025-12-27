@@ -155,13 +155,15 @@ export default function EventsGalleryPage() {
   const hasEditableEvents = editableEventsCount > 0;
 
   const eventsArray = useMemo(() => {
-    return (eventsFromStore || []).map((evt) => {
-      const eventId = evt?.event_id || evt?.id || evt?.eventId;
-      return {
-        ...evt,
-        event_id: eventId,
-      };
-    });
+    return (eventsFromStore || [])
+      .filter((evt) => evt?.status !== 'DELETING')
+      .map((evt) => {
+        const eventId = evt?.event_id || evt?.id || evt?.eventId;
+        return {
+          ...evt,
+          event_id: eventId,
+        };
+      });
   }, [eventsFromStore]);
 
   // Use events from store or placeholders when not authenticated

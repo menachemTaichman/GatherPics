@@ -355,18 +355,28 @@ class GeneralModels(BaseModels):
 
         return event_id
     
-    def delete_event(self, event_id: str):
-        """Delete an event and its associated data."""
+    def delete_event(self, event_id: str) -> list[str]:
+        """
+        Delete an event and its associated data.
+        Returns:
+            list of deleted profile ids
+        """
         current_profile = self.get_current_profile()['events'].get(event_id)
         if not current_profile.get('can_delete_event'):
             raise Forbidden('Profile does not have permission to delete this event')
 
         # Get event info for audit log
-        event = self.get_entities('events', event_id, include_details=True)
-        if not event:
-            raise Forbidden('Event not found')
-        event_name = event.get('name', 'Unknown')
+        event_data = self.get_entities('events', event_id, include_details=True)
+        # Set event status to DELETING
+        query = """
+            UPDATE events
+            SET status = %s
+            WHERE event_id = %s
+        """
+        self.db.execute_query(query, ('DELETING', event_id))
         
+        # Trigger background task to delete event files and database record
+        actor_profile_id = self.db.profile_context.get('profile_id')
         # Get profiles that will be deleted (restricted to this event)
         query = 'SELECT profile_id, label FROM profiles WHERE restricted_to_event = %s'
         restricted_profiles = self.db.execute_query(
@@ -374,49 +384,11 @@ class GeneralModels(BaseModels):
             (event_id,), 
             return_format=ReturnFormat.LIST_DICTS
         )
-        
-        # Delete the event (this will cascade delete restricted profiles)
-        Event.delete_event(event_id)
-        # Set transaction context and delete event in the same transaction
-        # This is required because triggers check cur_transaction('temp_event_in_deletion')
-        query = """
-            SELECT set_transaction_context('temp_event_in_deletion', %s);
-            DELETE FROM events_ctx WHERE event_id = %s
-            RETURNING event_id;
-            SELECT set_transaction_context('temp_event_in_deletion', 'null');
-        """
-        self.db.execute_query(query, (event_id, event_id), return_format=ReturnFormat.LIST_VALUES)
-        self.db.execute_query('ANALYZE;')
-        
-        # Log audit events - event deletion first
-        actor_profile_id = self.db.profile_context.get('profile_id')
-        log_audit(
-            action=AuditAction.EVENT_DELETED,
-            actor_profile_id=actor_profile_id,
-            details={
-                'event_id': event_id,
-                'event_name': event_name,
-                'images_count': event.get('images_count', 0) if event else 0,
-                'total_size': event.get('total_size', 0) if event else 0,
-                'rekognition_calls_used': event.get('rekognition_calls_used', 0) if event else 0,
-                'restricted_profiles_deleted': len(restricted_profiles)
-            }
-        )
-        
-        # Log each restricted profile deletion
-        for profile in restricted_profiles:
-            log_audit(
-                action=AuditAction.PROFILE_DELETED,
-                actor_profile_id=actor_profile_id,
-                details={
-                    'profile_id': profile['profile_id'],
-                    'profile_label': profile.get('label', 'Unknown'),
-                    'deleted_as_cascade': True,
-                    'cascade_from_event_id': event_id,
-                    'cascade_from_event_name': event_name
-                }
-            )
-    
+        from src.backend.tasks import delete_events_task
+        delete_events_task.delay(event_id, actor_profile_id, event_data, restricted_profiles)
+
+        return [profile['profile_id'] for profile in restricted_profiles]
+
     def get_event_by_url(self, url: str) -> Dict[str, Any] | None:
         """Get an event by its URL."""
         fields = self.db.get_view_fields('events')

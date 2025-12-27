@@ -389,3 +389,83 @@ def delete_aws_rekognition_faces_task(event_id: str, profile_id: str, face_ids: 
     except Exception as e:
         error_msg = f"Error deleting faces for event {event_id}: {str(e)}"
         log_error(error_msg, "FaceDeletionError", traceback.format_exc())
+
+@celery.task(name='delete_events_task')
+def delete_events_task(event_id: str, profile_id: str, event_data: dict, restricted_profiles: list[dict]):
+    """
+    Delete event files from storage and database.
+    
+    Args:
+        event_id: Event ID to delete
+        profile_id: Profile ID (for context)
+        event_data: Event data
+        restricted_profiles: List of restricted profiles
+    """
+    try:
+        # Create Event instance to access file_helper
+        event = Event(event_id, profile_id=profile_id)
+        
+        # List all files in the event
+        paths = event.file_helper.list_event_files(event_id)
+        
+        # Delete all files from storage
+        if paths:
+            result = event.file_helper.delete_many(paths)
+            if result:
+                for failure in result:
+                    if failure.get('code') == '404':
+                        continue
+                    else:
+                        error_msg = f"Error deleting file {failure.get('path', 'unknown')}: {failure.get('message', 'unknown error')}"
+                        log_error(error_msg, "EventFileDeletionError", traceback.format_exc())
+        
+        # Delete Rekognition collection
+        try:
+            event.face_utils.rek_helper.delete_collection()
+        except Exception as e:
+            error_msg = f"Error deleting Rekognition collection for event {event_id}: {str(e)}"
+            log_error(error_msg, "RekognitionCollectionDeletionError", traceback.format_exc())
+        
+        # Delete event from database
+        # Set transaction context and delete event in the same transaction
+        # This is required because triggers check cur_transaction('temp_event_in_deletion')
+        db = DB(profile_id=profile_id)
+        query = """
+            SELECT set_transaction_context('temp_event_in_deletion', %s);
+            DELETE FROM events WHERE event_id = %s
+            RETURNING event_id;
+            SELECT set_transaction_context('temp_event_in_deletion', 'null');
+        """
+        db.execute_query(query, (event_id, event_id), return_format=ReturnFormat.LIST_VALUES)
+        db.execute_query('ANALYZE;')
+        
+        log_audit(
+            action=AuditAction.EVENT_DELETED,
+            actor_profile_id=profile_id,
+            details={
+                'event_id': event_id,
+                'event_name': event_data.get('name', 'Unknown'),
+                'images_count': event_data.get('images_count', 0) if event_data else 0,
+                'total_size': event_data.get('total_size', 0) if event_data else 0,
+                'rekognition_calls_used': event_data.get('rekognition_calls_used', 0) if event_data else 0,
+                'restricted_profiles_deleted': len(restricted_profiles)
+            }
+        )
+        
+        # Log each restricted profile deletion
+        for profile in restricted_profiles:
+            log_audit(
+                action=AuditAction.PROFILE_DELETED,
+                actor_profile_id=profile_id,
+                details={
+                    'profile_id': profile['profile_id'],
+                    'profile_label': profile.get('label', 'Unknown'),
+                    'deleted_as_cascade': True,
+                    'cascade_from_event_id': event_id,
+                    'cascade_from_event_name': event_data.get('name', 'Unknown')
+                }
+            )
+
+    except Exception as e:
+        error_msg = f"Error deleting event {event_id}: {str(e)}"
+        log_error(error_msg, "EventDeletionError", traceback.format_exc())

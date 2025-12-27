@@ -73,19 +73,35 @@ def delete_event(event_id):
     """Delete an event."""
     event_id = validate_path_param('event_id', event_id)
     gm = get_general_models()
-    gm.delete_event(event_id)
-    changes = [{
-        'type': 'REMOVE',
-        'entity': 'event',
-        'ids': [event_id],
-        'event_id': 'general'
-    },{
+    deleted_ids = gm.delete_event(event_id)
+    changes = []
+
+    event_data = gm.get_entities('events', [event_id], include_details=True)
+    if event_data:
+        changes.append({
+            'type': 'UPDATE',
+            'entity': 'event',
+            'items': event_data,
+            'event_id': 'general'
+        })
+
+    changes.extend([{
         'type': 'UPSERT',
         'entity': 'localStorage',
         'items': {
             'currentProfile': gm.get_current_profile()
         }
-    }]
+    },{
+        'type': 'REMOVE',
+        'entity': 'profile',
+        'ids': deleted_ids,
+        'event_id': 'general'
+    },{
+        'type': 'REMOVE',
+        'entity': 'event_profile',
+        'ids': deleted_ids,
+        'event_id': event_id
+    }])
     return jsonify({'success': True, 'deleted_ids': [event_id], 'changes': changes})
 
 @event_bp.route('/events', methods=['POST'])

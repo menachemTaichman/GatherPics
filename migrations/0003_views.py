@@ -436,8 +436,12 @@ steps = [
             e.event_id = ep.event_id
             AND ep.profile_id = cur_profile_uuid('profile_id')
         WHERE
-            e.is_public
-            OR ep.profile_id IS NOT NULL;
+            (e.is_public OR ep.profile_id IS NOT NULL)
+            AND (
+                e.status != 'DELETING'
+                OR ep.can_manage_event = TRUE
+                OR ep.can_delete_event = TRUE
+            );
 
         -- context views by current profile and event
 

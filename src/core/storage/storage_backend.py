@@ -102,6 +102,18 @@ class StorageBackend(ABC):
             List of file paths (relative to storage root)
         """
         pass
+    
+    @abstractmethod
+    def list_event_files(self, event_id: str) -> list[str]:
+        """List all files in an event (all subdirectories).
+        
+        Args:
+            event_id: Event ID
+            
+        Returns:
+            List of file paths (relative to storage root) for all files in the event
+        """
+        pass
 
 
 class LocalStorageBackend(StorageBackend):
@@ -250,6 +262,22 @@ class LocalStorageBackend(StorageBackend):
                     # Return relative path from storage root
                     relative_path = str(item.relative_to(self.base_path))
                     files.append(relative_path)
+        
+        return files
+    
+    def list_event_files(self, event_id: str) -> list[str]:
+        """List all files in an event (all subdirectories)."""
+        event_path = self._get_full_path(event_id)
+        if not event_path.exists() or not event_path.is_dir():
+            return []
+        
+        files = []
+        # Recursively walk through all subdirectories
+        for item in event_path.rglob('*'):
+            if item.is_file():
+                # Return relative path from storage root
+                relative_path = str(item.relative_to(self.base_path))
+                files.append(relative_path)
         
         return files
 
@@ -506,6 +534,37 @@ class S3StorageBackend(StorageBackend):
                     # Filter by suffix if specified
                     if suffix is None or relative_key.endswith(suffix):
                         files.append(relative_key)
+        
+        return files
+    
+    def list_event_files(self, event_id: str) -> list[str]:
+        """List all files in an event (all subdirectories) in S3."""
+        key_prefix = self._get_key(event_id)
+        if not key_prefix.endswith('/'):
+            key_prefix += '/'
+        
+        files = []
+        paginator = self.s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=self.bucket_name, Prefix=key_prefix)
+        
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    key = obj['Key']
+                    # Skip directory markers (keys ending with '/')
+                    if key.endswith('/'):
+                        continue
+                    
+                    # Remove base_prefix if present to get relative path
+                    if self.base_prefix:
+                        if key.startswith(self.base_prefix + '/'):
+                            relative_key = key[len(self.base_prefix) + 1:]
+                        else:
+                            continue
+                    else:
+                        relative_key = key
+                    
+                    files.append(relative_key)
         
         return files
 

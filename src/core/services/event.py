@@ -39,23 +39,6 @@ class Event():
             os.makedirs(os.path.join(event_dir, 'high_quality'), exist_ok=True)
         # For S3, directories are virtual - no need to create
                 
-    @staticmethod
-    def delete_event(event_id: str):
-        file_helper = get_file_helper()
-        face_utils = FaceUtils(event_id, storage_backend=file_helper.storage)
-        face_utils.rek_helper.delete_collection()
-        
-        if file_helper.is_local:
-            # Local storage - delete directory
-            event_dir = os.path.join(DATA_ROOT, event_id)
-            if os.path.exists(event_dir):
-                shutil.rmtree(event_dir)
-        else:
-            # S3 storage - delete all files with event_id prefix
-            # Note: This is a simplified approach - in production you might want
-            # to list and delete all objects with the prefix
-            pass  # S3 cleanup can be handled by lifecycle policies or separate cleanup job
-   
     def __init__(self, event_id: str, profile_id: str | None = None, public_code: str | None = None):
         self.event_id = event_id
         self.file_helper = get_file_helper()
