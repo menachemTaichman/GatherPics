@@ -5,6 +5,8 @@ from datetime import timedelta
 import os
 import logging
 
+from src.core.database.db import DB
+
 # Load environment variables from .env file if it exists (development only)
 # In production (AWS), environment variables are already set
 if os.path.exists('.env'):
@@ -78,14 +80,7 @@ register_error_handlers(app)
 @app.teardown_appcontext
 def close_db(error):
     """Close all DB instances created during this request."""
-    from flask import g
-    db_instances = getattr(g, 'db_instances', [])
-    for db in db_instances:
-        try:
-            db.close()
-        except Exception:
-            # Ignore errors during cleanup
-            pass
+    DB.cleanup_db_connections()
 
 # Production build serving - only register if DIST_DIR exists and we're in production
 IS_PRODUCTION = os.getenv('ENVIRONMENT', 'DEVELOPMENT') == 'PRODUCTION'

@@ -5,8 +5,12 @@ import json
 import ast
 import os
 import socket
+import threading
 from enum import Enum
 from src.core.errors import Forbidden, DatabaseError, PolicyError
+
+# Thread-local storage for tracking DB instances (works in both Flask and Celery contexts)
+_thread_local = threading.local()
 
 # Load environment variables from .env file if it exists (development only)
 # In production (AWS), environment variables are already set
@@ -726,6 +730,23 @@ class DB:
             'all_groups': False,
             'all_albums': False,
         }
+    
+    @staticmethod
+    def cleanup_db_connections():
+        """
+        Close all DB instances tracked in thread-local storage.
+        This method should be called from Flask teardown handlers and Celery task cleanup.
+        Thread-local storage works in all contexts (Flask, Celery, scripts, tests).
+        """
+        if hasattr(_thread_local, 'db_instances'):
+            db_instances = list(_thread_local.db_instances)  # Copy to avoid modification during iteration
+            for db_instance in db_instances:
+                try:
+                    db_instance.close()
+                except Exception:
+                    # Ignore errors during cleanup
+                    pass
+            _thread_local.db_instances = []
 
     def __init__(self, *, event_id: str | None = None, profile_id: str | None = None, public_code: str | None = None):
         """Initialize database connection.
@@ -764,15 +785,10 @@ class DB:
         # Set context variables on this specific connection
         self._set_context_on_connection()
         
-        # Store DB instance in Flask g for teardown cleanup
-        try:
-            from flask import g
-            if not hasattr(g, 'db_instances'):
-                g.db_instances = []
-            g.db_instances.append(self)
-        except RuntimeError:
-            # Not in Flask request context (e.g., tests, scripts)
-            pass
+        # Track in thread-local storage (works in Flask, Celery, and other contexts)
+        if not hasattr(_thread_local, 'db_instances'):
+            _thread_local.db_instances = []
+        _thread_local.db_instances.append(self)
 
     @property
     def profile_id(self) -> str | None:
@@ -860,6 +876,13 @@ class DB:
 
                 self.connection_pool.putconn(self.conn)
                 self.conn = None
+        
+        # Remove from thread-local tracking
+        if hasattr(_thread_local, 'db_instances'):
+            try:
+                _thread_local.db_instances.remove(self)
+            except ValueError:
+                pass
     
     def __enter__(self):
         """Support for context manager protocol: with DB(...) as db:"""
@@ -898,6 +921,14 @@ class DB:
             self.conn.commit()
         
         except psycopg2_errors.Error as e:
+            # Rollback the transaction on any error to reset the transaction state
+            # This prevents "current transaction is aborted" errors on subsequent queries
+            try:
+                self.conn.rollback()
+            except Exception:
+                # If rollback fails, connection might be in a bad state, but we'll still raise the original error
+                pass
+            
             error_str = str(e)
             # Strip CONTEXT and SQL statement details from PostgreSQL errors
             # Format: "Error message\nCONTEXT: ..."

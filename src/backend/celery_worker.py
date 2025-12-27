@@ -5,8 +5,13 @@ Uses Redis as both broker and result backend.
 
 import os
 import logging
+import traceback
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import task_postrun
+
+from src.core.errors import log_error
+from src.core.database.db import DB
 
 # Load environment variables from .env file if it exists (development only)
 if os.path.exists('.env'):
@@ -95,6 +100,17 @@ celery.conf.update(
     },
 )
 
+# Database connection cleanup for Celery tasks
+@task_postrun.connect
+def close_db_connections(sender=None, headers=None, body=None, **kwargs):
+    """
+    This function runs automatically after every Celery task completes.
+    Its purpose is to clean up DB connections that were opened during the task.
+    """
+    try:
+        DB.cleanup_db_connections()
+    except Exception as e:
+        log_error(f"Error cleaning up DB connections in Celery task: {e}", "CeleryError", traceback.format_exc())
+
 if __name__ == '__main__':
     celery.start()
-
