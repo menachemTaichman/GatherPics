@@ -481,6 +481,7 @@ class Event():
                     WHERE f.face_id = fi.face_id
                 """
                 self.models.db.execute_query(query, (add_faces, largest_group_id))
+                self.models.ensure_representative('groups', largest_group_id)
                 groups_related += 1
 
         logger.info(f"Face clustering completed: groups_created={groups_created}")
