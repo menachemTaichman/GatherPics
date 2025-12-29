@@ -409,8 +409,34 @@ const isProfileEditable = useMemo(() => {
       }
     }
     
-    // Allow all normal input behavior for input, textarea, and select elements
+    // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
     const targetTagName = e.target.tagName?.toLowerCase();
+    if (targetTagName === 'button') {
+      // Check if this is the save button using data attribute
+      const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+      
+      // Allow save button to work normally
+      if (isSaveButton && e.key === 'Enter') {
+        return false; // Let the button's onClick handle it
+      }
+      
+      // For other buttons (like toggles), prevent Enter from triggering them
+      // Instead, trigger save if conditions are met
+      if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && hasChanges) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSave();
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // For other keys on buttons, allow default behavior
+      return true;
+    }
+    
+    // Allow all normal input behavior for input, textarea, and select elements
     if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
       // For Enter key, save the profile (only if there are changes)
       if (e.key === 'Enter' && !loading && !nameConflict && editingProfile?.label.trim() && hasChanges) {
@@ -2680,6 +2706,8 @@ const isProfileEditable = useMemo(() => {
               {t('editProfile.cancel')}
             </button>
             <button
+              type="button"
+              data-is-save-button="true"
               onClick={handleSave}
               disabled={
                 loading || 

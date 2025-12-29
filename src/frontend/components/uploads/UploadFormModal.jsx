@@ -79,23 +79,61 @@ export default function UploadFormModal({
 
   // Custom keyboard handler for Enter and Esc keys
   const handleUploadFormKeys = (e) => {
-    if (e.key === 'Enter' && !uploading && selectedFiles.length > 0) {
-      e.preventDefault();
-      handleStartUpload();
-      return true; // Mark as handled
-    }
-    // Prevent ESC during file upload, allow after files are uploaded (during processing)
-    if (e.key === 'Escape') {
-      if (uploading && !allImagesUploaded) {
-        e.preventDefault();
-        return true; // Prevent closing during upload
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
+    if (targetTagName === 'button') {
+      // Check if this is the save button using data attribute
+      const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+      
+      // Allow save button to work normally
+      if (isSaveButton && e.key === 'Enter') {
+        return false; // Let the button's onClick handle it
       }
-      // Allow ESC after files are uploaded (processing continues in background)
-      e.preventDefault();
-      onClose();
-      return true; // Mark as handled
+      // For other buttons (like toggles), prevent Enter from triggering them
+      // Instead, trigger upload if conditions are met
+      if (e.key === 'Enter' && !uploading && selectedFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleStartUpload();
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        // Prevent ESC during file upload, allow after files are uploaded (during processing)
+        if (uploading && !allImagesUploaded) {
+          e.preventDefault();
+          return true; // Prevent closing during upload
+        }
+        return false; // Let useModalFocus handle closing
+      }
+      // For other keys on buttons, allow default behavior
+      return true;
     }
-    return false; // Not handled
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      // For Enter key, trigger upload if conditions are met
+      if (e.key === 'Enter' && !uploading && selectedFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleStartUpload();
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        // Prevent ESC during file upload, allow after files are uploaded (during processing)
+        if (uploading && !allImagesUploaded) {
+          e.preventDefault();
+          return true; // Prevent closing during upload
+        }
+        return false; // Let useModalFocus handle closing
+      }
+      // Return true to signal that we're handling this, preventing useModalFocus from stopping it
+      return true;
+    }
+    
+    return false; // Let default modal behavior handle it (ESC to close)
   };
 
   // Register modal when opened
@@ -945,6 +983,7 @@ export default function UploadFormModal({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   if (!uploading || allImagesUploaded) {
                     onClose();
@@ -1123,6 +1162,7 @@ export default function UploadFormModal({
                         className="hidden"
                       />
                       <button
+                        type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
@@ -1195,6 +1235,7 @@ export default function UploadFormModal({
                     )}
                     {isViewingExistingUpload && existingUploadStatus === 'COMPLETED' && failedImagesCount > 0 && (
                       <button
+                        type="button"
                         onClick={handleDeleteUnreadyImagesClick}
                         disabled={deletingUnreadyImages}
                         className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
@@ -1216,6 +1257,7 @@ export default function UploadFormModal({
                     )}
                     {!isViewingExistingUpload && !uploading && selectedFiles.length > 0 && (
                       <button
+                        type="button"
                         onClick={() => setSelectedFiles([])}
                         className="text-xs text-red-600 hover:text-red-700 font-medium"
                         title={t('upload.clearAll')}
@@ -1336,6 +1378,7 @@ export default function UploadFormModal({
                               </div>
                               {!uploading && !isViewingExistingUpload && (
                                 <button
+                                  type="button"
                                   onClick={() => handleRemoveFile(fileItem.id)}
                                   className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
                                   title={t('upload.removeFile')}
@@ -1356,25 +1399,23 @@ export default function UploadFormModal({
 
               {/* Assign moments toggle - only show when not viewing existing upload */}
               {!isViewingExistingUpload && (
-                <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg mt-4">
+                <div className="flex items-center justify-between rounded-lg bg-white px-4 py-3 mt-4">
                   <div>
-                    <p className="font-medium text-gray-900 text-sm">{t('upload.autoAssignToMoments')}</p>
-                    <p className="text-xs text-gray-500">{t('upload.assignImagesToMomentsByCaptureTime')}</p>
+                    <p className="font-medium text-gray-900">{t('upload.autoAssignToMoments')}</p>
+                    <p className="text-sm text-gray-500">{t('upload.assignImagesToMomentsByCaptureTime')}</p>
                   </div>
-                  <label className="relative inline-flex items-center gap-3 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={assignMoments}
-                      onChange={(e) => setAssignMoments(e.target.checked)}
-                      disabled={uploading}
-                      className="sr-only peer"
-                    />
-                    <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:bg-primary-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${
-                      isRTL 
-                        ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
-                        : 'after:left-[2px] peer-checked:after:translate-x-5'
-                    } after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:border-white`}></div>
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (uploading) return;
+                      setAssignMoments(!assignMoments);
+                    }}
+                    disabled={uploading}
+                    className={`w-10 h-6 rounded-full relative transition-colors ${assignMoments ? 'bg-blue-600' : 'bg-gray-300'} ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                    aria-pressed={assignMoments}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${assignMoments ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                  </button>
                 </div>
               )}
             </div>
@@ -1382,6 +1423,7 @@ export default function UploadFormModal({
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3">
               <button
+                type="button"
                 onClick={() => {
                   if (!uploading || allImagesUploaded) {
                     onClose();
@@ -1412,6 +1454,8 @@ export default function UploadFormModal({
               </button>
               {!isViewingExistingUpload && (
                 <button
+                  type="button"
+                  data-is-save-button="true"
                   onClick={handleStartUpload}
                   disabled={uploading || selectedFiles.length === 0}
                   className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"

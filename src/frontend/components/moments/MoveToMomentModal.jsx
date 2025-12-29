@@ -72,11 +72,51 @@ export default function MoveToMomentModal({
 
   // Custom keyboard handler for MoveToMomentModal
   const handleMoveModalKeys = (e) => {
-    if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedMomentId || newMomentName.trim() || removeFromCurrent)) {
-      handleMove();
-      return true; // Mark as handled
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
+    if (targetTagName === 'button') {
+      // Check if this is the save button using data attribute
+      const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+      
+      // Allow save button to work normally
+      if (isSaveButton && e.key === 'Enter') {
+        return false; // Let the button's onClick handle it
+      }
+      // For other buttons (like toggles), prevent Enter from triggering them
+      // Instead, trigger move if conditions are met
+      if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedMomentId || newMomentName.trim() || removeFromCurrent)) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleMove();
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // For other keys on buttons, allow default behavior
+      return true;
     }
-    return false; // Not handled
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      // For Enter key, trigger move if conditions are met
+      if (e.key === 'Enter' && !isLoading && !nameConflict && (selectedMomentId || newMomentName.trim() || removeFromCurrent)) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleMove();
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // Return true to signal that we're handling this, preventing useModalFocus from stopping it
+      return true;
+    }
+    
+    return false; // Let default modal behavior handle it (ESC to close)
   };
   
   // Use modal focus hook
@@ -576,11 +616,14 @@ export default function MoveToMomentModal({
 
           {/* Remove from current moment option - show if any image has a moment */}
           {showRemoveOption && (
-            <div className="mb-6 flex items-center justify-between">
-              <div className="text-sm font-medium text-gray-900">
-                {t('moveToMoment.removeFromCurrent')} {hasMultipleMoments ? t('moveToMoment.moments') : t('moveToMoment.moment')}
+            <div className="mb-6 flex items-center justify-between rounded-lg bg-white px-4 py-3">
+              <div>
+                <p className="font-medium text-gray-900">
+                  {t('moveToMoment.removeFromCurrent')} {hasMultipleMoments ? t('moveToMoment.moments') : t('moveToMoment.moment')}
+                </p>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   const newValue = !removeFromCurrent;
                   setRemoveFromCurrent(newValue);
@@ -590,10 +633,10 @@ export default function MoveToMomentModal({
                     setNewMomentName('');
                   }
                 }}
-                className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${removeFromCurrent ? 'bg-blue-600' : 'bg-gray-300'}`}
+                className={`w-10 h-6 rounded-full relative transition-colors ${removeFromCurrent ? 'bg-blue-600' : 'bg-gray-300'} cursor-pointer`}
                 aria-pressed={removeFromCurrent}
               >
-                <span className={`absolute top-0.5 ${removeFromCurrent ? 'left-5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all`} />
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${removeFromCurrent ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
               </button>
             </div>
           )}
@@ -620,6 +663,8 @@ export default function MoveToMomentModal({
             {t('moveToMoment.cancel')}
           </button>
           <button
+            type="button"
+            data-is-save-button="true"
             onClick={handleMove}
             disabled={isLoading || (!selectedMomentId && !newMomentName.trim() && !removeFromCurrent) || nameConflict}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

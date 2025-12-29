@@ -277,26 +277,89 @@ export default function RequestFormModal({
 
   // Custom keyboard handler integrated with modal focus manager
   const handleRequestModalKeys = (e) => {
-    if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
-      if (currentStep === 1) {
-        if (canProceedToGroups()) {
-          handleNextStep();
+    const targetTagName = e.target.tagName?.toLowerCase();
+    
+    // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
+    if (targetTagName === 'button') {
+      // Check if this is the save button using data attribute
+      const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+      
+      // Allow save button to work normally
+      if (isSaveButton && e.key === 'Enter') {
+        return false; // Let form submission handle it
+      }
+      // For other buttons (like toggles), prevent Enter from triggering them
+      // Instead, trigger appropriate action based on step
+      if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
+        if (currentStep === 1) {
+          if (canProceedToGroups()) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleNextStep();
+          }
+          return true;
+        }
+        if (currentStep === 2) {
+          if (selectedGroups.size > 0 && !loading && !isClosed && !isPublicSubmissionView) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSubmit({ preventDefault: () => {} });
+          }
+          return true;
+        }
+        if (currentStep === 3) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleClose();
+          return true;
         }
         return true;
       }
-      if (currentStep === 2) {
-        if (selectedGroups.size > 0 && !loading && !isClosed && !isPublicSubmissionView) {
-          // Call submit logic directly
-          handleSubmit({ preventDefault: () => {} });
-        }
-        return true;
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
       }
-      if (currentStep === 3) {
-        handleClose();
-        return true;
-      }
+      // For other keys on buttons, allow default behavior
+      return true;
     }
-    return false;
+    
+    // Allow all normal input behavior for input, textarea, and select elements
+    if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
+      // For Enter key, trigger appropriate action based on step
+      if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
+        if (currentStep === 1) {
+          if (canProceedToGroups()) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleNextStep();
+          }
+          return true;
+        }
+        if (currentStep === 2) {
+          if (selectedGroups.size > 0 && !loading && !isClosed && !isPublicSubmissionView) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSubmit(e);
+          }
+          return true;
+        }
+        if (currentStep === 3) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleClose();
+          return true;
+        }
+        return true;
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // Return true to signal that we're handling this, preventing useModalFocus from stopping it
+      return true;
+    }
+    
+    return false; // Let default modal behavior handle it (ESC to close)
   };
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
@@ -1162,26 +1225,29 @@ export default function RequestFormModal({
                 
                 {/* Communication Consent - Show if new profile or current profile has email, but hide for public profiles */}
                 {(formData.requestType === 'new' || currentProfileHasEmail) && !currentProfileIsPublic && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <label className="flex items-start gap-2 cursor-pointer group">
-                      <div className="flex items-center h-5">
-                        <input
-                          type="checkbox"
-                          checked={formData.communication_consent}
-                          onChange={(e) => !(isClosed || isPublicSubmissionView) && handleInputChange('communication_consent', e.target.checked)}
-                          disabled={isClosed || isPublicSubmissionView}
-                          className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                      </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
+                        <span className="text-sm font-medium text-gray-900">
                           {t('requestForm.emailUpdatesConsent')}
                         </span>
                         <p className="text-xs text-gray-600 mt-0.5">
                           {t('requestForm.emailNotificationsDescription')}
                         </p>
                       </div>
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isClosed || isPublicSubmissionView) return;
+                          handleInputChange('communication_consent', !formData.communication_consent);
+                        }}
+                        disabled={isClosed || isPublicSubmissionView}
+                        className={`w-10 h-6 rounded-full relative transition-colors ${formData.communication_consent ? 'bg-blue-600' : 'bg-gray-300'} ${(isClosed || isPublicSubmissionView) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                        aria-pressed={formData.communication_consent}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${formData.communication_consent ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                      </button>
+                    </div>
                   </div>
                 )}
                 {Array.isArray(requestData?.closed_details) && requestData.closed_details.length > 0 && (
@@ -1280,6 +1346,7 @@ export default function RequestFormModal({
                 (currentStep === 2 && !isClosed && !isPublicSubmissionView) && (
                   <button
                     type="submit"
+                    data-is-save-button="true"
                     onClick={handleSubmit}
                     disabled={loading || (!isEditing && selectedGroups.size === 0) || (isEditing && !hasChanges)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"

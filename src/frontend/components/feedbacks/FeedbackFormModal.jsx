@@ -210,30 +210,51 @@ export default function FeedbackFormModal({
   const handleFormModalKeys = useCallback((e) => {
     const targetTagName = e.target.tagName?.toLowerCase();
     
-    // Ctrl+Enter or Cmd+Enter submits the form
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      if (!loading && !isViewOnly && isFormValid && !submitted) {
+    // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
+    if (targetTagName === 'button') {
+      // Check if this is the save button using data attribute
+      const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+      
+      // Allow save button to work normally
+      if (isSaveButton && e.key === 'Enter') {
+        return false; // Let the button's onClick handle it
+      }
+      // For other buttons (like toggles), prevent Enter from triggering them
+      // Instead, trigger submit if conditions are met
+      if (e.key === 'Enter' && !loading && !isViewOnly && isFormValid && !submitted) {
         e.preventDefault();
         e.stopPropagation();
         handleSubmit();
+        return true;
       }
-      return true; // Handled
-    }
-    
-    // ESC closes the modal
-    if (e.key === 'Escape') {
-      if (!loading) {
-        onClose();
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
       }
-      return true; // Handled
+      // For other keys on buttons, allow default behavior
+      return true;
     }
     
     // Allow all normal input behavior for input, textarea, and select elements
     if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
-      return true; // Signal that we're handling this, preventing useModalFocus from stopping it
+      // Ctrl+Enter or Cmd+Enter submits the form
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        if (!loading && !isViewOnly && isFormValid && !submitted) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleSubmit();
+        }
+        return true; // Handled
+      }
+      // For ESC key, return false to let useModalFocus handle closing the modal
+      if (e.key === 'Escape') {
+        return false;
+      }
+      // Return true to signal that we're handling this, preventing useModalFocus from stopping it
+      return true;
     }
     
-    return false; // Not handled
+    return false; // Let default modal behavior handle it (ESC to close)
   }, [loading, isViewOnly, isFormValid, submitted, handleSubmit, onClose]);
 
   const { modalRef } = useModalFocus(isOpen, onClose, {
@@ -371,19 +392,23 @@ export default function FeedbackFormModal({
                       {/* Communication Consent - shown when email is provided (not for public profiles) */}
                       {shouldShowCommunicationConsent && formData.sender_email.trim() && (
                         <div className="mt-2">
-                          <label className={`relative flex items-start gap-3 ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(formData.communication_consent)}
-                              onChange={(e) => handleChange('communication_consent', e.target.checked)}
-                              disabled={loading}
-                              className="sr-only peer"
-                            />
-                            <div className={`w-10 h-5 flex-shrink-0 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
+                          <div className="flex items-start gap-3">
                             <span className={`text-sm flex-1 ${loading ? 'text-gray-400' : 'text-gray-700'}`}>
                               {t('feedbackForm.iWouldLikeToReceiveEmailUpdates')}
                             </span>
-                          </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (loading) return;
+                                handleChange('communication_consent', !Boolean(formData.communication_consent));
+                              }}
+                              disabled={loading}
+                              className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(formData.communication_consent) ? 'bg-blue-600' : 'bg-gray-300'} ${loading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                              aria-pressed={Boolean(formData.communication_consent)}
+                            >
+                              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(formData.communication_consent) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -480,35 +505,29 @@ export default function FeedbackFormModal({
 
               {/* Communication Consent - for non-public profiles with email */}
               {shouldShowCommunicationConsent && !shouldShowEmailField && (
-                <div>
-                  <label className={`relative flex items-start gap-3 ${(loading || isViewOnly) ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(formData.communication_consent)}
-                      onChange={(e) => handleChange('communication_consent', e.target.checked)}
-                      disabled={loading || isViewOnly}
-                      className="sr-only peer"
-                    />
-                    <div className={`w-10 h-5 flex-shrink-0 ${(loading || isViewOnly) ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
-                    <span className={`text-sm font-medium flex-1 ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
-                      {t('feedbackForm.iWouldLikeToReceiveEmailUpdatesRegardingThisFeedback')}
-                    </span>
-                  </label>
+                <div className="flex items-center justify-between py-3 px-4 bg-white rounded-lg">
+                  <span className={`text-sm font-medium flex-1 ${(loading || isViewOnly) ? 'text-gray-400' : 'text-gray-700'}`}>
+                    {t('feedbackForm.iWouldLikeToReceiveEmailUpdatesRegardingThisFeedback')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loading || isViewOnly) return;
+                      handleChange('communication_consent', !Boolean(formData.communication_consent));
+                    }}
+                    disabled={loading || isViewOnly}
+                    className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(formData.communication_consent) ? 'bg-blue-600' : 'bg-gray-300'} ${(loading || isViewOnly) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                    aria-pressed={Boolean(formData.communication_consent)}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(formData.communication_consent) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                  </button>
                 </div>
               )}
 
               {/* Include Diagnostics */}
               {!isEditing && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <label className={`relative inline-flex items-start gap-3 ${loading ? 'cursor-not-allowed' : 'cursor-pointer'} select-none`}>
-                    <input
-                      type="checkbox"
-                      checked={formData.include_metadata}
-                      onChange={(e) => handleChange('include_metadata', e.target.checked)}
-                      disabled={loading}
-                      className="sr-only peer"
-                    />
-                    <div className={`w-10 h-5 flex-shrink-0 ${loading ? 'bg-gray-300' : 'bg-gray-200'} peer-focus:outline-none rounded-full peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-[2px] ${isRTL ? 'after:right-[2px] peer-checked:after:-translate-x-5' : 'after:left-[2px] peer-checked:after:translate-x-5'} after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all after:border-white`}></div>
+                  <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <span className={`text-sm font-medium ${loading ? 'text-gray-400' : 'text-gray-900'}`}>
                         {t('feedbackForm.includeDiagnosticInformation')}
@@ -517,7 +536,19 @@ export default function FeedbackFormModal({
                         {t('feedbackForm.helpUsDebugIssuesByIncludingBrowserInfo')}
                       </p>
                     </div>
-                  </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (loading) return;
+                        handleChange('include_metadata', !formData.include_metadata);
+                      }}
+                      disabled={loading}
+                      className={`w-10 h-6 rounded-full relative transition-colors ${formData.include_metadata ? 'bg-blue-600' : 'bg-gray-300'} ${loading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                      aria-pressed={formData.include_metadata}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${formData.include_metadata ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -536,6 +567,8 @@ export default function FeedbackFormModal({
             </button>
             {!isViewOnly && (
               <button
+                type="button"
+                data-is-save-button="true"
                 onClick={handleSubmit}
                 disabled={loading || !isFormValid}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

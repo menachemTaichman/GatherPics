@@ -53,7 +53,7 @@ function createEmptyEventDraft(uploadsLimits = null) {
     name: '',
     url: '',
     date: '',
-    is_public: Boolean(0), // Internal state uses 0/1, but will be converted to true/false when sending to backend
+    is_public: false,
     images_count_limit: uploadsLimits?.images_count_limit ?? 0,
     image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
     rekognition_calls_limit: uploadsLimits?.rekognition_calls_limit ?? 0,
@@ -718,8 +718,35 @@ export default function EditEventModal({
 
   const handleModalKeys = useCallback(
     (e) => {
-      // Allow all normal input behavior for input, textarea, and select elements
       const targetTagName = e.target.tagName?.toLowerCase();
+      
+      // Handle button elements - prevent Enter from triggering toggle buttons, route to save instead
+      if (targetTagName === 'button') {
+        // Check if this is the save button using data attribute
+        const isSaveButton = e.target.dataset?.isSaveButton === 'true';
+        
+        // Allow save button to work normally
+        if (isSaveButton && e.key === 'Enter') {
+          return false; // Let form submission handle it
+        }
+        // For other buttons (like toggles), prevent Enter from triggering them
+        // Instead, trigger save if conditions are met
+        if (e.key === 'Enter' && !eventSaving && !nameConflict && !urlConflict && canSaveEvent) {
+          e.preventDefault();
+          e.stopPropagation();
+          enterSubmitRef.current = true;
+          handleEventSave('enter-key');
+          return true;
+        }
+        // For ESC key, return false to let useModalFocus handle closing the modal
+        if (e.key === 'Escape') {
+          return false;
+        }
+        // For other keys on buttons, allow default behavior
+        return true;
+      }
+      
+      // Allow all normal input behavior for input, textarea, and select elements
       if (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') {
         // For Enter key, save the event (only if there are changes and no conflicts)
         if (e.key === 'Enter' && !eventSaving && !nameConflict && !urlConflict && canSaveEvent) {
@@ -920,20 +947,18 @@ export default function EditEventModal({
                                 {t('editEventModal.showInPublicList')}
                               </p>
                             </div>
-                            <label className={`relative inline-flex items-center ${isDeleting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(eventDraft.is_public)}
-                                onChange={(e) => handleEventToggle('is_public', e.target.checked)}
-                                disabled={isDeleting}
-                                className="peer sr-only"
-                              />
-                              <div className={`after:absolute after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer h-6 w-11 rounded-full bg-gray-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:border-white ${
-                                isRTL 
-                                  ? 'after:right-[2px] peer-checked:after:-translate-x-5' 
-                                  : 'after:left-[2px] peer-checked:after:translate-x-5'
-                              }`} />
-                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isDeleting) return;
+                                handleEventToggle('is_public', !Boolean(eventDraft.is_public));
+                              }}
+                              disabled={isDeleting}
+                              className={`w-10 h-6 rounded-full relative transition-colors ${Boolean(eventDraft.is_public) ? 'bg-blue-600' : 'bg-gray-300'} ${isDeleting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                              aria-pressed={Boolean(eventDraft.is_public)}
+                            >
+                              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${Boolean(eventDraft.is_public) ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
+                            </button>
                           </div>
                           {!isCreateMode && (
                             <div className="mt-4 rounded-lg bg-white px-4 py-3">
@@ -1257,6 +1282,7 @@ export default function EditEventModal({
                 type="submit"
                 disabled={!canSaveEvent}
                 data-submit-source="primary-button"
+                data-is-save-button="true"
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {eventSaving ? (
