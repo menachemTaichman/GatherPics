@@ -662,6 +662,9 @@
     "albums": "אלבומים",
     "moments": "רגעים",
     "totalSize": "גודל כולל",
+    "totalOriginalSize": "גודל מקורי",
+    "totalHighQualitySize": "גודל איכות גבוהה",
+    "maxImageSize": "תמונה הגדולה ביותר",
     "actions": "פעולות",
     "untitledEvent": "אירוע ללא שם",
     "pleaseLogInToView": "אנא התחבר כדי לצפות באירועים",
@@ -675,7 +678,8 @@
     "deleteEventConfirmNoLabel": "האם אתה בטוח שברצונך למחוק את האירוע הזה?",
     "deleteEventCaption": "פעולה זו לא ניתנת לביטול. כל נתוני האירוע יימחקו לצמיתות.",
     "createNewEvent": "צור אירוע חדש",
-    "backToDashboard": "חזרה ללוח הבקרה"
+    "backToDashboard": "חזרה ללוח הבקרה",
+    "deleting": "נמחק"
   },
   "editEventModal": {
     "createEvent": "צור אירוע",
@@ -710,6 +714,7 @@
     "requiredEnterMaxPhotos": "נדרש. הכנס את המספר המקסימלי של תמונות מותר.",
     "maxUploadSize": "גודל העלאה מקסימלי (MB)",
     "maximumAllowedMB": "מקסימום מותר: {{max}} MB.",
+    "maximumAllowed": "מקסימום מותר:",
     "requiredEnterMaxSize": "נדרש. הכנס את גודל ההעלאה המקסימלי ב-MB.",
     "callsLimit": "הגבלת קריאות",
     "minimumCalls": "מינימום: {{count}} קריאות (נוכחי בשימוש).",
@@ -731,7 +736,8 @@
     "updateEventAction": "עדכן אירוע",
     "eventCoverRemoved": "תמונת הכריכה של האירוע הוסרה",
     "removeEventCover": "הסר תמונת כריכה של אירוע",
-    "loadEventDetails": "טען פרטי אירוע"
+    "loadEventDetails": "טען פרטי אירוע",
+    "eventIsBeingDeleted": "אירוע זה נמחק כעת ולא ניתן לערוך אותו."
   },
   "feedbacksGallery": {
     "feedbacks": "משובים",

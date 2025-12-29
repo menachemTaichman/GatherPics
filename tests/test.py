@@ -394,25 +394,33 @@ ids = {
 
 # test_timeit()
 
-event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
-event = Event(event_id, profile_id=dev_profile_id)
-
-result1 = event.models.get_entities('images')
-print(result1)
+events = event.models.get_entities('events')
+print(events)
+print('--------------------------------')
+events2 = general_models.get_entities('events')
+print(events2)
 print('--------------------------------')
 
-public_profile_id = '0b54fd8b-722e-4449-996d-2044553616ac'
-public_event = Event(event_id, profile_id=public_profile_id)
-result2 = public_event.models.get_entities('images')
-print(result2)
-print('--------------------------------')
+# # prod
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
-# image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
-# result = find_incomplete_images(event_id, test_prod=True)
-# print(result)
-# print('--------------------------------')
-# general_models.process_new_images(event_id=event_id)
+# event = Event(event_id, profile_id=dev_profile_id)
 
-# result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)
-# print(result)
+# result1 = event.models.get_entities('images')
+# print(result1)
 # print('--------------------------------')
+
+# public_profile_id = '0b54fd8b-722e-4449-996d-2044553616ac'
+# public_event = Event(event_id, profile_id=public_profile_id)
+# result2 = public_event.models.get_entities('images')
+# print(result2)
+# print('--------------------------------')
+# # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+# # image_id = 'e50d347e-154f-4b22-a2f7-d8be6fdce28b'
+# # result = find_incomplete_images(event_id, test_prod=True)
+# # print(result)
+# # print('--------------------------------')
+# # general_models.process_new_images(event_id=event_id)
+
+# # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)
+# # print(result)
+# # print('--------------------------------')

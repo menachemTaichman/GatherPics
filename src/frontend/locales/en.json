@@ -661,6 +661,9 @@
     "albums": "Albums",
     "moments": "Moments",
     "totalSize": "Total Size",
+    "totalOriginalSize": "Original Size",
+    "totalHighQualitySize": "High Quality Size",
+    "maxImageSize": "Largest Image",
     "actions": "Actions",
     "untitledEvent": "Untitled Event",
     "pleaseLogInToView": "Please log in to view events",
@@ -674,7 +677,8 @@
     "deleteEventConfirmNoLabel": "Are you sure you want to delete this event?",
     "deleteEventCaption": "This action cannot be undone. All event data will be permanently removed.",
     "createNewEvent": "Create new event",
-    "backToDashboard": "Back to dashboard"
+    "backToDashboard": "Back to dashboard",
+    "deleting": "Deleting"
   },
   "editEventModal": {
     "createEvent": "Create Event",
@@ -709,6 +713,7 @@
     "requiredEnterMaxPhotos": "Required. Enter the maximum number of photos allowed.",
     "maxUploadSize": "Max Upload Size (MB)",
     "maximumAllowedMB": "Maximum allowed: {{max}} MB.",
+    "maximumAllowed": "Maximum allowed:",
     "requiredEnterMaxSize": "Required. Enter the maximum upload size in MB.",
     "callsLimit": "Calls Limit",
     "minimumCalls": "Minimum: {{count}} calls (current used).",
@@ -730,7 +735,8 @@
     "updateEventAction": "update event",
     "eventCoverRemoved": "Event cover removed",
     "removeEventCover": "remove event cover",
-    "loadEventDetails": "load event details"
+    "loadEventDetails": "load event details",
+    "eventIsBeingDeleted": "This event is currently being deleted and cannot be edited."
   },
   "feedbacksGallery": {
     "feedbacks": "Feedbacks",

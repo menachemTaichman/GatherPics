@@ -156,7 +156,6 @@ export default function EventsGalleryPage() {
 
   const eventsArray = useMemo(() => {
     return (eventsFromStore || [])
-      .filter((evt) => evt?.status !== 'DELETING')
       .map((evt) => {
         const eventId = evt?.event_id || evt?.id || evt?.eventId;
         return {
@@ -428,7 +427,16 @@ export default function EventsGalleryPage() {
                   sortable: true,
                   align: 'left',
                   cellClassName: 'text-gray-900 font-medium',
-                  renderCell: (event) => event.name || t('eventsGallery.untitledEvent'),
+                  renderCell: (event) => (
+                    <div className="flex items-center gap-2">
+                      <span>{event.name || t('eventsGallery.untitledEvent')}</span>
+                      {event.status === 'DELETING' && (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                          {t('eventsGallery.deleting')}
+                        </span>
+                      )}
+                    </div>
+                  ),
                 },
                 {
                   key: 'url',
@@ -546,7 +554,7 @@ export default function EventsGalleryPage() {
                               <Eye className="w-4 h-4" />
                             </span>
                           )}
-                          {deletableEventIds.has(String(event.event_id)) && (
+                          {deletableEventIds.has(String(event.event_id)) && event.status !== 'DELETING' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

@@ -17,6 +17,20 @@ import i18n from '../../i18n';
 
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
 
+function formatBytes(bytes) {
+  if (bytes == null || bytes === 0) return '0 B';
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(2)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 function normalizeDateForInput(value) {
   if (!value) return '';
   const isoMatch = String(value).match(ISO_DATE_REGEX);
@@ -255,11 +269,14 @@ export default function EditEventModal({
       return;
     }
     if (baseEvent) {
-      // Don't show/edit events that are being deleted
+      // Allow viewing but disable editing for events that are being deleted
       if (baseEvent.status === 'DELETING') {
-        setEventDraft(null);
+        setEventDraft(buildEventDraft(baseEvent));
         setEventError(t('editEventModal.eventIsBeingDeleted'));
-        emitToast(t('editEventModal.eventIsBeingDeleted'), 'error');
+        setNameConflict(false);
+        setUrlConflict(false);
+        setCheckingName(false);
+        setCheckingUrl(false);
         return;
       }
       setEventError('');
@@ -429,8 +446,7 @@ export default function EditEventModal({
         return { valid: false, error: t('editEventModal.maxUploadSizeRequired') };
       }
       if (maxLimitBytes != null && numValue > maxLimitBytes) {
-        const maxMb = Math.round(maxLimitBytes / (1024 * 1024));
-        return { valid: false, error: `${t('editEventModal.maximumAllowedMB', { max: maxMb })}` };
+        return { valid: false, error: `${t('editEventModal.maximumAllowed')} ${formatBytes(maxLimitBytes)}` };
       }
     } else if (field === 'rekognition_calls_limit') {
       const minLimit = !isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0;
@@ -693,9 +709,11 @@ export default function EditEventModal({
            limitErrors.rekognition_calls_limit != null;
   }, [limitErrors]);
 
+  const isDeleting = useMemo(() => baseEvent?.status === 'DELETING', [baseEvent?.status]);
+
   const canSaveEvent = useMemo(
-    () => hasEventChanges && !nameConflict && !urlConflict && !eventSaving && !hasLimitErrors,
-    [hasEventChanges, nameConflict, urlConflict, eventSaving, hasLimitErrors]
+    () => !isDeleting && hasEventChanges && !nameConflict && !urlConflict && !eventSaving && !hasLimitErrors,
+    [isDeleting, hasEventChanges, nameConflict, urlConflict, eventSaving, hasLimitErrors]
   );
 
   const handleModalKeys = useCallback(
@@ -826,9 +844,12 @@ export default function EditEventModal({
                                 value={eventDraft.name}
                                 onChange={(e) => handleEventFieldChange('name', e.target.value)}
                                 required
+                                disabled={isDeleting}
                                 dir={isRTL ? 'rtl' : 'ltr'}
                                 className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:border-transparent ${
-                                  nameConflict
+                                  isDeleting
+                                    ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                                    : nameConflict
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
@@ -852,9 +873,12 @@ export default function EditEventModal({
                                 value={eventDraft.url}
                                 onChange={(e) => handleEventFieldChange('url', e.target.value)}
                                 required
+                                disabled={isDeleting}
                                 dir="ltr"
                                 className={`w-full rounded-lg px-3 py-2 text-sm focus:ring-2 focus:border-transparent ${
-                                  urlConflict
+                                  isDeleting
+                                    ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                                    : urlConflict
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
@@ -881,8 +905,11 @@ export default function EditEventModal({
                                 type="date"
                                 value={eventDraft.date || ''}
                                 onChange={(e) => handleEventFieldChange('date', e.target.value)}
+                                disabled={isDeleting}
                                 dir="ltr"
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 ${
+                                  isDeleting ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
+                                }`}
                               />
                             </div>
                           </div>
@@ -893,11 +920,12 @@ export default function EditEventModal({
                                 {t('editEventModal.showInPublicList')}
                               </p>
                             </div>
-                            <label className="relative inline-flex cursor-pointer items-center">
+                            <label className={`relative inline-flex items-center ${isDeleting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                               <input
                                 type="checkbox"
                                 checked={Boolean(eventDraft.is_public)}
                                 onChange={(e) => handleEventToggle('is_public', e.target.checked)}
+                                disabled={isDeleting}
                                 className="peer sr-only"
                               />
                               <div className={`after:absolute after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer h-6 w-11 rounded-full bg-gray-200 after:content-[''] peer-checked:bg-blue-600 peer-checked:after:border-white ${
@@ -929,7 +957,7 @@ export default function EditEventModal({
                                     <button
                                       type="button"
                                       onClick={handleRemoveRepresentative}
-                                      disabled={removingRepresentative}
+                                      disabled={removingRepresentative || isDeleting}
                                       className={`absolute -bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70 ${endClass('2')}`}
                                       title={t('editEventModal.removeCoverPhoto')}
                                       aria-label={t('editEventModal.removeCoverPhoto')}
@@ -972,6 +1000,7 @@ export default function EditEventModal({
                               <input
                                 type="number"
                                 required
+                                disabled={isDeleting}
                                 min={!isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0}
                                 max={uploadsLimits?.images_count_limit ?? undefined}
                                 value={eventDraft.images_count_limit ?? ''}
@@ -984,7 +1013,9 @@ export default function EditEventModal({
                                 }}
                                 dir={isRTL ? 'rtl' : 'ltr'}
                                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-transparent focus:ring-2 ${
-                                  limitErrors.images_count_limit
+                                  isDeleting
+                                    ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                                    : limitErrors.images_count_limit
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
@@ -1010,6 +1041,7 @@ export default function EditEventModal({
                               <input
                                 type="number"
                                 required
+                                disabled={isDeleting}
                                 min={0}
                                 max={
                                   uploadsLimits?.image_size_limit_bytes != null
@@ -1032,7 +1064,9 @@ export default function EditEventModal({
                                 }}
                                 dir={isRTL ? 'rtl' : 'ltr'}
                                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-transparent focus:ring-2 ${
-                                  limitErrors.image_size_limit_bytes
+                                  isDeleting
+                                    ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                                    : limitErrors.image_size_limit_bytes
                                     ? 'border-red-500 focus:ring-red-500'
                                     : 'border-gray-300 focus:ring-blue-500'
                                 }`}
@@ -1047,7 +1081,7 @@ export default function EditEventModal({
                               ) : (
                                 <p className="mt-1 text-xs text-gray-500">
                                   {uploadsLimits?.image_size_limit_bytes != null
-                                    ? t('editEventModal.maximumAllowedMB', { max: Math.round(uploadsLimits.image_size_limit_bytes / (1024 * 1024)) })
+                                    ? `${t('editEventModal.maximumAllowed')} ${formatBytes(uploadsLimits.image_size_limit_bytes)}`
                                     : t('editEventModal.requiredEnterMaxSize')}
                                 </p>
                               )}
@@ -1060,6 +1094,7 @@ export default function EditEventModal({
                                 </label>
                                 <input
                                   type="number"
+                                  disabled={isDeleting}
                                   min={!isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0}
                                   max={uploadsLimits?.rekognition_calls_limit ?? undefined}
                                   value={eventDraft.rekognition_calls_limit ?? ''}
@@ -1072,7 +1107,9 @@ export default function EditEventModal({
                                   }}
                                   dir={isRTL ? 'rtl' : 'ltr'}
                                   className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-transparent focus:ring-2 ${
-                                    limitErrors.rekognition_calls_limit
+                                    isDeleting
+                                      ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                                      : limitErrors.rekognition_calls_limit
                                       ? 'border-red-500 focus:ring-red-500'
                                       : 'border-gray-300 focus:ring-blue-500'
                                   }`}
@@ -1148,9 +1185,7 @@ export default function EditEventModal({
                                 <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent.total_size != null
-                                  ? `${(baseEvent.total_size / (1024 * 1024)).toFixed(2)} MB`
-                                  : '0 MB'}
+                                {formatBytes(baseEvent.total_size)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
@@ -1158,12 +1193,10 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalOriginalSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent.total_original_size != null
-                                  ? `${(baseEvent.total_original_size / (1024 * 1024)).toFixed(2)} MB`
-                                  : '0 MB'}
+                                {formatBytes(baseEvent.total_original_size)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
@@ -1171,12 +1204,10 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalHighQualitySize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent.total_high_quality_size != null
-                                  ? `${(baseEvent.total_high_quality_size / (1024 * 1024)).toFixed(2)} MB`
-                                  : '0 MB'}
+                                {formatBytes(baseEvent.total_high_quality_size)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
@@ -1184,12 +1215,10 @@ export default function EditEventModal({
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                                   <HardDrive className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.totalSize')}</p>
+                                <p className="text-sm font-medium text-gray-600">{t('eventsGallery.maxImageSize')}</p>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent.max_image_size != null
-                                  ? `${(baseEvent.max_image_size / (1024 * 1024)).toFixed(2)} MB`
-                                  : '0 MB'}
+                                {formatBytes(baseEvent.max_image_size)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">

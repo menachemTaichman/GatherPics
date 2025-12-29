@@ -426,9 +426,9 @@ LEFT JOIN events_profiles ep ON
 WHERE
     (e.is_public OR ep.profile_id IS NOT NULL)
     AND (
-        e.status != 'DELETING'
-        OR ep.can_manage_event = TRUE
-        OR ep.can_delete_event = TRUE
+        e.status = 'READY'
+        OR ep.can_manage_event
+        OR ep.can_delete_event
     );
 
 -- context views by current profile and event
