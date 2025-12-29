@@ -75,7 +75,7 @@ class BaseModels(ABC):
         id_field = self.db.get_id_field(table)
         if not isinstance(entity_ids, list):
             entity_ids = [entity_ids]
-        id_type = self.db.STRUCTURE()[table].get('id_type', 'UUID')
+        id_type = self.db.get_id_type(table)
         query = f"""
             SELECT set_transaction_context('include_pending_images', 'true');
             WITH entity_ids AS (
@@ -110,7 +110,7 @@ class BaseModels(ABC):
             entity_ids = [entity_ids]
             single_item = True
         
-        id_type = self.db.STRUCTURE()[table].get('id_type', 'UUID')
+        id_type = self.db.get_id_type(table)
         id_field_name = self.db.get_id_field(table)
         
         if entity_ids:
@@ -184,7 +184,7 @@ class BaseModels(ABC):
         exclusive = relation_table == child_table
         ctx_relation = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
-        id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
+        id_type = self.db.get_id_type(child_table)
 
         if return_ids:
             child_data_table = f'{child_table}_ctx'
@@ -282,7 +282,7 @@ class BaseModels(ABC):
 
         for parent in parents:
             id_field = self.db.get_id_field(parent)
-            id_type = self.db.STRUCTURE()[child].get('id_type', 'UUID')
+            id_type = self.db.get_id_type(child)
             relation, child_table, child_id_field, view_fields, relation_table_fields = self.db.get_relation(parent, child)
             ctx_relation = f'{relation}_ctx' if not bypass_ctx else relation
             
@@ -408,7 +408,7 @@ class BaseModels(ABC):
         exclusive = relation_table == child_table
         ctx_relation_table = f'{relation_table}_ctx'
         id_field = self.db.get_id_field(parent)
-        id_type = self.db.STRUCTURE()[child_table].get('id_type', 'UUID')
+        id_type = self.db.get_id_type(child_table)
 
         if not self.is_accessible(parent, entity_id):
             raise Forbidden(f"Permission denied: the parent is not accessible")

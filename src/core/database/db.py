@@ -650,6 +650,11 @@ class DB:
         return id_field
 
     @staticmethod
+    def get_id_type(table: str) -> str:
+        """Get the ID type for a table."""
+        return DB.STRUCTURE()[DB.get_original_table(table)].get('id_type', 'UUID')
+
+    @staticmethod
     def _get_fields(fields: list[str] | None, table: str | None = None) -> str:
         """Format fields for SQL query."""
         if table:
