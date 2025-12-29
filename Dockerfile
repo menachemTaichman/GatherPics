@@ -76,6 +76,7 @@ EXPOSE 5000
 # Copy migration script
 COPY migrate.sh ./migrate.sh
 RUN chmod +x ./migrate.sh
+COPY scripts ./scripts
 
 # Run the application
 # Increased timeout to handle long-running operations like image processing and ZIP downloads
