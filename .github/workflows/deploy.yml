@@ -87,6 +87,7 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
           script: |
+            set -e  # Exit on any error
             cd /home/ubuntu
             
             if [ "${{ needs.check-changes.outputs.needs-build }}" == "true" ]; then
@@ -101,25 +102,34 @@ jobs:
             
             # Step 1: Drop database logic layer (functions, views, triggers)
             echo "Step 1: Dropping database logic layer..."
-            docker compose exec -T web python scripts/recreate_db_logic.py --drop-only || echo "Drop logic layer failed"
+            if ! docker compose exec -T web python scripts/recreate_db_logic.py --drop-only; then
+              echo "ERROR: Failed to drop database logic layer"
+              exit 1
+            fi
             
             # Step 2: Apply schema migrations (tables, indexes, constraints)
             if [ "${{ needs.check-changes.outputs.needs-migration }}" == "true" ]; then
               echo "Waiting for container to be ready..."
               sleep 3
               echo "Step 2: Applying schema migrations..."
-              docker compose exec -T web ./migrate.sh apply || echo "Schema migration failed"
+              if ! docker compose exec -T web ./migrate.sh apply; then
+                echo "ERROR: Schema migration failed"
+                exit 1
+              fi
             else
               echo "Step 2: Skipping schema migrations (no migration files changed)"
             fi
             
             # Step 3: Recreate database logic layer (functions, views, triggers)
             echo "Step 3: Recreating database logic layer..."
-            docker compose exec -T web python scripts/recreate_db_logic.py || echo "Recreate logic layer failed"
+            if ! docker compose exec -T web python scripts/recreate_db_logic.py; then
+              echo "ERROR: Failed to recreate database logic layer"
+              exit 1
+            fi
             
-            # Only prune images if we pulled a new one
+            # Only prune images if we pulled a new one (non-critical cleanup step)
             if [ "${{ needs.check-changes.outputs.needs-build }}" == "true" ]; then
-              docker image prune -f
+              docker image prune -f || echo "Warning: Image prune failed (non-critical)"
             fi
             
             echo "Deployment successful!"
