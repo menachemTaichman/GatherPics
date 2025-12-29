@@ -30,13 +30,15 @@ jobs:
               - 'package-lock.json'
               - 'src/**'
               - 'migrations/**'
+              - 'scripts/**'
               - 'vite.config.js'
               - 'tailwind.config.js'
               - 'postcss.config.js'
               - 'public/**'
               - 'index.html'
             needs-migration:
-              - 'migrations/**'
+              - 'migrations/*.py'
+              - '!migrations/sql/**'
 
   deploy:
     runs-on: ubuntu-latest
@@ -97,14 +99,23 @@ jobs:
             echo "Updating containers..."
             docker compose up -d --remove-orphans
             
+            # Step 1: Drop database logic layer (functions, views, triggers)
+            echo "Step 1: Dropping database logic layer..."
+            docker compose exec -T web python scripts/recreate_db_logic.py --drop-only || echo "Drop logic layer failed"
+            
+            # Step 2: Apply schema migrations (tables, indexes, constraints)
             if [ "${{ needs.check-changes.outputs.needs-migration }}" == "true" ]; then
               echo "Waiting for container to be ready..."
               sleep 3
-              echo "Running migrations..."
-              docker compose exec -T web ./migrate.sh apply || echo "Migration failed or script not found"
+              echo "Step 2: Applying schema migrations..."
+              docker compose exec -T web ./migrate.sh apply || echo "Schema migration failed"
             else
-              echo "Skipping migrations (no migration files changed)"
+              echo "Step 2: Skipping schema migrations (no migration files changed)"
             fi
+            
+            # Step 3: Recreate database logic layer (functions, views, triggers)
+            echo "Step 3: Recreating database logic layer..."
+            docker compose exec -T web python scripts/recreate_db_logic.py || echo "Recreate logic layer failed"
             
             # Only prune images if we pulled a new one
             if [ "${{ needs.check-changes.outputs.needs-build }}" == "true" ]; then
