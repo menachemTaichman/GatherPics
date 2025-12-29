@@ -1,5 +1,5 @@
 from psycopg2 import errors as psycopg2_errors
-from psycopg2 import pool
+from psycopg2.pool import ThreadedConnectionPool
 from typing import Any
 import json
 import ast
@@ -44,12 +44,15 @@ class DB:
     
     @classmethod
     def _get_connection_pool(cls):
-        """Get or create the shared connection pool."""
+        """Get or create the shared connection pool.
+        """
         if cls._connection_pool is None:
+            maxconn = int(os.getenv('DB_POOL_MAX_CONN', '20'))
+            minconn = int(os.getenv('DB_POOL_MIN_CONN', '1'))
             
-            cls._connection_pool = pool.SimpleConnectionPool(
-                minconn=1,
-                maxconn=10,
+            cls._connection_pool = ThreadedConnectionPool(
+                minconn=minconn,
+                maxconn=maxconn,
                 host=os.getenv('DB_HOST', 'localhost'),
                 database=os.getenv('DB_NAME', 'photo_app_db'),
                 user=os.getenv('DB_USER', 'postgres'),

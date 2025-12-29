@@ -14,6 +14,19 @@ class GeneralModels(BaseModels):
     def __init__(self, profile_id: str | None = None):
         self.db = DB(profile_id=profile_id)
 
+    def close(self):
+        """Close the DB connection used by this GeneralModels instance."""
+        if self.db:
+            self.db.close()
+
+    def __enter__(self):
+        """Support for context manager protocol: with GeneralModels(...) as general_models:"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Support for context manager protocol: automatically close DB connection on exit"""
+        self.close()
+
     def get_current_profile(self, event_id: str | None = None) -> dict[str, Any]:
         """Get the current profile."""
         profile = self.get_entities('current_profile', self.db.profile_context['profile_id'])
@@ -23,9 +36,9 @@ class GeneralModels(BaseModels):
             if not profile['events'].get(event_id):
                 raise Forbidden('Event not found')
             
-            event = self.get_event(event_id)
-            profile_event = event.models.get_entities('current_event_profile', event_id)
-            profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
+            with self.get_event(event_id) as event:
+                profile_event = event.models.get_entities('current_event_profile', event_id)
+                profile['events'][event_id] = {**profile['events'][event_id], **profile_event}
 
         return profile
 
@@ -126,17 +139,18 @@ class GeneralModels(BaseModels):
         _, event_profiles = self.get_childs('profiles', profile_id, 'events')
         for event_id, event_relation in event_profiles.items():
             try:
-                event = self.get_event(event_id)
-                event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.ADD, data=event_relation)
-                childs = ['images', 'albums', 'groups']
-                for child in childs:
-                    child_ids = event.models.get_childs('events_profiles_ctx', profile_id, child, return_ids=True)
-                    event.models.edit_childs('events_profiles_ctx', new_profile_id, child, child_ids, operation=ChildOperation.ADD)
-            except Forbidden as e:
+                with self.get_event(event_id) as event:
+                    event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.ADD, data=event_relation)
+                    childs = ['images', 'albums', 'groups']
+                    for child in childs:
+                        child_ids = event.models.get_childs('events_profiles_ctx', profile_id, child, return_ids=True)
+                        event.models.edit_childs('events_profiles_ctx', new_profile_id, child, child_ids, operation=ChildOperation.ADD)
+            except Forbidden:
                 incomplete_events.append(event_id)
                 try:
-                    event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.REMOVE)
-                except Forbidden as e:
+                    with self.get_event(event_id) as event:
+                        event.models.edit_childs('events', event_id, 'profiles', [new_profile_id], operation=ChildOperation.REMOVE)
+                except Forbidden:
                     pass
 
         return new_profile_id, label, password, incomplete_events
@@ -158,8 +172,8 @@ class GeneralModels(BaseModels):
         is_public = profile.get('is_public', False)
         
         if event_id:
-            event = self.get_event(event_id)
-            event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
+            with self.get_event(event_id) as event:
+                event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.REMOVE)
 
         complete_delete = not only_remove_from_event_id or restricted_to_event_id is not None
         if complete_delete:
@@ -264,49 +278,49 @@ class GeneralModels(BaseModels):
             label: label of the new profile
             password: password of the new profile
         """
-        event = self.get_event(event_id)
-        if not approved_group_ids and not denied_group_ids:
-            raise PolicyError('At least one group must be approved or denied')
+        with self.get_event(event_id) as event:
+            if not approved_group_ids and not denied_group_ids:
+                raise PolicyError('At least one group must be approved or denied')
 
-        access_request = event.models.get_entities('access_requests', access_request_id)
-        if not access_request:
-            raise Forbidden('Access request not found')
-        
-        applicant_profile_id = None
-        label = None
-        password = None
-        if approved_group_ids and not access_request['applicant_profile_id']:
-            requester_profile_id = access_request['profile_id']
-            overrides = {
-                'label': profile_name or access_request['applicant_name'],
-                'email': access_request['applicant_email'],
-                'hierarchy_rank': 0,
-                'is_public': False,
-            }
-
-            applicant_profile_id, label, password, incomplete_events = self.duplicate_profile(requester_profile_id, overrides)
-            if event_id in incomplete_events:
-                raise DatabaseError('Failed to create new profile')
+            access_request = event.models.get_entities('access_requests', access_request_id)
+            if not access_request:
+                raise Forbidden('Access request not found')
             
-            event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
-            
-            actor_profile_id = self.db.profile_context.get('profile_id')
-            log_audit(
-                action=AuditAction.PROFILE_CREATED,
-                actor_profile_id=actor_profile_id,
-                details={
-                    'profile_id': applicant_profile_id,
-                    'profile_label': label,
-                    'created_from_access_request': True,
-                    'access_request_id': access_request_id,
-                    'event_id': event_id,
-                    'requester_profile_id': requester_profile_id
+            applicant_profile_id = None
+            label = None
+            password = None
+            if approved_group_ids and not access_request['applicant_profile_id']:
+                requester_profile_id = access_request['profile_id']
+                overrides = {
+                    'label': profile_name or access_request['applicant_name'],
+                    'email': access_request['applicant_email'],
+                    'hierarchy_rank': 0,
+                    'is_public': False,
                 }
-            )
-        
-        event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
 
-        return applicant_profile_id, label, password
+                applicant_profile_id, label, password, incomplete_events = self.duplicate_profile(requester_profile_id, overrides)
+                if event_id in incomplete_events:
+                    raise DatabaseError('Failed to create new profile')
+                
+                event.models.edit('access_requests', access_request_id, {'applicant_profile_id': applicant_profile_id})
+                
+                actor_profile_id = self.db.profile_context.get('profile_id')
+                log_audit(
+                    action=AuditAction.PROFILE_CREATED,
+                    actor_profile_id=actor_profile_id,
+                    details={
+                        'profile_id': applicant_profile_id,
+                        'profile_label': label,
+                        'created_from_access_request': True,
+                        'access_request_id': access_request_id,
+                        'event_id': event_id,
+                        'requester_profile_id': requester_profile_id
+                    }
+                )
+            
+            event.models.toggle_access_request(access_request_id, approved_group_ids, denied_group_ids, closed_details)
+
+            return applicant_profile_id, label, password
 
     # Event management
     def get_uploads_limits(self) -> dict:
@@ -402,19 +416,6 @@ class GeneralModels(BaseModels):
         """Get event URL by event ID."""
         query = 'SELECT url FROM events WHERE event_id = %s'
         return self.db.execute_query(query, (event_id,), return_format=ReturnFormat.VALUE)
-
-    # TODO: remove
-    def process_new_images(self, event_id: str, file_names: list[str] | None = None, assign_moments: bool = False, progress_callback=None) -> dict:
-        """Process images for an event."""
-        event = self.get_event(event_id)
-        if not self.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
-            raise Forbidden('Permission denied: cannot upload and delete images')
-        
-        return event.process_new_images(
-            file_names=file_names,
-            assign_moments=assign_moments,
-            progress_callback=progress_callback
-        )
 
     # Settings
     def get_settings(self) -> Dict[str, Any]:

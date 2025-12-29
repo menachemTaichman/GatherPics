@@ -8,8 +8,7 @@ import logging
 import traceback
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_postrun
-
+from celery.signals import task_postrun, task_failure
 from src.core.errors import log_error
 from src.core.database.db import DB
 
@@ -111,6 +110,17 @@ def close_db_connections(sender=None, headers=None, body=None, **kwargs):
         DB.cleanup_db_connections()
     except Exception as e:
         log_error(f"Error cleaning up DB connections in Celery task: {e}", "CeleryError", traceback.format_exc())
+
+@task_failure.connect
+def close_db_connections_on_failure(sender=None, task_id=None, exception=None, traceback=None, einfo=None, **kwargs):
+    """
+    This function runs automatically when a Celery task fails.
+    Ensures DB connections are cleaned up even when tasks fail.
+    """
+    try:
+        DB.cleanup_db_connections()
+    except Exception as e:
+        log_error(f"Error cleaning up DB connections after task failure: {e}", "CeleryError", traceback.format_exc())
 
 if __name__ == '__main__':
     celery.start()

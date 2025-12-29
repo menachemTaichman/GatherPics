@@ -45,9 +45,9 @@ def get_upload_urls(event_id):
     try:
         event_id = validate_path_param('event_id', event_id)
         event = get_event(event_id)
-        general_models = get_general_models()
         
-        if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+        event_profile = event.models.get_current_event_profile()
+        if not event_profile.get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
         files_data = get_input('files_data', required=True)
@@ -87,9 +87,9 @@ def direct_upload(event_id):
     """
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    general_models = get_general_models()
     
-    if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+    event_profile = event.models.get_current_event_profile()
+    if not event_profile.get('can_upload_and_delete_images', False):
         raise Forbidden("Permission denied: cannot upload and delete images")
     
     if 'file' not in request.files:
@@ -139,10 +139,10 @@ def image_ready(event_id):
     try:
         event_id = validate_path_param('event_id', event_id)
         event = get_event(event_id)
-        general_models = get_general_models()
-        profile_id = general_models.db.profile_context.get('profile_id')
+        profile_id = event.models.db.profile_context.get('profile_id')
         
-        if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+        event_profile = event.models.get_current_event_profile()
+        if not event_profile.get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
         # Get request data
@@ -209,10 +209,10 @@ def upload_finished(event_id, upload_id):
         event_id = validate_path_param('event_id', event_id)
         upload_id = validate_path_param('upload_id', upload_id)
         event = get_event(event_id)
-        general_models = get_general_models()
-        profile_id = general_models.db.profile_context.get('profile_id')
+        profile_id = event.models.db.profile_context.get('profile_id')
         
-        if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+        event_profile = event.models.get_current_event_profile()
+        if not event_profile.get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
         
         # Validate upload_id is accessible
@@ -361,9 +361,9 @@ def delete_unready_images_in_upload(event_id, upload_id):
     """Delete all unready (failed) images in an upload."""
     event_id = validate_path_param('event_id', event_id)
     event = get_event(event_id)
-    general_models = get_general_models()
     
-    if not general_models.get_current_profile(event_id).get('events', {}).get(event_id, {}).get('can_upload_and_delete_images', False):
+    event_profile = event.models.get_current_event_profile()
+    if not event_profile.get('can_upload_and_delete_images', False):
         raise Forbidden("Permission denied: cannot upload and delete images")
     
     deleted_count = event.delete_unready_images_in_upload(upload_id)

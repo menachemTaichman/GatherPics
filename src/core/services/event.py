@@ -54,6 +54,19 @@ class Event():
         self.models = EventModels(event_id, profile_id, public_code)
         self.face_utils = FaceUtils(event_id, storage_backend=self.file_helper.storage)
 
+    def close(self):
+        """Close the DB connection used by this Event instance."""
+        if self.models and self.models.db:
+            self.models.db.close()
+
+    def __enter__(self):
+        """Support for context manager protocol: with Event(...) as event:"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Support for context manager protocol: automatically close DB connection on exit"""
+        self.close()
+
     def prepare_upload_urls(self, files_data: list[dict]) -> dict:
         """
         Prepare presigned URLs for direct S3 uploads.

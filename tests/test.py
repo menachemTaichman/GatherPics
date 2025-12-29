@@ -394,11 +394,8 @@ ids = {
 
 # test_timeit()
 
-events = event.models.get_entities('events')
-print(events)
-print('--------------------------------')
-events2 = general_models.get_entities('events')
-print(events2)
+result = event.models.get_current_event_profile()
+print(result)
 print('--------------------------------')
 
 # # prod

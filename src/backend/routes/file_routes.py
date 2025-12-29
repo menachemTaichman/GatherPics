@@ -141,12 +141,11 @@ def get_original_image_jpg(event_id, image_id):
 @require_auth
 def get_event_display_representative_webp(event_id):
     event_id = validate_path_param('event_id', event_id)
-    general_models = get_general_models()
-    event = general_models.get_entities('events', event_id)
     event_instance = get_event(event_id)
-    if not event:
+    event_data = event_instance.models.get_entities('events', event_id)
+    if not event_data:
         abort(404)
-    representative_image = event['representative_image']
+    representative_image = event_data['representative_image']
     if not representative_image:
         return '', 204
     
@@ -162,12 +161,11 @@ def get_event_display_representative_webp(event_id):
 @optional_auth
 def get_event_thumb_representative_webp(event_id):
     event_id = validate_path_param('event_id', event_id)
-    general_models = get_general_models()
-    event = general_models.get_entities('events', event_id)
     event_instance = get_event(event_id)
-    if not event:
+    event_data = event_instance.models.get_entities('events', event_id)
+    if not event_data:
         abort(404)
-    representative_image = event['representative_image']
+    representative_image = event_data['representative_image']
     if not representative_image:
         return '', 204
 

@@ -718,6 +718,14 @@ class EventModels(BaseModels):
         """
         return bool(self.db.execute_query(query, (group_id,), return_format=ReturnFormat.VALUE))
 
+    def get_current_event_profile(self) -> dict[str, Any]:
+        """Get the current event profile permissions for this event.
+        This is equivalent to getting current_event_profile view data.
+        Returns:
+            dict with event profile permissions (can_upload_and_delete_images, etc.)
+        """
+        return self.get_entities('current_event_profile', self.db.event_id)
+
     def create_access_request(self, data: dict, group_ids: list[str]) -> str:
         """Create an access request.
         Args:
