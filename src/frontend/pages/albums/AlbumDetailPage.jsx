@@ -312,7 +312,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
   // Set document title
   useEffect(() => {
     if (album?.label) {
-      document.title = `${album.label} - ${t('albumDetail.album')} | ${APP_CONFIG.name}`;
+      document.title = `${album.label} | ${APP_CONFIG.name}`;
     } else {
       document.title = `${t('albumDetail.album')} | ${APP_CONFIG.name}`;
     }

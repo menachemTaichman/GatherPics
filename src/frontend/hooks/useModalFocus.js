@@ -295,9 +295,15 @@ export function useModalFocus(isOpen, onClose, options = {}) {
 
       if (!shouldForce) return;
 
-      // Prevent default to stop other listeners from stealing focus (e.g., PhotoSwipe/UI buttons)
-      e.preventDefault();
-      e.stopPropagation();
+      // Don't prevent default for date/datetime-local inputs - allow native calendar picker to open
+      const inputType = t.type?.toLowerCase();
+      const isDateInput = inputType === 'date' || inputType === 'datetime-local' || inputType === 'time' || inputType === 'month' || inputType === 'week';
+      
+      if (!isDateInput) {
+        // Prevent default to stop other listeners from stealing focus (e.g., PhotoSwipe/UI buttons)
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
       const focusAttempts = [0, 10, 30, 60, 120];
       lastForcedFocusTargetRef.current = t;

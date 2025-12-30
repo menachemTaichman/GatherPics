@@ -962,7 +962,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   // Set document title
   useEffect(() => {
     if (group?.label) {
-      document.title = `${group.label} - ${t('groupDetail.person')} | ${APP_CONFIG.name}`;
+      document.title = `${group.label} | ${APP_CONFIG.name}`;
     } else {
       document.title = `${t('groupDetail.person')} | ${APP_CONFIG.name}`;
     }

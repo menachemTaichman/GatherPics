@@ -86,6 +86,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
     return sortGroups(filtered, sortBy, sortOrder);
   }, [currentGroups, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
+
   return (
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="h-[4rem]"></div>
@@ -236,6 +237,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           items={filteredAndSortedGroups}
           baseSize={Math.max(100, 175 * cardSize)}
           imageClasses={{}}
+          heightMultiplier={1.2}
           containerHeight="auto"
           className="w-full"
           onPinchRef={setGridContainerRef}
@@ -249,7 +251,13 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           renderItem={(group, index, isPortrait, setRef) => {
             return (
               <div
-                style={{ width: '100%', height: '100%' }}
+                style={{ 
+                  width: '100%', 
+                  height: '100%',
+                  paddingTop: '4px',
+                  paddingBottom: '4px',
+                  overflow: 'visible'
+                }}
               >
                 <FaceCard
                   group={group}

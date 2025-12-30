@@ -107,12 +107,16 @@ export default function EventHomePage({ eventUrl, eventData }) {
   }, [isAuthenticated, eventId, resolvedEvent, representativeCacheKey]);
 
   const primaryDate = resolvedEvent?.date || resolvedEvent?.start || resolvedEvent?.start_date || null;
+  
+  // Get locale based on current language
+  const locale = i18n.language === 'he' ? 'he-IL' : 'en';
+  
   const formattedDate = useMemo(() => {
     if (!primaryDate) return null;
     try {
       const parsed = new Date(primaryDate);
       if (Number.isNaN(parsed.getTime())) return null;
-      return parsed.toLocaleDateString(undefined, {
+      return parsed.toLocaleDateString(locale, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -120,21 +124,21 @@ export default function EventHomePage({ eventUrl, eventData }) {
     } catch {
       return null;
     }
-  }, [primaryDate]);
+  }, [primaryDate, locale]);
 
   const shortFormattedDate = useMemo(() => {
     if (!primaryDate) return null;
     try {
       const parsed = new Date(primaryDate);
       if (Number.isNaN(parsed.getTime())) return null;
-      return parsed.toLocaleDateString(undefined, {
+      return parsed.toLocaleDateString(locale, {
         month: 'short',
         day: 'numeric',
       });
     } catch {
       return null;
     }
-  }, [primaryDate]);
+  }, [primaryDate, locale]);
 
   // Measure text overlay and image section heights for sticky positioning
   useEffect(() => {

@@ -269,7 +269,7 @@ function AppContent({ eventUrl }) {
       const state = window.history.state;
       const source = state && typeof state === 'object' ? state.source : null;
       if (momentLabel && source !== 'scroll') {
-        nextTitle = `${eventName} - Moment: ${decodeURIComponent(momentLabel)}`;
+        nextTitle = `${eventName} - ${decodeURIComponent(momentLabel)}`;
       } else {
         nextTitle = `${eventName} - Timeline`;
       }
@@ -279,7 +279,7 @@ function AppContent({ eventUrl }) {
         // albums/:album_name
         const albumNameEncoded = parts.slice(1).join('/');
         const albumName = decodeURIComponent(albumNameEncoded);
-        nextTitle = `${eventName} - Album: ${albumName}`;
+        nextTitle = `${eventName} - ${albumName}`;
       } else {
         // albums
         nextTitle = `${eventName} - Albums`;

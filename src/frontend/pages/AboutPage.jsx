@@ -514,11 +514,21 @@ export default function AboutPage() {
   }, [i18n.language]);
 
   // Manual sticky implementation for sidebar (CSS Grid interferes with native sticky)
+  // Only apply on desktop (lg breakpoint and above, typically 1024px)
   useEffect(() => {
     const sidebar = sidebarRef.current;
     const container = sidebarContainerRef.current;
     
     if (!sidebar || !container) return;
+    
+    // Check if we're on mobile (below lg breakpoint)
+    const isMobile = () => window.innerWidth < 1024;
+    
+    // On mobile, ensure sidebar is in normal flow
+    if (isMobile()) {
+      setSidebarStyle({});
+      return;
+    }
     
     // Compute direction string once based on current isRTL value
     const direction = isRTL ? 'right' : 'left';
@@ -529,6 +539,15 @@ export default function AboutPage() {
     let initialTop = 0;
     
     const handleScroll = () => {
+      // Reset to normal flow on mobile
+      if (isMobile()) {
+        if (isSticky) {
+          isSticky = false;
+          setSidebarStyle({});
+        }
+        return;
+      }
+      
       const sidebarRect = sidebar.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
       const headerHeight = 64; // Header height

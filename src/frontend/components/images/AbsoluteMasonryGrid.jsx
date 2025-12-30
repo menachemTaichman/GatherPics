@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 
 // --- האלגוריתם שלך נשאר ללא שינוי ---
-const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false) => {
+const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false, heightMultiplier = 1.0) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
 
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (baseSize + gap)));
@@ -42,7 +42,12 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
     } else {
         // במצב מייסונרי רגיל: הלוגיקה המקורית שלך
         const isPortrait = imageClasses[item.id] === 'portrait';
-        itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
+        // Use heightMultiplier for portrait items, or apply to all items if heightMultiplier is set
+        if (heightMultiplier !== 1.0) {
+          itemHeight = realColWidth * heightMultiplier;
+        } else {
+          itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
+        }
     }
     // ------------------
     
@@ -129,6 +134,7 @@ const AbsoluteMasonryGrid = forwardRef(({
   isSquareGrid = false, // <--- Prop חדש למצב ריבועי
   isListLayout = false, // <--- Prop חדש למצב רשימה
   listItemHeight = 80, // <--- גובה פריט במצב רשימה
+  heightMultiplier = 1.0, // <--- Multiplier for item height (e.g., 1.5 = 50% taller)
 }, ref) => {
   const internalContainerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 800 });
@@ -180,8 +186,8 @@ const AbsoluteMasonryGrid = forwardRef(({
     if (isListLayout) {
       return calculateListLayout(items, dimensions.width, listItemHeight, gap);
     }
-    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid);
-  }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight]);
+    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, heightMultiplier);
+  }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight, heightMultiplier]);
 
   // --- Expose scrollToItem and scrollToMoment methods via ref ---
   useImperativeHandle(ref, () => ({
@@ -317,7 +323,8 @@ const AbsoluteMasonryGrid = forwardRef(({
           left: `${itemLayout.left}px`,
           width: `${itemLayout.width}px`,
           height: `${itemLayout.height}px`,
-          contain: 'strict',
+          contain: 'layout style paint',
+          overflow: 'visible',
           
           // --- השינוי הקריטי ---
           // התמונה מקבלת את הסקייל מהמשתנה שהגדרנו באבא
@@ -331,7 +338,7 @@ const AbsoluteMasonryGrid = forwardRef(({
           willChange: 'transform'
         }}
       >
-        <div style={{ width: '100%', height: '100%' }}>
+        <div style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
             if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
           })}
