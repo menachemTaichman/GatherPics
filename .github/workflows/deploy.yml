@@ -76,7 +76,7 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }} 
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
-          source: "docker-compose.yml,Caddyfile"
+          source: "docker-compose.yml,Caddyfile,Dockerfile.backup,scripts/upload_script.sh"
           target: "/home/ubuntu/"
       
       - name: Deploy on Lightsail
@@ -87,7 +87,7 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
           script: |
-            set -e  # Exit on any error
+            set -e
             cd /home/ubuntu
             
             if [ "${{ needs.check-changes.outputs.needs-build }}" == "true" ]; then
@@ -98,16 +98,18 @@ jobs:
             fi
             
             echo "Updating containers..."
-            docker compose up -d --remove-orphans
             
-            # Step 1: Drop database logic layer (functions, views, triggers)
+            docker compose up -d --remove-orphans --build db-backup
+            docker compose up -d --remove-orphans
+
+            # Step 1: Drop database logic layer
             echo "Step 1: Dropping database logic layer..."
             if ! docker compose exec -T web python scripts/recreate_db_logic.py --drop-only; then
               echo "ERROR: Failed to drop database logic layer"
               exit 1
             fi
             
-            # Step 2: Apply schema migrations (tables, indexes, constraints)
+            # Step 2: Apply schema migrations
             if [ "${{ needs.check-changes.outputs.needs-migration }}" == "true" ]; then
               echo "Waiting for container to be ready..."
               sleep 3
@@ -120,14 +122,13 @@ jobs:
               echo "Step 2: Skipping schema migrations (no migration files changed)"
             fi
             
-            # Step 3: Recreate database logic layer (functions, views, triggers)
+            # Step 3: Recreate database logic layer
             echo "Step 3: Recreating database logic layer..."
             if ! docker compose exec -T web python scripts/recreate_db_logic.py; then
               echo "ERROR: Failed to recreate database logic layer"
               exit 1
             fi
             
-            # Only prune images if we pulled a new one (non-critical cleanup step)
             if [ "${{ needs.check-changes.outputs.needs-build }}" == "true" ]; then
               docker image prune -f || echo "Warning: Image prune failed (non-critical)"
             fi

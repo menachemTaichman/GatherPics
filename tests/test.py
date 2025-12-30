@@ -394,6 +394,8 @@ ids = {
 
 # test_timeit()
 
+# general_models.delete_event(event_id)
+
 result = event.models.get_current_event_profile()
 print(result)
 print('--------------------------------')

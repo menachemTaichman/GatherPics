@@ -1,0 +1,10 @@
+FROM prodrigestivill/postgres-backup-local:15-alpine
+
+RUN apk add --no-cache aws-cli groff dos2unix
+
+RUN mkdir -p /hooks
+
+COPY scripts/upload_script.sh /hooks/post-backup
+
+RUN dos2unix /hooks/post-backup && \
+    chmod +x /hooks/post-backup
