@@ -115,7 +115,7 @@ BEGIN
         RAISE EXCEPTION 'Permission denied: cannot manage event';
     END IF;
     
-    IF NEW.rekognition_calls_limit <> OLD.rekognition_calls_limit AND cur_profile_bool('is_developer') THEN
+    IF NEW.rekognition_calls_limit <> OLD.rekognition_calls_limit AND NOT cur_profile_bool('is_developer') THEN
         RAISE EXCEPTION 'Permission denied: cannot update rekognition calls limit';
     END IF;
     

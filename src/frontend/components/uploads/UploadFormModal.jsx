@@ -39,6 +39,7 @@ export default function UploadFormModal({
   const [allImagesUploaded, setAllImagesUploaded] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null); // null = all, or specific status
   const allImagesUploadedRef = useRef(false); // Ref to track upload completion for poll function
+  const uploadedCountRef = useRef({ completed: 0, total: 0 }); // Track upload count from callback
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
   const timeUpdateIntervalRef = useRef(null);
@@ -179,6 +180,82 @@ export default function UploadFormModal({
     allowOutsideScroll: true
   });
 
+  // Helper to calculate progress from images array
+  const calculateProgressFromImages = useCallback((images, uploadStatus, startTime = null) => {
+    let totalReady = 0;
+    let totalFailed = 0;
+    let totalProcessing = 0;
+    let totalQueued = 0;
+    let totalUploading = 0;
+    let totalPendingUpload = 0;
+    
+    images.forEach(img => {
+      const status = img.status || 'PENDING_UPLOAD';
+      if (status === 'READY') totalReady++;
+      else if (status === 'FAILED') totalFailed++;
+      else if (status === 'PROCESSING') totalProcessing++;
+      else if (status === 'QUEUED') totalQueued++;
+      else if (status === 'UPLOADING') totalUploading++;
+      else if (status === 'PENDING_UPLOAD') totalPendingUpload++;
+    });
+    
+    // Use callback's upload count if available (more accurate during upload phase)
+    const callbackUploadCount = uploadedCountRef.current;
+    const stillUploadingFromCallback = callbackUploadCount.total > 0 && callbackUploadCount.completed < callbackUploadCount.total;
+    const stillUploadingFromImages = totalUploading > 0 || totalPendingUpload > 0;
+    const stillUploading = stillUploadingFromCallback || stillUploadingFromImages;
+    
+    let currentStep;
+    if (uploadStatus === 'COMPLETED') {
+      currentStep = 'complete';
+    } else if (uploadStatus === 'FAILED') {
+      currentStep = 'error';
+    } else if (allImagesUploadedRef.current) {
+      currentStep = 'processing';
+    } else if (stillUploading) {
+      currentStep = 'uploading';
+    } else {
+      currentStep = 'processing';
+    }
+    
+    const total = images.length;
+    const percentage = calculateOverallProgress({
+      step: currentStep,
+      current: totalReady,
+      total: total
+    });
+    
+    const elapsedTime = startTime ? Date.now() - startTime : 0;
+    
+    // Build message - use callback's upload count for more accurate upload progress
+    // Use consistent format: "Uploaded X/Y | Ready: Z | Processing: N | Failed: M"
+    let message;
+    if (uploadStatus === 'COMPLETED') {
+      message = `Complete | Ready: ${totalReady} | Failed: ${totalFailed}`;
+    } else if (currentStep === 'uploading') {
+      // Use callback count for upload progress (more accurate)
+      const uploadedCount = callbackUploadCount.total > 0 ? callbackUploadCount.completed : (total - totalUploading - totalPendingUpload);
+      const uploadTotal = callbackUploadCount.total > 0 ? callbackUploadCount.total : total;
+      message = `Uploaded: ${uploadedCount}/${uploadTotal} | Ready: ${totalReady} | Processing: ${totalProcessing + totalQueued} | Failed: ${totalFailed}`;
+    } else {
+      message = `Uploaded: ${total}/${total} | Ready: ${totalReady} | Processing: ${totalProcessing + totalQueued} | Failed: ${totalFailed}`;
+    }
+    
+    return {
+      step: currentStep,
+      current: totalReady,
+      total: total,
+      message: message,
+      percentage: percentage,
+      elapsedTime: elapsedTime,
+      estimatedTimeRemaining: null,
+      totalReady,
+      totalFailed,
+      totalProcessing,
+      totalQueued
+    };
+  }, []);
+
   // Fetch existing upload images when modal opens with existingUploadId
   useEffect(() => {
     if (isOpen && existingUploadId && eventUrl) {
@@ -195,6 +272,15 @@ export default function UploadFormModal({
             statuses[img.image_id] = img.status || 'PENDING_UPLOAD';
           });
           setImageStatuses(statuses);
+          
+          // Set upload progress for in-progress uploads
+          if (progress.upload_status !== 'COMPLETED' && progress.upload_status !== 'FAILED') {
+            // For existing uploads, all files are already uploaded
+            allImagesUploadedRef.current = true;
+            setAllImagesUploaded(true);
+            const progressData = calculateProgressFromImages(progress.images || [], progress.upload_status);
+            setUploadProgress(progressData);
+          }
         } catch (error) {
           console.error('Failed to fetch existing upload:', error);
           showToast(formatErrorMessage('fetch existing upload', error), 'error');
@@ -220,12 +306,21 @@ export default function UploadFormModal({
             return newStatuses;
           });
           
+          // Update progress for in-progress uploads
+          if (progress.upload_status !== 'COMPLETED' && progress.upload_status !== 'FAILED') {
+            const progressData = calculateProgressFromImages(progress.images || [], progress.upload_status);
+            setUploadProgress(progressData);
+          }
+          
           // Stop polling if upload is complete or failed
           if (progress.upload_status === 'COMPLETED' || progress.upload_status === 'FAILED') {
             if (existingPollIntervalRef.current) {
               clearInterval(existingPollIntervalRef.current);
               existingPollIntervalRef.current = null;
             }
+            // Update final progress state
+            const progressData = calculateProgressFromImages(progress.images || [], progress.upload_status);
+            setUploadProgress(progressData);
           }
         } catch (error) {
           console.error('Failed to poll existing upload:', error);
@@ -246,7 +341,7 @@ export default function UploadFormModal({
         }
       };
     }
-  }, [isOpen, existingUploadId, eventUrl, showToast]);
+  }, [isOpen, existingUploadId, eventUrl, showToast, calculateProgressFromImages]);
 
   // Check if all images are uploaded (fallback check - primary is set via callback from uploadWithProgress)
   useEffect(() => {
@@ -314,6 +409,7 @@ export default function UploadFormModal({
       setAllImagesUploaded(false);
       setStatusFilter(null);
       allImagesUploadedRef.current = false;
+      uploadedCountRef.current = { completed: 0, total: 0 };
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current);
         timeUpdateIntervalRef.current = null;
@@ -492,6 +588,7 @@ export default function UploadFormModal({
     // Reset upload completion status when starting new upload
     setAllImagesUploaded(false);
     allImagesUploadedRef.current = false;
+    uploadedCountRef.current = { completed: 0, total: selectedFiles.length };
     setUploadProgress({ 
       step: 'preparing', 
       current: 0, 
@@ -542,10 +639,7 @@ export default function UploadFormModal({
         try {
           if (!currentUploadId) return;
           
-          // Stop polling if upload has failed
-          if (pollIntervalRef.current === null) return;
-          
-          // Stop polling if upload has failed
+          // Stop polling if already stopped
           if (pollIntervalRef.current === null) return;
           
           const progress = await imagesAPI.getUploadProgress(currentUploadId, eventUrl);
@@ -565,65 +659,9 @@ export default function UploadFormModal({
             return newStatuses;
           });
           
-          // Count images by status
-          let totalReady = 0;
-          let totalFailed = 0;
-          let totalProcessing = 0;
-          let totalQueued = 0;
-          let totalUploading = 0;
-          let totalPendingUpload = 0;
-          
-          images.forEach(img => {
-            const status = img.status || 'PENDING_UPLOAD';
-            if (status === 'READY') totalReady++;
-            else if (status === 'FAILED') totalFailed++;
-            else if (status === 'PROCESSING') totalProcessing++;
-            else if (status === 'QUEUED') totalQueued++;
-            else if (status === 'UPLOADING') totalUploading++;
-            else if (status === 'PENDING_UPLOAD') totalPendingUpload++;
-          });
-          
-          // Determine the current step:
-          // - If uploadStatus is COMPLETED, we're in 'complete' step
-          // - If we know all S3 uploads are complete (from callback), we're in 'processing' step
-          // - Otherwise, if any images are still UPLOADING or PENDING_UPLOAD, we're still in 'uploading' step
-          // - Otherwise, we're in 'processing' step
-          const stillUploading = totalUploading > 0 || totalPendingUpload > 0;
-          let currentStep;
-          if (uploadStatus === 'COMPLETED') {
-            currentStep = 'complete';
-          } else if (allImagesUploadedRef.current) {
-            // We know S3 uploads are complete (from callback), so we're processing
-            currentStep = 'processing';
-          } else if (stillUploading) {
-            currentStep = 'uploading';
-          } else {
-            currentStep = 'processing';
-          }
-          
-          // Calculate overall progress
-          const total = images.length;
-          const processed = totalReady + totalFailed;
-          const percentage = calculateOverallProgress({
-            step: currentStep,
-            current: totalReady,
-            total: total
-          });
-          
-          // Update progress
-          setUploadProgress({
-            step: currentStep,
-            current: totalReady,
-            total: total,
-            message: uploadStatus === 'COMPLETED' 
-              ? `Processing complete: ${totalReady} images processed`
-              : stillUploading
-              ? `Uploading: ${totalUploading + totalPendingUpload} uploading, ${totalQueued + totalProcessing} queued/processing, ${totalReady} ready, ${totalFailed} failed`
-              : `Processing: ${totalReady} ready, ${totalProcessing + totalQueued} processing, ${totalFailed} failed`,
-            percentage: percentage,
-            elapsedTime: Date.now() - startTime,
-            estimatedTimeRemaining: null
-          });
+          // Use shared helper to calculate progress (uses uploadedCountRef for accurate upload count)
+          const progressData = calculateProgressFromImages(images, uploadStatus, startTime);
+          setUploadProgress(progressData);
           
           // Check if complete
           if (uploadStatus === 'COMPLETED' || uploadStatus === 'FAILED') {
@@ -637,9 +675,9 @@ export default function UploadFormModal({
             }
             
             if (uploadStatus === 'COMPLETED') {
-                // Get final upload details
-                try {
-                  const uploadDetails = await uploadsAPI.getById(currentUploadId, eventUrl);
+              // Get final upload details
+              try {
+                const uploadDetails = await uploadsAPI.getById(currentUploadId, eventUrl);
                 
                 let facesCount = 0;
                 let clustersCount = 0;
@@ -655,12 +693,12 @@ export default function UploadFormModal({
                   }
                 }
                 
-                const successMsg = `${t('upload.successfullyProcessed')} ${totalReady} ${totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${clustersCount} ${clustersCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
+                const successMsg = `${t('upload.successfullyProcessed')} ${progressData.totalReady} ${progressData.totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${clustersCount} ${clustersCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
                 
                 setUploadProgress({ 
                   step: 'complete', 
-                  current: totalReady, 
-                  total: total, 
+                  current: progressData.totalReady, 
+                  total: progressData.total, 
                   message: successMsg,
                   percentage: 100,
                   elapsedTime: Date.now() - startTime,
@@ -669,8 +707,8 @@ export default function UploadFormModal({
                 
                 showToast(successMsg, 'success');
                 
-                if (totalFailed > 0) {
-                  showToast(`${totalFailed} ${t('upload.imageFailedToProcess')}`, 'warning');
+                if (progressData.totalFailed > 0) {
+                  showToast(`${progressData.totalFailed} ${t('upload.imageFailedToProcess')}`, 'warning');
                 }
                 
                 try {
@@ -682,10 +720,10 @@ export default function UploadFormModal({
                 if (onUploadComplete) {
                   onUploadComplete({
                     upload_id: result.upload_id,
-                    images_processed: totalReady,
+                    images_processed: progressData.totalReady,
                     faces_detected: facesCount,
                     groups_created: clustersCount,
-                    errors: totalFailed > 0 ? [`${totalFailed} images failed to process`] : []
+                    errors: progressData.totalFailed > 0 ? [`${progressData.totalFailed} images failed to process`] : []
                   });
                 }
                 
@@ -745,32 +783,15 @@ export default function UploadFormModal({
             pollIntervalRef.current = setInterval(pollProgress, 2000);
             pollProgress(); // Initial poll
           } else if (progress.phase === 'uploading') {
-            // Update progress during upload
-            setUploadProgress({ 
-              step: 'uploading', 
-              current: progress.completed, 
-              total: progress.total, 
-              message: progress.message,
-              percentage: Math.min(12, 2 + (progress.completed / progress.total) * 10),
-              elapsedTime: Date.now() - startTime,
-              estimatedTimeRemaining: null
-            });
+            // Only update the upload count ref - polling will use this for accurate count
+            uploadedCountRef.current = { completed: progress.completed, total: progress.total };
           } else if (progress.phase === 'uploads_complete') {
             // All S3 uploads are complete - safe to close modal now
             allS3UploadsComplete = true;
             allImagesUploadedRef.current = true;
             setAllImagesUploaded(true);
-            
-            // Update progress to show we're moving to processing
-            setUploadProgress({ 
-              step: 'processing', 
-              current: progress.completed, 
-              total: progress.total, 
-              message: 'All files uploaded. Processing images...',
-              percentage: 12,
-              elapsedTime: Date.now() - startTime,
-              estimatedTimeRemaining: null
-            });
+            // Clear upload count ref since uploads are done
+            uploadedCountRef.current = { completed: progress.total, total: progress.total };
           }
         }
       );
@@ -1012,7 +1033,7 @@ export default function UploadFormModal({
 
             {/* Upload progress - moved to top */}
             <AnimatePresence>
-              {uploadProgress && uploading && (
+              {uploadProgress && (uploading || (existingUploadId && existingUploadStatus && existingUploadStatus !== 'COMPLETED' && existingUploadStatus !== 'FAILED')) && (
                 <motion.div 
                   key="upload-progress"
                   initial={{ opacity: 0, height: 0 }}

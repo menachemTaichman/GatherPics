@@ -117,18 +117,12 @@ def direct_upload(event_id):
         "filename": filename
     })
 
-@upload_bp.route("/upload/image_ready", methods=["POST"])
+@upload_bp.route("/upload/<int:upload_id>/image_ready/<image_id>", methods=["PUT"])
 @require_auth
-def image_ready(event_id):
+def image_ready(event_id, upload_id, image_id):
     """
     Hook called by frontend when a single image has been uploaded to S3.
     Adds image_id to Redis Set and triggers process_image_task.
-    
-    Request body:
-    {
-        "upload_id": 123,
-        "image_id": "uuid"
-    }
     
     Returns:
     {
@@ -138,16 +132,13 @@ def image_ready(event_id):
     """
     try:
         event_id = validate_path_param('event_id', event_id)
+        upload_id = validate_path_param('upload_id', upload_id)
         event = get_event(event_id)
         profile_id = event.models.db.profile_context.get('profile_id')
         
         event_profile = event.models.get_current_event_profile()
         if not event_profile.get('can_upload_and_delete_images', False):
             raise Forbidden("Permission denied: cannot upload and delete images")
-        
-        # Get request data
-        upload_id = get_input('upload_id', required=True)
-        image_id = get_input('image_id', required=True)
         
         # Validate upload_id is accessible
         if not event.models.is_accessible('uploads', upload_id):

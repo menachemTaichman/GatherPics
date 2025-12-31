@@ -710,10 +710,7 @@ export const imagesAPI = {
 
   notifyImageReady: async (uploadId, imageId, eventUrl) => {
     const eventId = await getEventIdForApi(eventUrl);
-    const response = await api.post(`/api/events/${eventId}/upload/image_ready`, {
-      upload_id: uploadId,
-      image_id: imageId
-    });
+    const response = await api.put(`/api/events/${eventId}/upload/${uploadId}/image_ready/${imageId}`);
     return response.data;
   },
 
