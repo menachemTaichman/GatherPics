@@ -17,18 +17,18 @@ steps = [
             developer_id UUID,
             image_size_limit_bytes INTEGER DEFAULT 0,
             images_count_limit INTEGER DEFAULT 0,
-            rekognition_calls_limit INTEGER DEFAULT 0,
+            rekognition_requests_limit INTEGER DEFAULT 0,
             min_rank_to_create_event INTEGER DEFAULT 0
         );
         
-        -- rekognition_usaged
-        CREATE TABLE IF NOT EXISTS rekognition_usaged (
-            usage_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        -- rekognition_requests
+        CREATE TABLE IF NOT EXISTS rekognition_requests (
+            rekognition_request_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
             event_id UUID NOT NULL,
             event_label TEXT NOT NULL,
             profile_id UUID NOT NULL,
             profile_label TEXT NOT NULL,
-            calls_count INTEGER NOT NULL DEFAULT 1,
+            requests_count INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         
@@ -50,8 +50,7 @@ steps = [
             is_public BOOLEAN NOT NULL DEFAULT FALSE,
             images_count_limit INTEGER NOT NULL DEFAULT 0,
             image_size_limit_bytes INTEGER NOT NULL DEFAULT 0,
-            rekognition_calls_limit INTEGER NOT NULL DEFAULT 0,
-            rekognition_calls_used INTEGER NOT NULL DEFAULT 0,
+            rekognition_requests_limit INTEGER NOT NULL DEFAULT 0,
             archive_album_id UUID,
             favorites_album_id UUID,
             unassociated_group_id UUID,
@@ -356,7 +355,7 @@ steps = [
         DROP TABLE IF EXISTS profiles CASCADE;
         DROP TABLE IF EXISTS events CASCADE;
         DROP TABLE IF EXISTS default_preferences CASCADE;
-        DROP TABLE IF EXISTS rekognition_usaged CASCADE;
+        DROP TABLE IF EXISTS rekognition_requests CASCADE;
         DROP TABLE IF EXISTS settings CASCADE;
         """
     ),
@@ -629,9 +628,8 @@ steps = [
     # Step 3: Add all indexes
 step(
         """
-        CREATE INDEX IF NOT EXISTS idx_rekognition_usaged_created_at ON rekognition_usaged(created_at);
+        CREATE INDEX IF NOT EXISTS idx_rekognition_requests_created_at ON rekognition_requests(created_at);
         CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
-        CREATE INDEX IF NOT EXISTS idx_events_rekognition_calls_used ON events(rekognition_calls_used);
         CREATE INDEX IF NOT EXISTS idx_profiles_label_lower ON profiles(LOWER(label));
         CREATE INDEX IF NOT EXISTS idx_profiles_public_access_code ON profiles(public_access_code);
         CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
@@ -684,9 +682,8 @@ step(
         DROP INDEX IF EXISTS idx_refresh_tokens_token;
         DROP INDEX IF EXISTS idx_profiles_public_access_code;
         DROP INDEX IF EXISTS idx_profiles_label_lower;
-        DROP INDEX IF EXISTS idx_events_rekognition_calls_used;
         DROP INDEX IF EXISTS idx_events_created_at;
-        DROP INDEX IF EXISTS idx_rekognition_usaged_created_at;
+        DROP INDEX IF EXISTS idx_rekognition_requests_created_at;
         """
     ),
     # Step 4: Add status constraints
@@ -744,7 +741,7 @@ step(
         ON CONFLICT (profile_id) DO NOTHING;
         
         -- Insert settings row
-        INSERT INTO settings (developer_id, image_size_limit_bytes, images_count_limit, rekognition_calls_limit, min_rank_to_create_event)
+        INSERT INTO settings (developer_id, image_size_limit_bytes, images_count_limit, rekognition_requests_limit, min_rank_to_create_event)
         SELECT 
             '89cb4967-0eba-48af-99cc-5e87407fb639',
             13631488,

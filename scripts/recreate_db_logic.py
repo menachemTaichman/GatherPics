@@ -176,19 +176,33 @@ def drop_all_objects(conn, dry_run=False):
         
         # Drop functions last (they may be used by triggers/views)
         # Get all functions with their signatures (handle overloaded functions)
+        # Exclude functions that belong to extensions
         cursor.execute("""
             SELECT proname, pg_get_function_identity_arguments(oid) as args
-            FROM pg_proc
+            FROM pg_proc p
             WHERE pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+            AND NOT EXISTS (
+                SELECT 1
+                FROM pg_depend d
+                JOIN pg_extension e ON d.refobjid = e.oid
+                WHERE d.objid = p.oid
+                AND d.deptype = 'e'
+            )
             ORDER BY proname, args
         """)
         functions = cursor.fetchall()
+        dropped_count = 0
         for (func_name, args) in functions:
-            if args:
-                cursor.execute(f"DROP FUNCTION IF EXISTS {func_name}({args}) CASCADE")
-            else:
-                cursor.execute(f"DROP FUNCTION IF EXISTS {func_name}() CASCADE")
-        print(f"  Dropped {len(functions)} function(s)")
+            try:
+                if args:
+                    cursor.execute(f"DROP FUNCTION IF EXISTS {func_name}({args}) CASCADE")
+                else:
+                    cursor.execute(f"DROP FUNCTION IF EXISTS {func_name}() CASCADE")
+                dropped_count += 1
+            except Exception as e:
+                # Log but continue - some functions might be protected or have dependencies
+                print(f"  Warning: Could not drop function {func_name}({args or ''}): {e}")
+        print(f"  Dropped {dropped_count} function(s)")
         
         conn.commit()
         print("✓ All existing objects dropped\n")

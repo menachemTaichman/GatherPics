@@ -75,8 +75,8 @@ def get_views_in_order():
     return [
         'settings_ctx',
         'settings_ext',
-        'rekognition_usaged_ctx',
-        'rekognition_usaged_ext',
+        'rekognition_requests_ctx',
+        'rekognition_requests_ext',
         'profiles_ctx',
         'profiles_ext',
         'my_preferences',

@@ -60,7 +60,7 @@ def try_trigger_cluster(upload_id: int, event_id: str, profile_id: str) -> bool:
         try:
             # Trigger cluster_faces_task using send_task to avoid circular import
             celery.send_task(
-                'cluster_faces_task',
+                'fetch_face_matches_task',
                 args=[event_id, profile_id, upload_id]
             )
             return True
@@ -141,8 +141,78 @@ def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id:
                     traceback.format_exc()
                 )
 
-@celery.task(name='cluster_faces_task')
-def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
+@celery.task(name='fetch_face_matches_task', time_limit=3600, soft_time_limit=1800)
+def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
+    """
+    Fetch face matches from AWS Rekognition and store them in the database.
+    call cluster_faces_task after fetching face matches
+    
+    Args:
+        event_id: Event ID
+        profile_id: Profile ID (for context)
+        upload_id: ID of the upload to fetch matches for
+    """
+    try:
+        # Create Event instance
+        event = Event(event_id, profile_id=profile_id)
+        unready_images_count = len(event.models.get_upload_images(upload_id, status='FAILED'))
+        errors = [] if unready_images_count == 0 else [f'{unready_images_count} images failed to process']
+        event.models.edit('uploads', upload_id, {'errors': errors})
+        
+        logger.info(f"Starting face matches fetch for {len(face_ids)} faces")
+
+        face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
+        rekognition_request_id = event.models.edit_rekognition_requests(len(face_ids), request_type='FETCH_FACE_MATCHES')
+        # Fetch face matches from AWS
+        face_matches = event.face_utils.fetch_face_matches(face_ids=face_ids)
+        
+        # Store matches in database
+        event.store_face_matches(face_matches)
+        if len(face_matches) != len(face_ids):
+            event.models.edit_rekognition_requests(len(face_matches) - len(face_ids), rekognition_request_id, request_type='FETCH_FACE_MATCHES')
+        
+        logger.info(f"Completed face matches fetch and storage for {len(face_matches)} faces")
+
+        cluster_faces_task.delay(event_id, profile_id, upload_id)
+
+        # Assign moments by time if requested
+        # Check if assign_moments flag is set in Redis
+        assign_moments = False
+        try:
+            redis_client = get_redis_client()
+            assign_moments_key = f"upload:{upload_id}:assign_moments"
+            assign_moments_value = redis_client.get(assign_moments_key)
+            assign_moments = assign_moments_value == "true"
+        except Exception as e:
+            # If Redis is unavailable, log but continue without assigning moments
+            log_error(f"Redis unavailable when checking assign_moments flag: {str(e)}", "RedisConnectionError", "")
+        
+        if assign_moments:
+            try:
+                ready_images = event.models.get_upload_images(upload_id, status='READY')
+                assigned_moments = event.models.assign_moments_by_time(ready_images)
+                logger.info(f"Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments for upload {upload_id}")
+            except Exception as e:
+                error_msg = f"Error assigning moments for upload {upload_id}: {str(e)}"
+                log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
+        
+        return {
+            'event_id': event_id,
+            'faces_processed': len(face_matches),
+            'total_faces_requested': len(face_ids)
+        }
+        
+    except Exception as e:
+        error_msg = f"Error fetching face matches for event {event_id}: {str(e)}"
+        log_error(error_msg, "FaceMatchesFetchError", traceback.format_exc())
+        return None
+
+@celery.task(name='cluster_faces_task', time_limit=3600, soft_time_limit=1800)
+def cluster_faces_task(
+    event_id: str,
+    profile_id: str,
+    upload_id: int
+):
     """
     Cluster faces from all images in an upload and create/update groups.
     Optionally assigns images to moments by time if assign_moments flag is set.
@@ -155,68 +225,22 @@ def cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
     try:
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)
-        images = event.models.get_upload_images(upload_id)
-        ready_images = [image['image_id'] for image in images if image['status'] == 'READY']
-        images_count = len(ready_images)
-        if images_count == 0:
-            raise Exception('No ready images found')
         
         face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
-        groups_created, groups_related = event._cluster_faces(face_ids)
+        event._cluster_faces(face_ids)
         
-        # Check if assign_moments flag is set in Redis
-        assign_moments = False
-        try:
-            redis_client = get_redis_client()
-            assign_moments_key = f"upload:{upload_id}:assign_moments"
-            assign_moments_value = redis_client.get(assign_moments_key)
-            assign_moments = assign_moments_value == "true"
-        except Exception as e:
-            # If Redis is unavailable, log but continue without assigning moments
-            log_error(f"Redis unavailable when checking assign_moments flag: {str(e)}", "RedisConnectionError", "")
+        upload = event.models.get_entities('uploads', upload_id)
+        if upload.get('status') != 'COMPLETED':
+            event.models.edit('uploads', upload_id, {'status': 'COMPLETED', 'completed_at': datetime.now().isoformat()})
         
-        # Assign moments by time if requested
-        upload_images = event.models.get_upload_images(upload_id)
-        moments_count = 0
-        if assign_moments:
-            try:
-                # Get all processed image IDs from the upload
-                processed_image_ids = [img['image_id'] for img in upload_images if img['status'] == 'READY']
-                
-                if processed_image_ids:
-                    assigned_moments = event.models.assign_moments_by_time(processed_image_ids)
-                    moments_count = len(assigned_moments.keys())
-                    logger.info(f"Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments for upload {upload_id}")
-            except Exception as e:
-                error_msg = f"Error assigning moments for upload {upload_id}: {str(e)}"
-                log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
-        
-        unready_images_count = len([img for img in upload_images if img['status'] != 'READY'])
-        errors = [] if unready_images_count == 0 else [f'{unready_images_count} images failed to process']
-        # Update upload status
-        faces_count = len(face_ids)
-        event.models.edit('uploads', upload_id, {
-            'status': 'COMPLETED',
-            'completed_at': datetime.now().isoformat(),
-            'images_count': images_count,
-            'faces_count': faces_count,
-            'clusters_count': groups_related,
-            'moments_count': moments_count,
-            'errors': errors
-        })
         logger.info(f"completed cluster_faces_task for upload {upload_id}")
-
-        logger.info("Running final DB optimization (ANALYZE) after upload...")
-        analyze_query = "ANALYZE images; ANALYZE faces; ANALYZE groups;"
-        event.models.db.execute_query(analyze_query)
         
-        return {'upload_id': upload_id, 'groups_created': groups_created, 'faces_count': faces_count, 'moments_count': moments_count}
+        return True
         
     except Exception as e:
         error_msg = f"Error clustering faces for upload {upload_id}: {str(e)}"
         log_error(error_msg, "ClusteringError", traceback.format_exc())
         
-        # Update upload status to FAILED
         try:
             event.models.edit('uploads', upload_id, {'status': 'FAILED', 'errors': []})
         except Exception as e:
@@ -243,10 +267,6 @@ def expire_pending_uploads_task():
         # Calculate expiration threshold: now minus 3 hours (plus 5 minutes buffer for safety)
         expiration_threshold = datetime.now(timezone.utc) - timedelta(seconds=UPLOAD_URL_EXPIRATION_SECONDS + 300)
         
-        # Single efficient UPDATE query that updates all relevant images at once
-        # The JOIN ensures we check the upload start time
-        # Note: This updates directly on the 'images' table to bypass permission checks
-        # which is appropriate for system-level cleanup tasks
         query = """
             UPDATE images i
             SET status = 'FAILED'
@@ -447,7 +467,7 @@ def delete_events_task(event_id: str, profile_id: str, event_data: dict, restric
                 'event_name': event_data.get('name', 'Unknown'),
                 'images_count': event_data.get('images_count', 0) if event_data else 0,
                 'total_size': event_data.get('total_size', 0) if event_data else 0,
-                'rekognition_calls_used': event_data.get('rekognition_calls_used', 0) if event_data else 0,
+                'rekognition_requests_count': event_data.get('rekognition_requests_count', 0) if event_data else 0,
                 'restricted_profiles_deleted': len(restricted_profiles)
             }
         )

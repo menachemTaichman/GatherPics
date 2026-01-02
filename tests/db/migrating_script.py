@@ -82,7 +82,7 @@ SQLITE_DB_PATH = os.path.join(os.path.dirname(__file__), 'old_db.db')
 # Boolean field mapping - INTEGER fields that should be converted to BOOLEAN
 BOOLEAN_FIELDS = {
     'settings': [],
-    'rekognition_usaged': [],
+    'rekognition_requests': [],
     'default_preferences': [],
     'profiles': ['can_create_events', 'is_public'],
     'events': ['is_public'],
@@ -165,7 +165,7 @@ COLUMN_MAPPING = {
 # Tables with identity columns that need OVERRIDING SYSTEM VALUE
 IDENTITY_COLUMN_TABLES = {
     'settings': 'id',
-    'rekognition_usaged': 'usage_id',
+    'rekognition_requests': 'rekognition_request_id',
     'refresh_tokens': 'token_id',
     'notifications': 'notification_id',
     'feedbacks': 'feedback_id',
@@ -176,7 +176,7 @@ IDENTITY_COLUMN_TABLES = {
 # Timestamp columns that need timezone conversion
 # Maps table name to list of timestamp column names
 TIMESTAMP_COLUMNS = {
-    'rekognition_usaged': ['created_at'],
+    'rekognition_requests': ['created_at'],
     'events': ['created_at'],
     'refresh_tokens': ['issued_at', 'expires_at', 'revoked_at'],
     'notifications': ['created_at', 'read_at'],
@@ -748,7 +748,7 @@ def migrate_table(source_cursor, pg_cursor, pg_conn, table_name, exclude_columns
     pk_column_index = None
     if skip_ids:
         # Try to find common primary key column names
-        for pk_col in ['profile_id', 'event_id', 'image_id', 'group_id', 'moment_id', 'album_id', 'face_id', 'upload_id', 'access_request_id', 'token_id', 'notification_id', 'feedback_id', 'usage_id', 'id']:
+        for pk_col in ['profile_id', 'event_id', 'image_id', 'group_id', 'moment_id', 'album_id', 'face_id', 'upload_id', 'access_request_id', 'token_id', 'notification_id', 'feedback_id', 'rekognition_request_id', 'id']:
             if pk_col in all_column_names:
                 pk_column_index = all_column_names.index(pk_col)
                 break
@@ -995,7 +995,7 @@ def migrate_data_from_postgres(backup_db_name):
         migration_order = [
             # Base tables first (no FK dependencies)
             # 'default_preferences',  # Skipped - created by migrations
-            'rekognition_usaged',
+            'rekognition_requests',
             
             # Tables that reference each other (circular) - create without FKs first
             'events',  # Created first, then profiles can reference it
@@ -1305,7 +1305,7 @@ def migrate_data():
         migration_order = [
             # Base tables first (no FK dependencies)
             # 'default_preferences',  # Skipped - created by migrations
-            'rekognition_usaged',
+            'rekognition_requests',
             
             # Tables that reference each other (circular) - create without FKs first
             'events',  # Created first, then profiles can reference it

@@ -39,7 +39,7 @@ def update_settings():
     update_data = get_multiple_inputs([
         'image_size_limit_bytes',
         'images_count_limit',
-        'rekognition_calls_limit',
+        'rekognition_requests_limit',
         'min_rank_to_create_event',
     ], required=True)
     

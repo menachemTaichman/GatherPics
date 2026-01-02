@@ -18,19 +18,19 @@ SELECT
     sc.*
 FROM settings_ctx sc;
 
--- rekognition usage
+-- rekognition requests
 
-CREATE OR REPLACE VIEW rekognition_usaged_ctx AS
+CREATE OR REPLACE VIEW rekognition_requests_ctx AS
 SELECT
-    ru.*
-FROM rekognition_usaged ru
+    rr.*
+FROM rekognition_requests rr
 JOIN settings s ON s.id = 1
 WHERE cur_profile_bool('is_developer');
 
-CREATE OR REPLACE VIEW rekognition_usaged_ext AS
+CREATE OR REPLACE VIEW rekognition_requests_ext AS
 SELECT
     ruc.*
-FROM rekognition_usaged_ctx ruc;
+FROM rekognition_requests_ctx ruc;
 
 -- errors
 
@@ -911,6 +911,18 @@ moments_stats AS (
         AND me.is_accessible
         AND ep.can_manage_event
     GROUP BY me.event_id
+),
+rekognition_stats AS (
+    SELECT
+        rr.event_id,
+        SUM(rr.requests_count)
+    FROM rekognition_requests rr
+    INNER JOIN events_profiles ep ON
+        rr.event_id = ep.event_id
+        AND ep.profile_id = cur_event_profile_uuid('profile_id')
+    WHERE
+        ep.can_manage_event
+    GROUP BY rr.event_id
 )
 SELECT
     ec.*,
@@ -921,7 +933,8 @@ SELECT
     COALESCE(img_stats.original_size, 0) AS total_original_size,
     COALESCE(img_stats.high_quality_size, 0) AS total_high_quality_size,
     COALESCE(img_stats.total_size, 0) + COALESCE(fs.size, 0) AS total_size,
-    COALESCE(img_stats.max_image_size, 0) AS max_image_size
+    COALESCE(img_stats.max_image_size, 0) AS max_image_size,
+    COALESCE(rekognition_stats, 0) AS rekognition_requests_count
 FROM events_ctx ec
 LEFT JOIN images_stats_base isb ON ec.event_id = isb.event_id
 LEFT JOIN images_stats img_stats ON ec.event_id = img_stats.event_id

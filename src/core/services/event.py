@@ -4,6 +4,8 @@ import gc
 from datetime import datetime
 import re
 import logging
+import json
+from collections import defaultdict
 
 from ..utils.image_utils import resize_image, extract_metadata_from_bytes, crop_image
 from PIL import Image as PILImage
@@ -117,16 +119,13 @@ class Event():
         images_count_limit = event_data['images_count_limit']
         images_count = self.models.get_images_count()
         image_size_limit_bytes = event_data['image_size_limit_bytes']
-        rekognition_calls_limit = event_data['rekognition_calls_limit']
-        rekognition_calls_used = event_data['rekognition_calls_used']
         if len(files_data) + images_count > images_count_limit:
             raise PolicyError(f"Upload would exceed image count limit. Current: {images_count}, Limit: {images_count_limit}, Attempting to add: {len(files_data)}")
         max_file_size = max(file_info['size'] for file_info in files_data)
         if max_file_size > image_size_limit_bytes:
             raise PolicyError(f"Max file size allowed is {image_size_limit_bytes} bytes, but file with size {max_file_size} bytes was provided")
-        if rekognition_calls_used + len(files_data) > rekognition_calls_limit:
-            raise PolicyError(f"Upload would exceed rekognition calls limit. Current: {rekognition_calls_used}, Limit: {rekognition_calls_limit}, Attempting to add: {len(files_data)}")
-        
+        self.models.ensure_rekognition_requests_limit(len(files_data))
+
         # Create upload session
         upload_id = self.models.add('uploads', {
             'started_at': datetime.now().isoformat(),
@@ -316,11 +315,7 @@ class Event():
                 
             event_data = self.models.get_entities('events', self.event_id, include_details=True)
             unassociated_group_id = event_data['unassociated_group_id']
-            rekognition_calls_used = event_data['rekognition_calls_used']
-            rekognition_calls_limit = event_data['rekognition_calls_limit']
-            if rekognition_calls_used + 1 > rekognition_calls_limit:
-                raise PolicyError(f"Processing image would exceed rekognition calls limit. Current: {rekognition_calls_used}, Limit: {rekognition_calls_limit}, Attempting to add: {1}")
-            self.models.add_rekognition_calls(1)
+            self.models.edit_rekognition_requests(1, request_type='DETECT_FACES', details={'image_id': image_id})
             logger.verbose(f"Detecting faces in image: image_id={image_id}")
             detected_faces = self.face_utils.detect_faces(
                 image=high_quality_img,
@@ -392,58 +387,80 @@ class Event():
             gc.collect()
             raise
 
-    def _cluster_faces(
-        self,
-        face_ids: list[str],
-        minimal_group_size: int = 2,
-        cluster_threshold: int = 90,
-        max_matches_faces: int = 100,
-    ) -> tuple[int, int]:
+    def _cluster_faces(self, face_ids: list[str], minimal_group_size: int = 2, cluster_threshold: int = 90):
         """
         Cluster faces and create/update groups.
+        Reads face matches from database and performs clustering using UnionFind.
         
         Args:
             face_ids: List of face IDs to cluster
             minimal_group_size: Minimum number of faces required to create/join a group
-            cluster_threshold: Similarity threshold for face clustering (0-100)
-            max_matches_faces: Maximum number of faces to match for clustering
-            
-        Returns:
-            Number of groups created, Number of groups related
+            cluster_threshold: Similarity threshold for face clustering (0-100) - used to filter matches
         """        
-        logger.info(f"Starting face clustering: face_ids_count={len(face_ids)}, cluster_threshold={cluster_threshold}, minimal_group_size={minimal_group_size}")
-        
         # Get unassociated group ID
-        query = f"""
-            SELECT unassociated_group_id, rekognition_calls_used, rekognition_calls_limit FROM events WHERE event_id = %s;
+        query = """
+            SELECT unassociated_group_id FROM events WHERE event_id = %s;
         """
-        unassociated_group_id, rekognition_calls_used, rekognition_calls_limit = self.models.db.execute_query(query, (self.event_id,), return_format=ReturnFormat.TUPLE)
-        if rekognition_calls_used + len(face_ids) > rekognition_calls_limit:
-            raise PolicyError(f"Clustering would exceed rekognition calls limit. Current: {rekognition_calls_used}, Limit: {rekognition_calls_limit}, Attempting to add: {len(face_ids)}")
+        unassociated_group_id = self.models.db.execute_query(query, (self.event_id,), return_format=ReturnFormat.VALUE)
+        
+        # UnionFind data structure for clustering
+        class UnionFind:
+            def __init__(self):
+                self.parent = {}
 
-        self.models.add_rekognition_calls(len(face_ids))
-        logger.verbose(f"Clustering {len(face_ids)} faces using rekognition...")
-        clusters = self.face_utils.cluster_faces(
-            face_ids, 
-            threshold_similarity=cluster_threshold, 
-            max_matches_faces=max_matches_faces
-        )
-        logger.verbose(f"Face clustering completed: found {len(clusters)} clusters")
-        groups_created = 0
-        groups_related = 1 if len(face_ids) > 0 else 0
+            def find(self, x):
+                if x not in self.parent:
+                    self.parent[x] = x
+                if self.parent[x] != x:
+                    self.parent[x] = self.find(self.parent[x])
+                return self.parent[x]
 
+            def union(self, x, y):
+                self.parent[self.find(x)] = self.find(y)
+
+        face_matches = self.get_face_matches(face_ids)
+        
+        uf = UnionFind()
+        all_faces = set(face_ids)
+        
+        for face_id, matches in face_matches.items():
+            for match in matches:
+                similarity = match.get('Similarity', 0)
+                match_id = match['Face']['FaceId']
+                
+                # Filter by cluster_threshold (only include matches above threshold)
+                if similarity >= cluster_threshold:
+                    uf.union(face_id, match_id)
+                    all_faces.add(match_id)
+        
+        # Group faces by root parent
+        clusters_dict = defaultdict(list)
+        for face_id in all_faces:
+            clusters_dict[uf.find(face_id)].append(face_id)
+        
+        # Convert to list of tuples: (new_faces, existing_faces)
+        clusters = []
+        for root, cluster_faces_list in clusters_dict.items():
+            new_faces = [face_id for face_id in cluster_faces_list if face_id in face_ids]
+            similar_faces = [face_id for face_id in cluster_faces_list if face_id not in face_ids]
+            clusters.append((new_faces, similar_faces))
+        
         for new_faces, existing_faces in clusters:
             if len(new_faces) + len(existing_faces) < minimal_group_size:
-                logger.verbose(f"Skipping cluster: new_faces={len(new_faces)}, existing_faces={len(existing_faces)}, below minimal_group_size={minimal_group_size}")
                 continue
 
             partition = {}
-            for existing_face_id in existing_faces:
+            if existing_faces:
                 query = f"""
-                    SELECT group_id FROM faces WHERE face_id = %s;
+                    WITH face_ids AS (
+                        SELECT DISTINCT unnest(%s::uuid[]) AS face_id
+                    )
+                    SELECT face_id, group_id FROM faces f
+                    INNER JOIN face_ids fi ON f.face_id = fi.face_id
                 """
-                group_id = self.models.db.execute_query(query, (existing_face_id,), return_format=ReturnFormat.VALUE)
-                partition.setdefault(group_id, []).append(existing_face_id)
+                rows = self.models.db.execute_query(query, (existing_faces,), return_format=ReturnFormat.LIST_TUPLES)
+                for face_id, group_id in rows:
+                    partition.setdefault(group_id, []).append(face_id)
 
             # Find the largest non-unassociated group to assign faces to
             largest_group_id = max(
@@ -461,12 +478,7 @@ class Event():
                         INSERT INTO groups (event_id, label) VALUES (%s, %s) RETURNING group_id;
                     """
                     largest_group_id = self.models.db.execute_query(query, (self.event_id, group_label), return_format=ReturnFormat.VALUE)
-                    groups_created += 1
-                    logger.verbose(f"Created new group: group_id={largest_group_id}, label={group_label}, faces_count={len(add_faces)}")
-                else:
-                    logger.verbose(f"Updating existing group: group_id={largest_group_id}, adding {len(add_faces)} faces")
                 
-                # Update faces directly in upload pipeline
                 query = f"""
                     WITH face_ids AS (
                         SELECT DISTINCT unnest(%s::uuid[]) AS face_id
@@ -478,11 +490,56 @@ class Event():
                 """
                 self.models.db.execute_query(query, (add_faces, largest_group_id))
                 self.models.ensure_representative('groups', largest_group_id)
-                groups_related += 1
 
-        logger.info(f"Face clustering completed: groups_created={groups_created}")
+    def store_face_matches(self, face_matches: dict[str, list[dict]]):
 
-        return groups_created, groups_related
+        if not face_matches:
+            return
+        
+        values = []
+        for face_id, matches in face_matches.items():
+            raw_matches_json = json.dumps(matches)
+            values.extend([face_id, raw_matches_json])
+        
+        query = f"""
+            INSERT INTO face_matches_raw (face_id, raw_matches)
+            VALUES {','.join(['(%s, %s::jsonb)'] * len(face_matches))}
+            ON CONFLICT (face_id) 
+            DO UPDATE SET 
+                raw_matches = EXCLUDED.raw_matches;
+        """
+        self.models.db.execute_query(query, values)
+
+    def get_face_matches(self, face_ids: list[str]) -> dict[str, list[dict]]:
+        """
+        Retrieve face matches from the database.
+        
+        Args:
+            face_ids: List of face IDs to retrieve matches for
+            
+        Returns:
+            Dictionary mapping face_id to list of match dictionaries
+        """
+        if not face_ids:
+            return {}
+        
+        query = """
+            WITH face_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS face_id
+            )
+            SELECT face_id, raw_matches 
+            FROM face_matches_raw fm
+            INNER JOIN face_ids fi ON fm.face_id = fi.face_id;
+        """
+        results = self.models.db.execute_query(query, (face_ids,), return_format=ReturnFormat.LIST_DICTS)
+        
+        face_matches = {}
+        for row in results:
+            face_id = row['face_id']
+            raw_matches = row['raw_matches']
+            face_matches[face_id] = raw_matches if isinstance(raw_matches, list) else []
+        
+        return face_matches
 
     def delete_unready_images_in_upload(self, upload_id: int) -> int:
         """Delete unready images in an upload.
@@ -491,12 +548,11 @@ class Event():
         Returns:
             number of deleted images
         """
-        images = self.models.get_upload_images(upload_id)
-        unready_image_ids = [img['image_id'] for img in images if img['status'] != 'READY']
-        if unready_image_ids:
-            self.delete_images(unready_image_ids)
+        images = self.models.get_upload_images(upload_id, status='READY', exclude_status=True)
+        if images:
+            self.delete_images(images)
 
-        return len(unready_image_ids)
+        return len(images)
 
     def fail_pending_images(self, upload_id: int) -> int:
         """Fail pending images in an upload.

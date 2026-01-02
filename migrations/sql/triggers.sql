@@ -6,25 +6,25 @@ BEGIN
         image_size_limit_bytes = NEW.image_size_limit_bytes,
         images_count_limit = NEW.images_count_limit,
         min_rank_to_create_event = NEW.min_rank_to_create_event,
-        rekognition_calls_limit = NEW.rekognition_calls_limit
+        rekognition_requests_limit = NEW.rekognition_requests_limit
     WHERE id = 1;
     
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function for rekognition_usaged_ctx INSERT
-CREATE OR REPLACE FUNCTION trg_rekognition_usaged_ctx_insert()
+-- Function for rekognition_requests_ctx INSERT
+CREATE OR REPLACE FUNCTION trg_rekognition_requests_ctx_insert()
 RETURNS TRIGGER AS $$
 DECLARE
-    new_usage_id INTEGER;
+    new_rekognition_request_id INTEGER;
 BEGIN
-    INSERT INTO rekognition_usaged (
+    INSERT INTO rekognition_requests (
         event_id,
         event_label,
         profile_id,
         profile_label,
-        calls_count,
+        requests_count,
         created_at
     )
     VALUES (
@@ -32,12 +32,12 @@ BEGIN
         NEW.event_label,
         NEW.profile_id,
         NEW.profile_label,
-        NEW.calls_count,
+        NEW.requests_count,
         COALESCE(NEW.created_at, CURRENT_TIMESTAMP)
     )
-    RETURNING usage_id INTO new_usage_id;
+    RETURNING rekognition_request_id INTO new_rekognition_request_id;
     
-    NEW.usage_id := new_usage_id;
+    NEW.rekognition_request_id := new_rekognition_request_id;
     
     RETURN NEW;
 END;
@@ -64,7 +64,7 @@ BEGIN
         representative_image,
         created_at,
         created_by,
-        rekognition_calls_limit
+        rekognition_requests_limit
     )
     VALUES (
         COALESCE(NEW.event_id, gen_random_uuid()),
@@ -77,7 +77,7 @@ BEGIN
         NEW.representative_image,
         COALESCE(NEW.created_at, CURRENT_TIMESTAMP),
         cur_profile_uuid('profile_id'),
-        (SELECT rekognition_calls_limit FROM settings WHERE id = 1 LIMIT 1)
+        (SELECT rekognition_requests_limit FROM settings WHERE id = 1 LIMIT 1)
     )
     RETURNING event_id INTO new_event_id;
 
@@ -115,11 +115,11 @@ BEGIN
         RAISE EXCEPTION 'Permission denied: cannot manage event';
     END IF;
     
-    IF NEW.rekognition_calls_limit <> OLD.rekognition_calls_limit AND NOT cur_profile_bool('is_developer') THEN
+    IF NEW.rekognition_requests_limit <> OLD.rekognition_requests_limit AND NOT cur_profile_bool('is_developer') THEN
         RAISE EXCEPTION 'Permission denied: cannot update rekognition calls limit';
     END IF;
     
-    IF NEW.rekognition_calls_used <> OLD.rekognition_calls_used THEN
+    IF NEW.rekognition_requests_count <> OLD.rekognition_requests_count THEN
         RAISE EXCEPTION 'Policy error: cannot update rekognition calls used';
     END IF;
     
@@ -131,7 +131,7 @@ BEGIN
         images_count_limit = NEW.images_count_limit,
         image_size_limit_bytes = NEW.image_size_limit_bytes,
         representative_image = NEW.representative_image,
-        rekognition_calls_limit = NEW.rekognition_calls_limit
+        rekognition_requests_limit = NEW.rekognition_requests_limit
     WHERE event_id = OLD.event_id;
     
     RETURN NEW;
@@ -188,10 +188,10 @@ CREATE TRIGGER trg_settings_ctx_update
     INSTEAD OF UPDATE ON settings_ctx
     FOR EACH ROW EXECUTE FUNCTION trg_settings_ctx_update();
 
-DROP TRIGGER IF EXISTS trg_rekognition_usaged_ctx_insert ON rekognition_usaged_ctx;
-CREATE TRIGGER trg_rekognition_usaged_ctx_insert
-    INSTEAD OF INSERT ON rekognition_usaged_ctx
-    FOR EACH ROW EXECUTE FUNCTION trg_rekognition_usaged_ctx_insert();
+DROP TRIGGER IF EXISTS trg_rekognition_requests_ctx_insert ON rekognition_requests_ctx;
+CREATE TRIGGER trg_rekognition_requests_ctx_insert
+    INSTEAD OF INSERT ON rekognition_requests_ctx
+    FOR EACH ROW EXECUTE FUNCTION trg_rekognition_requests_ctx_insert();
 
 DROP TRIGGER IF EXISTS trg_events_ctx_insert ON events_ctx;
 CREATE TRIGGER trg_events_ctx_insert

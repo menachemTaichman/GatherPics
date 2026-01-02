@@ -138,7 +138,7 @@ export default function SettingsPage() {
       setSettingsDraft({
         image_size_limit_bytes: loadedSettings.image_size_limit_bytes ?? 0,
         images_count_limit: loadedSettings.images_count_limit ?? 0,
-        rekognition_calls_limit: loadedSettings.rekognition_calls_limit ?? 0,
+        rekognition_requests_limit: loadedSettings.rekognition_requests_limit ?? 0,
         min_rank_to_create_event: loadedSettings.min_rank_to_create_event ?? 0,
       });
     } catch (err) {
@@ -157,7 +157,7 @@ export default function SettingsPage() {
     return (
       settingsDraft.image_size_limit_bytes !== (settings.image_size_limit_bytes ?? 0) ||
       settingsDraft.images_count_limit !== (settings.images_count_limit ?? 0) ||
-      settingsDraft.rekognition_calls_limit !== (settings.rekognition_calls_limit ?? 0) ||
+      settingsDraft.rekognition_requests_limit !== (settings.rekognition_requests_limit ?? 0) ||
       settingsDraft.min_rank_to_create_event !== (settings.min_rank_to_create_event ?? 0)
     );
   }, [settings, settingsDraft]);
@@ -185,8 +185,8 @@ export default function SettingsPage() {
       if (settingsDraft.images_count_limit !== (settings?.images_count_limit ?? 0)) {
         updateData.images_count_limit = settingsDraft.images_count_limit;
       }
-      if (settingsDraft.rekognition_calls_limit !== (settings?.rekognition_calls_limit ?? 0)) {
-        updateData.rekognition_calls_limit = settingsDraft.rekognition_calls_limit;
+      if (settingsDraft.rekognition_requests_limit !== (settings?.rekognition_requests_limit ?? 0)) {
+        updateData.rekognition_requests_limit = settingsDraft.rekognition_requests_limit;
       }
       if (settingsDraft.min_rank_to_create_event !== (settings?.min_rank_to_create_event ?? 0)) {
         updateData.min_rank_to_create_event = settingsDraft.min_rank_to_create_event;
@@ -207,7 +207,7 @@ export default function SettingsPage() {
       setSettingsDraft({
         image_size_limit_bytes: updatedSettings.image_size_limit_bytes ?? 0,
         images_count_limit: updatedSettings.images_count_limit ?? 0,
-        rekognition_calls_limit: updatedSettings.rekognition_calls_limit ?? 0,
+        rekognition_requests_limit: updatedSettings.rekognition_requests_limit ?? 0,
         min_rank_to_create_event: updatedSettings.min_rank_to_create_event ?? 0,
       });
     } catch (err) {
@@ -224,7 +224,7 @@ export default function SettingsPage() {
     setSettingsDraft({
       image_size_limit_bytes: settings.image_size_limit_bytes ?? 0,
       images_count_limit: settings.images_count_limit ?? 0,
-      rekognition_calls_limit: settings.rekognition_calls_limit ?? 0,
+      rekognition_requests_limit: settings.rekognition_requests_limit ?? 0,
       min_rank_to_create_event: settings.min_rank_to_create_event ?? 0,
     });
     setError('');
@@ -318,8 +318,8 @@ export default function SettingsPage() {
           return (item.event_label || item.event_id || '').toString().toLowerCase();
         case 'profile_label':
           return (item.profile_label || item.profile_id || '').toString().toLowerCase();
-        case 'calls_count':
-          return item.calls_count || 0;
+        case 'requests_count':
+          return item.requests_count || 0;
         default:
           return '';
       }
@@ -791,13 +791,13 @@ export default function SettingsPage() {
       ),
     },
     {
-      key: 'calls_count',
+      key: 'requests_count',
       label: t('settings.calls'),
       sortable: true,
       align: 'right',
       renderCell: (usage) => (
         <span className="font-medium text-gray-900">
-          {(usage.calls_count || 0).toLocaleString()}
+          {(usage.requests_count || 0).toLocaleString()}
         </span>
       ),
     },
@@ -1152,8 +1152,8 @@ export default function SettingsPage() {
                       <input
                         type="number"
                         min="0"
-                        value={settingsDraft.rekognition_calls_limit ?? ''}
-                        onChange={(e) => handleFieldChange('rekognition_calls_limit', e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
+                        value={settingsDraft.rekognition_requests_limit ?? ''}
+                        onChange={(e) => handleFieldChange('rekognition_requests_limit', e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="0"
                       />
@@ -1267,7 +1267,7 @@ export default function SettingsPage() {
                         ? t('settings.noUsageDataMatchesFilters')
                         : t('settings.noRekognitionUsageDataAvailable')
                     }}
-                    getRowKey={(usage) => usage.usage_id || `usage-${usage.created_at}`}
+                    getRowKey={(usage) => usage.rekognition_request_id || `usage-${usage.created_at}`}
                   />
                 </div>
                 )}

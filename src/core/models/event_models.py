@@ -21,7 +21,7 @@ class EventModels(BaseModels):
             'uploads',
             'access_requests',
             'events_profiles',
-            'rekognition_usaged',
+            'rekognition_requests',
             'errors',
             'audit_logs',
         ]
@@ -126,38 +126,54 @@ class EventModels(BaseModels):
         return valid_child_ids, detached_parents
 
     # -------- events helpers --------
-    def add_rekognition_calls(self, count: int):
-        """Add rekognition calls to the event.
+    def ensure_rekognition_requests_limit(self, count: int) -> bool:
+        """Ensure rekognition requests limit.
+        Raises PolicyError if limit is reached.
+        """
+        event_data = self.get_entities('events', self.db.event_id, include_details=True)
+        requests_limit = event_data['rekognition_requests_limit']
+        requests_used = event_data['rekognition_requests_count']
+        if requests_used + count > requests_limit:
+            raise PolicyError(f"Policy error: cannot add more rekognition requests than the limit. Current: {requests_used}, Limit: {requests_limit}, Attempting to add: {count}")
+
+    def edit_rekognition_requests(self, count: int, rekognition_request_id: int | None = None, request_type: str = 'DETECT_FACES', details: dict = {}) -> int:
+        """Edit rekognition requests of the event.
         Args:
-            count: number of rekognition calls to add
+            count: number of rekognition requests to add or subtract (positive or negative number)
+            rekognition_request_id: rekognition request id (if not provided, a new one will be created)
+            request_type: type of the rekognition request (DETECT_FACES or FETCH_FACE_MATCHES)
+            details: details to add to the rekognition request for new rekognition request
+        Returns:
+            rekognition request id
         """
         if not self.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Permission denied: cannot upload and delete images")
         
-        event_data = self.get_entities('events', self.db.event_id, include_details=True)
-        calls_limit = event_data['rekognition_calls_limit']
-        calls_used = event_data['rekognition_calls_used']
-        if calls_used + count > calls_limit:
-            raise PolicyError("Policy error: cannot add more rekognition calls than the limit")
+        self.ensure_rekognition_requests_limit(count)
 
-        query = f"""
-            UPDATE events
-            SET rekognition_calls_used = rekognition_calls_used + %s
-            WHERE event_id = %s
-        """
-        self.db.execute_query(query, (count, self.db.event_id))
-        
         # Track rekognition usage
+        event_data = self.get_entities('events', self.db.event_id)
         event_label = event_data.get('name', '')
         profile_id = self.db.profile_context.get('profile_id')
         profile_label = self.get_entities('current_profile', profile_id).get('label', '')
-        self.add('rekognition_usaged', {
-            'event_id': self.db.event_id,
-            'event_label': event_label,
-            'profile_id': profile_id,
-            'profile_label': profile_label,
-            'calls_count': count,
-        })
+
+        if rekognition_request_id:
+            self.edit('rekognition_requests', rekognition_request_id, {
+                'requests_count': count,
+            })
+
+        else:
+            rekognition_request_id = self.add('rekognition_requests', {
+                'event_id': self.db.event_id,
+                'event_label': event_label,
+                'profile_id': profile_id,
+                'profile_label': profile_label,
+                'requests_count': count,
+                'request_type': request_type,
+                'details': details,
+            })
+
+        return rekognition_request_id
 
     # -------- Moments helpers --------
     def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:
@@ -428,7 +444,7 @@ class EventModels(BaseModels):
         return result
 
     # -------- Images processing helpers --------
-    def get_upload_images(self, upload_id: int) -> list[dict]:
+    def get_upload_images(self, upload_id: int, *, status: str | None = None, exclude_status: bool = False) -> list[dict] | list[str]:
         """Get upload images.
         
         WARNING: This method queries the raw 'images' table directly and is NOT protected
@@ -436,15 +452,32 @@ class EventModels(BaseModels):
         
         Args:
             upload_id: upload id
+            status: status of the images to get (READY, PROCESSING, COMPLETED, FAILED)
+            exclude_status: if True, exclude the status from the query, if False, include the status in the query
         Returns:
             list of images dicts with image id, label and status
+            if status is provided, return list of image_ids
         """
-        query = f"""
-            SELECT image_id, label, status
-            FROM images
-            WHERE upload_id = %s;
-        """
-        result = self.db.execute_query(query, (upload_id,), return_format=ReturnFormat.LIST_DICTS)
+        if status:
+            exclude_clause = '<>' if exclude_status else '='
+            query = f"""
+                SELECT image_id
+                FROM images
+                WHERE upload_id = %s
+                AND status {exclude_clause} %s
+            """
+            params = (upload_id, status)
+            return_format = ReturnFormat.LIST_VALUES
+        else:
+            query = f"""
+                SELECT image_id, label, status
+                FROM images
+                WHERE upload_id = %s
+            """
+            params = (upload_id,)
+            return_format = ReturnFormat.LIST_DICTS
+        
+        result = self.db.execute_query(query, params, return_format=return_format)
         return result
 
     def update_image_status(self, image_ids: str | list[str], status: str):

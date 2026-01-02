@@ -162,9 +162,9 @@ class TestDBPerformance(unittest.TestCase):
                     cursor.execute("DELETE FROM events_profiles WHERE event_id = %s", (cls.EVENT_ID,))
                     print(f"  Deleted {cursor.rowcount} events_profiles")
                     
-                    # Delete rekognition_usaged (references events)
-                    cursor.execute("DELETE FROM rekognition_usaged WHERE event_id = %s", (cls.EVENT_ID,))
-                    print(f"  Deleted {cursor.rowcount} rekognition_usaged")
+                    # Delete rekognition_requests (references events)
+                    cursor.execute("DELETE FROM rekognition_requests WHERE event_id = %s", (cls.EVENT_ID,))
+                    print(f"  Deleted {cursor.rowcount} rekognition_requests")
                     
                     # Delete profiles where restricted_to_event = event_id
                     cursor.execute("DELETE FROM profiles WHERE restricted_to_event = %s", (cls.EVENT_ID,))

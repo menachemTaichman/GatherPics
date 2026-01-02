@@ -56,7 +56,7 @@ function createEmptyEventDraft(uploadsLimits = null) {
     is_public: false,
     images_count_limit: uploadsLimits?.images_count_limit ?? 0,
     image_size_limit_bytes: uploadsLimits?.image_size_limit_bytes ?? 0,
-    rekognition_calls_limit: uploadsLimits?.rekognition_calls_limit ?? 0,
+    rekognition_requests_limit: uploadsLimits?.rekognition_requests_limit ?? 0,
   };
 }
 
@@ -84,7 +84,7 @@ export default function EditEventModal({
   const [limitErrors, setLimitErrors] = useState({
     images_count_limit: null,
     image_size_limit_bytes: null,
-    rekognition_calls_limit: null,
+    rekognition_requests_limit: null,
   });
   const eventId = useEventId(isCreateMode ? null : eventUrl);
   const baseEvent = useEventGeneralById(eventId);
@@ -187,10 +187,10 @@ export default function EditEventModal({
         evt.image_size_limit_bytes !== null && evt.image_size_limit_bytes !== undefined
           ? Number(evt.image_size_limit_bytes)
           : uploadsLimits?.image_size_limit_bytes ?? 0,
-      rekognition_calls_limit:
-        evt.rekognition_calls_limit !== null && evt.rekognition_calls_limit !== undefined
-          ? Number(evt.rekognition_calls_limit)
-          : uploadsLimits?.rekognition_calls_limit ?? 0,
+      rekognition_requests_limit:
+        evt.rekognition_requests_limit !== null && evt.rekognition_requests_limit !== undefined
+          ? Number(evt.rekognition_requests_limit)
+          : uploadsLimits?.rekognition_requests_limit ?? 0,
     };
   }, [uploadsLimits]);
 
@@ -210,7 +210,7 @@ export default function EditEventModal({
     setLimitErrors({
       images_count_limit: null,
       image_size_limit_bytes: null,
-      rekognition_calls_limit: null,
+      rekognition_requests_limit: null,
     });
   }, [baseEvent, buildEventDraft, isCreateMode, uploadsLimits]);
 
@@ -317,8 +317,8 @@ export default function EditEventModal({
     const originalImagesLimit = baseEvent.images_count_limit ?? null;
     const draftSizeLimit = eventDraft.image_size_limit_bytes ?? null;
     const originalSizeLimit = baseEvent.image_size_limit_bytes ?? null;
-    const draftCallsLimit = eventDraft.rekognition_calls_limit ?? null;
-    const originalCallsLimit = baseEvent.rekognition_calls_limit ?? null;
+    const draftCallsLimit = eventDraft.rekognition_requests_limit ?? null;
+    const originalCallsLimit = baseEvent.rekognition_requests_limit ?? null;
     return (
       draftName !== originalName ||
       draftUrl !== originalUrl ||
@@ -448,9 +448,9 @@ export default function EditEventModal({
       if (maxLimitBytes != null && numValue > maxLimitBytes) {
         return { valid: false, error: `${t('editEventModal.maximumAllowed')} ${formatBytes(maxLimitBytes)}` };
       }
-    } else if (field === 'rekognition_calls_limit') {
-      const minLimit = !isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0;
-      const maxLimit = uploadsLimits?.rekognition_calls_limit;
+    } else if (field === 'rekognition_requests_limit') {
+      const minLimit = !isCreateMode && baseEvent?.rekognition_requests_count != null ? baseEvent.rekognition_requests_count : 0;
+      const maxLimit = uploadsLimits?.rekognition_requests_limit;
       if (numValue < minLimit) {
         return { valid: false, error: `${t('editEventModal.minimumCalls', { count: minLimit.toLocaleString() })}` };
       }
@@ -460,7 +460,7 @@ export default function EditEventModal({
     }
     
     return { valid: true, error: null };
-  }, [uploadsLimits, isCreateMode, baseEvent?.images_count, baseEvent?.rekognition_calls_used, t]);
+  }, [uploadsLimits, isCreateMode, baseEvent?.images_count, baseEvent?.rekognition_requests_count, t]);
 
   const handleEventLimitChange = useCallback((field, value) => {
     setEventDraft((prev) => {
@@ -491,11 +491,11 @@ export default function EditEventModal({
       if (!prev) return prev;
       // Allow free typing - store the value as-is (could be string or number)
       const numValue = value === '' ? null : (typeof value === 'string' ? value : Number(value));
-      return { ...prev, rekognition_calls_limit: numValue };
+      return { ...prev, rekognition_requests_limit: numValue };
     });
     
     // Clear error when user starts typing
-    setLimitErrors((prev) => ({ ...prev, rekognition_calls_limit: null }));
+    setLimitErrors((prev) => ({ ...prev, rekognition_requests_limit: null }));
   }, []);
 
   const handleLimitBlur = useCallback((field, value) => {
@@ -540,10 +540,10 @@ export default function EditEventModal({
     } else {
       const numValue = typeof value === 'string' ? (value === '' ? null : Number(value)) : value;
       if (numValue === null || numValue === '') {
-        const maxLimit = uploadsLimits?.[field === 'images_count_limit' ? 'images_count_limit' : 'rekognition_calls_limit'];
+        const maxLimit = uploadsLimits?.[field === 'images_count_limit' ? 'images_count_limit' : 'rekognition_requests_limit'];
         const minLimit = field === 'images_count_limit' 
           ? (!isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0)
-          : (!isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0);
+          : (!isCreateMode && baseEvent?.rekognition_requests_count != null ? baseEvent.rekognition_requests_count : 0);
         const correctedValue = maxLimit ?? minLimit;
         setEventDraft((prev) => {
           if (!prev) return prev;
@@ -562,10 +562,10 @@ export default function EditEventModal({
         setLimitErrors((prev) => ({ ...prev, [field]: null }));
       } else {
         // Clamp to valid range
-        const maxLimit = uploadsLimits?.[field === 'images_count_limit' ? 'images_count_limit' : 'rekognition_calls_limit'];
+        const maxLimit = uploadsLimits?.[field === 'images_count_limit' ? 'images_count_limit' : 'rekognition_requests_limit'];
         const minLimit = field === 'images_count_limit' 
           ? (!isCreateMode && baseEvent?.images_count != null ? baseEvent.images_count : 0)
-          : (!isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0);
+          : (!isCreateMode && baseEvent?.rekognition_requests_count != null ? baseEvent.rekognition_requests_count : 0);
         let correctedValue = numValue;
         if (correctedValue < minLimit) {
           correctedValue = minLimit;
@@ -580,7 +580,7 @@ export default function EditEventModal({
         setLimitErrors((prev) => ({ ...prev, [field]: validation.error }));
       }
     }
-  }, [validateLimit, uploadsLimits, isCreateMode, baseEvent?.images_count, baseEvent?.rekognition_calls_used]);
+  }, [validateLimit, uploadsLimits, isCreateMode, baseEvent?.images_count, baseEvent?.rekognition_requests_count]);
 
   const handleEventSave = useCallback(async (source = 'ui') => {
     if (!eventDraft) return;
@@ -635,10 +635,10 @@ export default function EditEventModal({
       return;
     }
     
-    if (permissions.has_settings && eventDraft.rekognition_calls_limit != null) {
-      const callsLimitValidation = validateLimit('rekognition_calls_limit', eventDraft.rekognition_calls_limit);
+    if (permissions.has_settings && eventDraft.rekognition_requests_limit != null) {
+      const callsLimitValidation = validateLimit('rekognition_requests_limit', eventDraft.rekognition_requests_limit);
       if (!callsLimitValidation.valid) {
-        setLimitErrors((prev) => ({ ...prev, rekognition_calls_limit: callsLimitValidation.error }));
+        setLimitErrors((prev) => ({ ...prev, rekognition_requests_limit: callsLimitValidation.error }));
         setEventError(callsLimitValidation.error);
         return;
       }
@@ -654,9 +654,9 @@ export default function EditEventModal({
       images_count_limit: Number(eventDraft.images_count_limit),
       image_size_limit_bytes: imageSizeLimitBytes,
     };
-    // Only include rekognition_calls_limit if user has settings permission
-    if (permissions.has_settings && eventDraft.rekognition_calls_limit != null) {
-      payload.rekognition_calls_limit = eventDraft.rekognition_calls_limit;
+    // Only include rekognition_requests_limit if user has settings permission
+    if (permissions.has_settings && eventDraft.rekognition_requests_limit != null) {
+      payload.rekognition_requests_limit = eventDraft.rekognition_requests_limit;
     }
     try {
       let response;
@@ -706,7 +706,7 @@ export default function EditEventModal({
   const hasLimitErrors = useMemo(() => {
     return limitErrors.images_count_limit != null || 
            limitErrors.image_size_limit_bytes != null || 
-           limitErrors.rekognition_calls_limit != null;
+           limitErrors.rekognition_requests_limit != null;
   }, [limitErrors]);
 
   const isDeleting = useMemo(() => baseEvent?.status === 'DELETING', [baseEvent?.status]);
@@ -1120,34 +1120,34 @@ export default function EditEventModal({
                                 <input
                                   type="number"
                                   disabled={isDeleting}
-                                  min={!isCreateMode && baseEvent?.rekognition_calls_used != null ? baseEvent.rekognition_calls_used : 0}
-                                  max={uploadsLimits?.rekognition_calls_limit ?? undefined}
-                                  value={eventDraft.rekognition_calls_limit ?? ''}
+                                  min={!isCreateMode && baseEvent?.rekognition_requests_count != null ? baseEvent.rekognition_requests_count : 0}
+                                  max={uploadsLimits?.rekognition_requests_limit ?? undefined}
+                                  value={eventDraft.rekognition_requests_limit ?? ''}
                                   onChange={(e) => {
                                     const value = e.target.value === '' ? '' : e.target.value;
                                     handleEventCallsLimitChange(value);
                                   }}
                                   onBlur={(e) => {
-                                    handleLimitBlur('rekognition_calls_limit', e.target.value);
+                                    handleLimitBlur('rekognition_requests_limit', e.target.value);
                                   }}
                                   dir={isRTL ? 'rtl' : 'ltr'}
                                   className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-transparent focus:ring-2 ${
                                     isDeleting
                                       ? 'bg-gray-100 cursor-not-allowed opacity-60'
-                                      : limitErrors.rekognition_calls_limit
+                                      : limitErrors.rekognition_requests_limit
                                       ? 'border-red-500 focus:ring-red-500'
                                       : 'border-gray-300 focus:ring-blue-500'
                                   }`}
-                                  placeholder={uploadsLimits?.rekognition_calls_limit?.toLocaleString() ?? t('editEventModal.enterMaxCalls')}
+                                  placeholder={uploadsLimits?.rekognition_requests_limit?.toLocaleString() ?? t('editEventModal.enterMaxCalls')}
                                 />
-                                {limitErrors.rekognition_calls_limit ? (
-                                  <p className="mt-1 text-xs text-red-600">{limitErrors.rekognition_calls_limit}</p>
+                                {limitErrors.rekognition_requests_limit ? (
+                                  <p className="mt-1 text-xs text-red-600">{limitErrors.rekognition_requests_limit}</p>
                                 ) : (
                                   <p className="mt-1 text-xs text-gray-500">
-                                    {!isCreateMode && baseEvent?.rekognition_calls_used != null
-                                      ? `${t('editEventModal.minimumCalls', { count: baseEvent.rekognition_calls_used.toLocaleString() })} ${uploadsLimits?.rekognition_calls_limit != null ? t('editEventModal.maximumCalls', { max: uploadsLimits.rekognition_calls_limit.toLocaleString() }) : ''}`
-                                      : uploadsLimits?.rekognition_calls_limit != null
-                                      ? t('editEventModal.maximumAllowedCalls', { max: uploadsLimits.rekognition_calls_limit.toLocaleString() })
+                                    {!isCreateMode && baseEvent?.rekognition_requests_count != null
+                                      ? `${t('editEventModal.minimumCalls', { count: baseEvent.rekognition_requests_count.toLocaleString() })} ${uploadsLimits?.rekognition_requests_limit != null ? t('editEventModal.maximumCalls', { max: uploadsLimits.rekognition_requests_limit.toLocaleString() }) : ''}`
+                                      : uploadsLimits?.rekognition_requests_limit != null
+                                      ? t('editEventModal.maximumAllowedCalls', { max: uploadsLimits.rekognition_requests_limit.toLocaleString() })
                                       : t('editEventModal.enterMaxCalls')}
                                   </p>
                                 )}
@@ -1253,15 +1253,15 @@ export default function EditEventModal({
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-gray-600">{t('editEventModal.callsLimit')}</p>
-                                  {baseEvent?.rekognition_calls_limit != null && (
+                                  {baseEvent?.rekognition_requests_limit != null && (
                                     <p className="text-xs text-gray-500">
-                                      {t('editEventModal.maximumCalls', { max: baseEvent.rekognition_calls_limit.toLocaleString() })}
+                                      {t('editEventModal.maximumCalls', { max: baseEvent.rekognition_requests_limit.toLocaleString() })}
                                     </p>
                                   )}
                                 </div>
                               </div>
                               <span className="text-base font-semibold text-blue-600">
-                                {baseEvent?.rekognition_calls_used ?? 0}
+                                {baseEvent?.rekognition_requests_count ?? 0}
                               </span>
                             </div>
                           </div>

@@ -80,7 +80,7 @@ FIELD_VALIDATORS = {
     'notification_id': TypeAdapter(Annotated[int, Field(ge=0)]),
     'feedback_id': TypeAdapter(Annotated[int, Field(ge=0)]),
     'access_request_id': TypeAdapter(Annotated[int, Field(ge=0)]),
-    'usage_id': TypeAdapter(Annotated[int, Field(ge=0)]),
+    'rekognition_request_id': TypeAdapter(Annotated[int, Field(ge=0)]),
     'id': TypeAdapter(Annotated[int, Field(ge=0)]),
 
     # String fields with length constraints
@@ -138,8 +138,8 @@ FIELD_VALIDATORS = {
     'image_size_limit_bytes': TypeAdapter(Annotated[int, Field(ge=0)]),
     'images_count_limit': TypeAdapter(Annotated[int, Field(ge=0)]),
     'min_rank_to_create_event': TypeAdapter(Annotated[int, Field(ge=0)]),
-    'rekognition_calls_limit': TypeAdapter(Annotated[int, Field(ge=0)]),
-    'rekognition_calls_used': TypeAdapter(Annotated[int, Field(ge=0)]),
+    'rekognition_requests_limit': TypeAdapter(Annotated[int, Field(ge=0)]),
+    'rekognition_requests_count': TypeAdapter(Annotated[int, Field(ge=0)]),
     
     # Boolean fields
     'is_public': TypeAdapter(bool),

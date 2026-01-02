@@ -1,8 +1,13 @@
 import os
+import traceback
 from PIL import Image
 import boto3
 from io import BytesIO
 from collections import defaultdict
+import concurrent.futures
+import threading
+
+from src.core.errors import log_error
 
 class AWSRekognitionHelper:
     def __init__(self, event_id: str, storage_backend=None):
@@ -181,6 +186,89 @@ class FaceUtils:
         faces = [(face['Face']['FaceId'], self.bbox_conv(face['Face']['BoundingBox'])) for face in face_details]
         return faces
 
+    def fetch_face_matches(
+        self,
+        face_ids: list[str],
+        similarity_threshold: int = 90,
+        max_matches_faces: int = 100,
+        max_workers: int = 50,
+        reduce_calls: bool = False,
+        transitiviy_threshold: float = 98.0
+    ) -> dict[str, list[dict]]:
+        """
+        Fetch face matches from AWS Rekognition for multiple faces in parallel.
+        This method only fetches data from AWS and returns the raw results.
+        
+        Args:
+            face_ids: list of AWS FaceIds to search for matches
+            similarity_threshold: similarity threshold for Rekognition search_similar_faces
+            max_matches_faces: maximum number of matches to retrieve per face
+            max_workers: maximum number of parallel threads for processing
+            reduce_calls: reduce the number of calls to Rekognition search_similar_faces
+            transitiviy_threshold: when reduce_calls=True, matches with similarity above this 
+                                 threshold will be skipped from separate processing
+                                 (assuming that the similarity above this threshold is transitive)
+        
+        Returns:
+            Dictionary mapping face_id to list of match dictionaries (raw AWS responses)
+        """
+        # Shared variables for managing skips when reduce_calls=True
+        processed_faces = set()
+        processed_lock = threading.Lock()
+        results = {}
+        results_lock = threading.Lock()
+
+        def process_single_face(face_id):
+            if reduce_calls:
+                with processed_lock:
+                    if face_id in processed_faces:
+                        return face_id, None
+
+            try:
+                matches = self.rek_helper.search_similar_faces(
+                    face_id,
+                    threshold=similarity_threshold,
+                    max_faces=max_matches_faces
+                )
+            except Exception as e:
+                log_error(f"Failed to search face {face_id}: {e}", "FaceSearchError", traceback.format_exc())
+                return face_id, []
+
+            # Update the processed set with results
+            if matches:
+                with processed_lock:
+                    # Mark ourselves as processed
+                    processed_faces.add(face_id)
+                    
+                    for match in matches:
+                        similarity = match.get('Similarity', 0)
+                        match_id = match['Face']['FaceId']
+                        
+                        # Transitivity trick: skip only very high confidence matches
+                        # when reduce_calls is enabled
+                        if reduce_calls and similarity > transitiviy_threshold:
+                            processed_faces.add(match_id)
+
+            return face_id, matches
+
+        # Process faces in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_face = {executor.submit(process_single_face, fid): fid for fid in face_ids}
+            
+            for future in concurrent.futures.as_completed(future_to_face):
+                face_id, matches = future.result()
+                
+                # Skip if we skipped this face (matches is None)
+                if matches is None:
+                    continue
+                
+                # Store results thread-safely
+                with results_lock:
+                    results[face_id] = matches
+
+        return results
+
+    # TODO: remove this method
     def cluster_faces(
         self,
         face_ids: list[str],
