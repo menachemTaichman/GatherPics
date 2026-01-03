@@ -394,7 +394,7 @@ ids = {
 
 # test_timeit()
 
-result = event.models.get_current_event_profile()
+result = event.models.get_unique_labels('images', ['image1', 'image2', 'image3'], suffix='.jpg', separator='.', brackets=True, event_id=event_id)
 print(result)
 print('--------------------------------')
 

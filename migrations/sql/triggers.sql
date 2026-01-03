@@ -25,6 +25,8 @@ BEGIN
         profile_id,
         profile_label,
         requests_count,
+        request_type,
+        details,
         created_at
     )
     VALUES (
@@ -33,6 +35,8 @@ BEGIN
         NEW.profile_id,
         NEW.profile_label,
         NEW.requests_count,
+        NEW.request_type,
+        NEW.details,
         COALESCE(NEW.created_at, CURRENT_TIMESTAMP)
     )
     RETURNING rekognition_request_id INTO new_rekognition_request_id;
@@ -40,6 +44,27 @@ BEGIN
     NEW.rekognition_request_id := new_rekognition_request_id;
     
     RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function for rekognition_requests_ctx UPDATE
+CREATE OR REPLACE FUNCTION trg_rekognition_requests_ctx_update()
+RETURNS TRIGGER AS $$
+DECLARE
+    updated_rekognition_request_id INTEGER;
+BEGIN
+    UPDATE rekognition_requests SET
+        requests_count = NEW.requests_count,
+        request_type = NEW.request_type,
+        details = NEW.details
+    WHERE rekognition_request_id = OLD.rekognition_request_id
+    RETURNING rekognition_request_id INTO updated_rekognition_request_id;
+    
+    IF updated_rekognition_request_id IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
+    
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -192,6 +217,11 @@ DROP TRIGGER IF EXISTS trg_rekognition_requests_ctx_insert ON rekognition_reques
 CREATE TRIGGER trg_rekognition_requests_ctx_insert
     INSTEAD OF INSERT ON rekognition_requests_ctx
     FOR EACH ROW EXECUTE FUNCTION trg_rekognition_requests_ctx_insert();
+
+DROP TRIGGER IF EXISTS trg_rekognition_requests_ctx_update ON rekognition_requests_ctx;
+CREATE TRIGGER trg_rekognition_requests_ctx_update
+    INSTEAD OF UPDATE ON rekognition_requests_ctx
+    FOR EACH ROW EXECUTE FUNCTION trg_rekognition_requests_ctx_update();
 
 DROP TRIGGER IF EXISTS trg_events_ctx_insert ON events_ctx;
 CREATE TRIGGER trg_events_ctx_insert

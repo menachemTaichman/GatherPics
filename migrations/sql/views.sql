@@ -735,7 +735,7 @@ CREATE OR REPLACE VIEW uploads_ext AS
 WITH
     images_stats AS (
         SELECT
-            uc.upload_id,
+            ic.upload_id,
             COUNT(*) AS images_count
         FROM images_ctx ic
         GROUP BY ic.upload_id
@@ -944,7 +944,7 @@ moments_stats AS (
 rekognition_stats AS (
     SELECT
         rr.event_id,
-        SUM(rr.requests_count)
+        SUM(rr.requests_count) AS rekognition_requests_count
     FROM rekognition_requests rr
     INNER JOIN events_profiles ep ON
         rr.event_id = ep.event_id
@@ -963,13 +963,14 @@ SELECT
     COALESCE(img_stats.high_quality_size, 0) AS total_high_quality_size,
     COALESCE(img_stats.total_size, 0) + COALESCE(fs.size, 0) AS total_size,
     COALESCE(img_stats.max_image_size, 0) AS max_image_size,
-    COALESCE(rekognition_stats, 0) AS rekognition_requests_count
+    COALESCE(rs.rekognition_requests_count, 0) AS rekognition_requests_count
 FROM events_ctx ec
 LEFT JOIN images_stats_base isb ON ec.event_id = isb.event_id
 LEFT JOIN images_stats img_stats ON ec.event_id = img_stats.event_id
 LEFT JOIN faces_stats fs ON ec.event_id = fs.event_id
 LEFT JOIN albums_stats albums_stats_alias ON ec.event_id = albums_stats_alias.event_id
-LEFT JOIN moments_stats ms ON ec.event_id = ms.event_id;
+LEFT JOIN moments_stats ms ON ec.event_id = ms.event_id
+LEFT JOIN rekognition_stats rs ON ec.event_id = rs.event_id;
 
 -- current profile views
 CREATE OR REPLACE VIEW groups_to_access_requests_ctx AS

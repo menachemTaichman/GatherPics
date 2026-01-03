@@ -438,7 +438,7 @@ class EventModels(BaseModels):
                 'profile_label': profile_label,
                 'requests_count': count,
                 'request_type': request_type,
-                'details': details,
+                'details': self.db.serialize_value(dict, details),
             })
 
         return rekognition_request_id
@@ -590,11 +590,21 @@ class EventModels(BaseModels):
             upload id
         """
         if not override_errors_field and 'errors' in data:
-            # Append to existing errors
-            existing_errors = self.get_entities('uploads', upload_id).get('errors', [])
-            data['errors'] = existing_errors + data.get('errors', [])
+            errors = data.pop('errors')
+            if isinstance(errors, str):
+                errors = [errors]
+
+            query = f"""
+                UPDATE uploads SET
+                errors = COALESCE(errors, ARRAY[]::TEXT[]) || %s::TEXT[]
+                WHERE upload_id = %s
+            """
+            self.db.execute_query(query, (errors, upload_id))
         
-        return self.edit('uploads', upload_id, data)
+        if data:
+            return self.edit('uploads', upload_id, data)
+        
+        return upload_id
 
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:

@@ -160,7 +160,8 @@ class Event():
             
             filenames.append(filename)
             image_names.append(image_name)
-            image_exts.append(image_ext)
+            # Remove leading dot from extension since separator='.' will add it
+            image_exts.append(image_ext.lstrip('.'))
             file_sizes.append(file_size)
         
         # Generate all unique labels at once (single DB query instead of N queries)
@@ -452,7 +453,7 @@ class Event():
                     WITH face_ids AS (
                         SELECT DISTINCT unnest(%s::uuid[]) AS face_id
                     )
-                    SELECT face_id, group_id FROM faces f
+                    SELECT f.face_id, f.group_id FROM faces f
                     INNER JOIN face_ids fi ON f.face_id = fi.face_id
                 """
                 rows = self.models.db.execute_query(query, (existing_faces,), return_format=ReturnFormat.LIST_TUPLES)
@@ -537,7 +538,7 @@ class Event():
             WITH face_ids AS (
                 SELECT DISTINCT unnest(%s::uuid[]) AS face_id
             )
-            SELECT face_id, raw_matches 
+            SELECT fm.face_id, fm.raw_matches 
             FROM face_matches_raw fm
             INNER JOIN face_ids fi ON fm.face_id = fi.face_id;
         """
@@ -559,8 +560,7 @@ class Event():
             number of deleted images
         """
         images = self.models.get_upload_images(upload_id, status='READY', exclude_status=True)
-        if images:
-            self.delete_images(images)
+        self.delete_images(images, upload_id=upload_id)
 
         return len(images)
 
@@ -576,8 +576,16 @@ class Event():
         """
         self.models.db.execute_query(query, (upload_id,))
 
-    def delete_images(self, image_ids: list[str]) -> tuple[list[str], dict]:
-        """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value"""
+    def delete_images(self, image_ids: list[str], upload_id: int | None = None) -> tuple[list[str], dict]:
+        """Delete images and return list of deleted groups and dict of parents affected with parent entity as key and parent ids as value
+        Args:
+            image_ids: list of image ids
+            upload_id: upload id (optional). if provided, the upload will be also deleted.
+
+        Returns:
+            list of deleted groups
+            dict of parents affected with parent entity as key and parent ids as value
+        """
         if not self.models.db.event_profile_context['can_upload_and_delete_images']:
             raise Forbidden("Profile not allowed to delete images")
 
@@ -591,7 +599,7 @@ class Event():
         self.models.update_image_status(image_ids, 'DELETING')
         
         from src.backend.tasks import delete_images_task
-        delete_images_task.delay(self.event_id, actor_profile_id, image_ids)
+        delete_images_task.delay(self.event_id, actor_profile_id, image_ids, upload_id=upload_id)
         
         deleted_groups = []
         for group_id in parents.get('groups', []):

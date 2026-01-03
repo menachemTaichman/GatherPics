@@ -254,17 +254,19 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                     align: 'right',
                     renderCell: (upload) => (
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteUpload(upload);
-                          }}
-                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                          title={t('uploadsGallery.deleteUpload')}
-                          aria-label={t('uploadsGallery.deleteUpload')}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
+                        {upload.is_deletable !== false && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteUpload(upload);
+                            }}
+                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                            title={t('uploadsGallery.deleteUpload')}
+                            aria-label={t('uploadsGallery.deleteUpload')}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        )}
                       </div>
                     ),
                   },

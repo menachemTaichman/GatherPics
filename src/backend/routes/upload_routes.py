@@ -374,7 +374,6 @@ def delete_upload(event_id, upload_id):
         return jsonify({"error": f"Upload {upload_id} not found or not accessible"}), 404
     
     event.delete_unready_images_in_upload(upload_id)
-    event.models.delete('uploads', upload_id)
     changes = [{
         'type': 'REMOVE',
         'entity': 'upload',

@@ -1250,7 +1250,11 @@ export default function UploadFormModal({
                           : 'bg-blue-100 text-blue-700'
                       }`}>
                         {existingUploadStatus === 'COMPLETED' ? t('upload.successfullyProcessed') : 
-                         existingUploadStatus === 'FAILED' ? t('upload.imageFailedToProcess') :
+                         existingUploadStatus === 'FAILED' ? (
+                           failedImagesCount > 0 
+                             ? t('upload.imageFailedToProcess')
+                             : t('upload.uploadFailed')
+                         ) :
                          t('upload.processing')}
                       </span>
                     )}

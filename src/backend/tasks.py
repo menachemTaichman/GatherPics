@@ -166,11 +166,14 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
         face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
         if not face_ids:
             logger.info(f"No ready faces found for upload {upload_id}")
-            return {
-                'event_id': event_id,
-                'faces_processed': 0,
-                'total_faces_requested': 0
-            }
+            # update upload status to COMPLETED (OR FAILED IF there is any image failed)
+            upload_status = 'COMPLETED'
+            completed_at = datetime.now().isoformat()
+            if len(event.models.get_upload_images(upload_id, status='FAILED')) > 0:
+                upload_status = 'FAILED'
+                completed_at = datetime.now().isoformat()
+            event.models.edit_upload(upload_id, {'status': upload_status, 'completed_at': completed_at})
+            return True
         
         logger.info(f"Starting face matches fetch for {len(face_ids)} faces")
         
@@ -218,11 +221,7 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
                     log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
                 event.models.edit_upload(upload_id, {'errors': [f"Moments assignment: {user_msg}"]})
         
-        return {
-            'event_id': event_id,
-            'faces_processed': len(face_matches.keys()),
-            'total_faces_requested': len(face_ids)
-        }
+        return True
         
     except Exception as e:
         if isinstance(e, (Forbidden, PolicyError)):
@@ -281,7 +280,10 @@ def cluster_faces_task(
         
         if event:
             try:
-                event.models.edit_upload(upload_id, {'status': 'FAILED', 'errors': [f"Clustering faces failed: {user_msg}"]})
+                if event.models.get_entities('uploads', upload_id).get('status') != 'COMPLETED':
+                    completed_at = datetime.now().isoformat()
+                    error = [f"Clustering faces failed: {user_msg}"]
+                    event.models.edit_upload(upload_id, {'status': 'FAILED', 'completed_at': completed_at, 'errors': error})
             except Exception as e:
                 error_msg = f"Error updating upload status to FAILED: {str(e)}"
                 log_error(error_msg, "ClusteringError", traceback.format_exc())
@@ -342,7 +344,7 @@ def expire_pending_uploads_task():
         }
 
 @celery.task(name='delete_images_task')
-def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
+def delete_images_task(event_id: str, profile_id: str, image_ids: list[str], upload_id: int | None = None):
     """
     Delete images from storage.
 
@@ -350,6 +352,7 @@ def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
         event_id: Event ID
         profile_id: Profile ID (for context)
         image_ids: List of image IDs to delete
+        upload_id: upload id (optional). if provided, the upload will be also deleted after the images are deleted.
     """
     try:
         # Create Event instance
@@ -427,10 +430,10 @@ def delete_images_task(event_id: str, profile_id: str, image_ids: list[str]):
             """
             deleted_image_ids = event.models.db.execute_query(query, (list(deleted),), return_format=ReturnFormat.LIST_VALUES)
 
-            query = f"""
-                ANALYZE images; ANALYZE faces; ANALYZE groups;
-            """
-            event.models.db.execute_query(query)
+            event.models.db.execute_query("ANALYZE images; ANALYZE faces; ANALYZE groups;")
+
+        if upload_id:
+            event.models.delete('uploads', upload_id)
 
     except Exception as e:
         error_msg = f"Error deleting objects for event {event_id}: {str(e)}"
