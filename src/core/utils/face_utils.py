@@ -7,6 +7,8 @@ from io import BytesIO
 import concurrent.futures
 import threading
 import logging
+import networkx as nx
+from networkx.algorithms import community
 from src.core.errors import log_error
 
 logger = logging.getLogger(__name__)
@@ -284,3 +286,68 @@ class FaceUtils:
                     results[face_id] = matches
 
         return results
+
+    @staticmethod
+    def cluster_faces(face_matches: dict[str, list[dict]], face_ids: list[str]) -> list[tuple[list[str], list[str]]]:
+        """
+        Cluster faces using Louvain community detection.
+        Uses exponential weighting to emphasize strong connections and reduce false merges.
+        
+        Args:
+            face_matches: Dictionary mapping face_id to list of match dictionaries (raw AWS responses)
+            face_ids: List of face IDs to cluster (the "new" faces being processed)
+            
+        Returns:
+            List of tuples: (new_faces, existing_faces) for each cluster
+        """
+        if not face_ids:
+            return []
+
+        face_ids_set = set(face_ids)
+        G = nx.Graph()
+        
+        # 1. Build graph with exponential weighting
+        # Exponential weighting makes strong connections "thick cables" and weak ones "thin threads"
+        # Example: 99% -> weight 0.98, 92% -> weight 0.84
+        # Power of 4 sharpens the differences even more
+        for face_id, matches in face_matches.items():
+            G.add_node(face_id)
+            
+            if not matches:
+                continue
+                
+            for match in matches:
+                match_id = match['Face']['FaceId']
+                similarity = match.get('Similarity', 0)
+                
+                # Basic noise filtering only
+                if similarity < 90.0:
+                    continue
+
+                # Exponential weighting: emphasizes differences between similarity levels
+                weight = (similarity / 100.0) ** 4
+                G.add_edge(face_id, match_id, weight=weight)
+
+        # 2. Run Louvain community detection
+        # resolution:
+        # 1.0 = default
+        # 1.1 = split more (solution for monster groups)
+        # 0.8 = merge more
+        try:
+            communities = community.louvain_communities(G, weight='weight', resolution=1.1)
+        except Exception as e:
+            # Fallback for errors (sometimes happens with empty graphs)
+            logger.warning(f"Louvain failed: {e}, falling back to connected components")
+            communities = list(nx.connected_components(G))
+
+        # 3. Convert to expected format
+        clusters = []
+        for comm in communities:
+            cluster_list = list(comm)
+            new_faces = [f for f in cluster_list if f in face_ids_set]
+            similar_faces = [f for f in cluster_list if f not in face_ids_set]
+
+            if new_faces or similar_faces:
+                clusters.append((new_faces, similar_faces))
+        
+        return clusters

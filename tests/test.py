@@ -394,7 +394,14 @@ ids = {
 
 # test_timeit()
 
-def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int, similarity_threshold: int = 90):
+test_profile_id = '2853b9db-1c22-4a35-b41a-89bfc827406e'
+test_event_id = 'b5c2cb37-f7bf-4223-92eb-eee4060eb553'
+event = Event(test_event_id, profile_id=test_profile_id)
+event_data = event.models.get_entities('events', test_event_id, include_details=True)
+print(event_data)
+print('--------------------------------')
+
+def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
 
     event = Event(event_id, profile_id=profile_id)
     unassociated_group_id = event.models.get_entities('events', event_id, include_details=True).get('unassociated_group_id')
@@ -403,12 +410,15 @@ def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int, simi
         SET group_id = %s
         FROM images
         WHERE faces.image_id = images.image_id AND images.event_id = %s;
-    """
-    event.models.db.execute_query(query, (unassociated_group_id, event_id))
-    face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
-    event._cluster_faces(face_ids, similarity_threshold=similarity_threshold)
 
-test_cluster_faces_task(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id, upload_id=18, similarity_threshold=95)
+        DELETE FROM groups
+        WHERE event_id = %s AND group_id <> %s;
+    """
+    event.models.db.execute_query(query, (unassociated_group_id, event_id, event_id, unassociated_group_id))
+    face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
+    event._cluster_faces(face_ids)
+
+# test_cluster_faces_task(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id, upload_id=18)
 print('--------------------------------')
 # # prod
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'

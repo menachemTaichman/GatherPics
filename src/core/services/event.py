@@ -1,11 +1,9 @@
 import os
-import shutil
 import gc
 from datetime import datetime
 import re
 import logging
 import json
-from collections import defaultdict
 
 from ..utils.image_utils import resize_image, extract_metadata_from_bytes, crop_image
 from PIL import Image as PILImage
@@ -13,6 +11,7 @@ from io import BytesIO
 
 from src.core.errors import Forbidden, PolicyError
 from src.core.utils.face_utils import FaceUtils
+# export ChildOperation for others
 from src.core.models.event_models import EventModels, ChildOperation
 from src.core.database.db import ReturnFormat
 from src.core.audit_log import AuditAction, log_audit
@@ -383,15 +382,15 @@ class Event():
             gc.collect()
             raise
 
-    def _cluster_faces(self, face_ids: list[str], minimal_group_size: int = 2, similarity_threshold: int = 90):
+    def _cluster_faces(self, face_ids: list[str], minimal_group_size: int = 2):
         """
         Cluster faces and create/update groups.
-        Reads face matches from database and performs clustering using UnionFind.
+        Reads face matches from database and performs clustering using Louvain community detection.
+        Uses exponential weighting to emphasize strong connections and reduce false merges.
         
         Args:
             face_ids: List of face IDs to cluster
             minimal_group_size: Minimum number of faces required to create/join a group
-            similarity_threshold: Similarity threshold for face clustering (0-100)
         """
 
         if not face_ids:
@@ -400,48 +399,9 @@ class Event():
         # Get unassociated group ID
         query = "SELECT unassociated_group_id FROM events WHERE event_id = %s;"
         unassociated_group_id = self.models.db.execute_query(query, (self.event_id,), return_format=ReturnFormat.VALUE)
-        
-        # UnionFind data structure for clustering
-        class UnionFind:
-            def __init__(self):
-                self.parent = {}
-
-            def find(self, x):
-                if x not in self.parent:
-                    self.parent[x] = x
-                if self.parent[x] != x:
-                    self.parent[x] = self.find(self.parent[x])
-                return self.parent[x]
-
-            def union(self, x, y):
-                self.parent[self.find(x)] = self.find(y)
 
         face_matches = self.get_face_matches(face_ids)
-        
-        uf = UnionFind()
-        all_faces = set(face_ids)
-        
-        for face_id, matches in face_matches.items():
-            for match in matches:
-                similarity = match.get('Similarity', 0)
-                match_id = match['Face']['FaceId']
-                
-                # Filter by cluster_threshold (only include matches above threshold)
-                if similarity >= similarity_threshold:
-                    uf.union(face_id, match_id)
-                    all_faces.add(match_id)
-        
-        # Group faces by root parent
-        clusters_dict = defaultdict(list)
-        for face_id in all_faces:
-            clusters_dict[uf.find(face_id)].append(face_id)
-        
-        # Convert to list of tuples: (new_faces, existing_faces)
-        clusters = []
-        for root, cluster_faces_list in clusters_dict.items():
-            new_faces = [face_id for face_id in cluster_faces_list if face_id in face_ids]
-            similar_faces = [face_id for face_id in cluster_faces_list if face_id not in face_ids]
-            clusters.append((new_faces, similar_faces))
+        clusters = self.face_utils.cluster_faces(face_matches, face_ids)
         
         for new_faces, existing_faces in clusters:
             if len(new_faces) + len(existing_faces) < minimal_group_size:
@@ -489,7 +449,7 @@ class Event():
                 self.models.db.execute_query(query, (add_faces, largest_group_id))
                 self.models.ensure_representative('groups', largest_group_id)
 
-        self.models.db.execute_query("ANALYZE groups;")
+        self.models.db.execute_query("ANALYZE;")
 
     def store_face_matches(self, face_matches: dict[str, list[dict]], rekognition_request_id: int):
         """
