@@ -188,7 +188,7 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
         
         # Adjust rekognition requests count if reduce_calls is enabled
         if len(face_matches.keys()) != len(face_ids):
-            event.models.edit_rekognition_requests(len(face_matches.keys()) - len(face_ids), rekognition_request_id)
+            event.models.edit_rekognition_requests(len(face_matches.keys()), rekognition_request_id)
         
         logger.info(f"Completed face matches fetch and storage for {len(face_matches.keys())} faces")
         
@@ -245,7 +245,8 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
 def cluster_faces_task(
     event_id: str,
     profile_id: str,
-    upload_id: int
+    upload_id: int,
+    similarity_threshold: int = 90
 ):
     """
     Cluster faces from all images in an upload and create/update groups.
@@ -255,6 +256,7 @@ def cluster_faces_task(
         event_id: Event ID
         profile_id: Profile ID (for context)
         upload_id: ID of the upload to cluster
+        similarity_threshold: Similarity threshold for face clustering (0-100)
     """
     event = None
     try:
@@ -262,7 +264,7 @@ def cluster_faces_task(
         event = Event(event_id, profile_id=profile_id)
         
         face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
-        event._cluster_faces(face_ids)
+        event._cluster_faces(face_ids, similarity_threshold)
         
         upload = event.models.get_entities('uploads', upload_id)
         if upload.get('status') != 'COMPLETED':

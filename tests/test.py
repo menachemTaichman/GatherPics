@@ -394,10 +394,22 @@ ids = {
 
 # test_timeit()
 
-result = event.models.get_unique_labels('images', ['image1', 'image2', 'image3'], suffix='.jpg', separator='.', brackets=True, event_id=event_id)
-print(result)
-print('--------------------------------')
+def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int, similarity_threshold: int = 90):
 
+    event = Event(event_id, profile_id=profile_id)
+    unassociated_group_id = event.models.get_entities('events', event_id, include_details=True).get('unassociated_group_id')
+    query = f"""
+        UPDATE faces
+        SET group_id = %s
+        FROM images
+        WHERE faces.image_id = images.image_id AND images.event_id = %s;
+    """
+    event.models.db.execute_query(query, (unassociated_group_id, event_id))
+    face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
+    event._cluster_faces(face_ids, similarity_threshold=similarity_threshold)
+
+test_cluster_faces_task(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id, upload_id=18, similarity_threshold=95)
+print('--------------------------------')
 # # prod
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # event = Event(event_id, profile_id=dev_profile_id)

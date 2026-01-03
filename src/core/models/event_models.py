@@ -74,12 +74,10 @@ class EventModels(BaseModels):
         if representative_id:
             return representative_id
         
-        ctx_child = f'{child}_ctx'
-        ctx_relation = f'{relation}_ctx'
         join_clause = ''
         parent = 'c'
         if relation != child:
-            join_clause = f'INNER JOIN {ctx_relation} r ON c.{child_id_field} = r.{child_id_field}'
+            join_clause = f'INNER JOIN {relation} r ON c.{child_id_field} = r.{child_id_field}'
             parent = 'r'
 
         # Determine size fields based on child table type
@@ -90,7 +88,7 @@ class EventModels(BaseModels):
             size_expr = 'c.width * c.height'
 
         query = f"""SELECT c.{child_id_field}
-        FROM {ctx_child} c
+        FROM {child} c
         {join_clause}
         WHERE {parent}.{id_field} = %s
         ORDER BY {size_expr} DESC
