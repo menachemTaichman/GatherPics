@@ -3,11 +3,12 @@ import traceback
 from PIL import Image
 import boto3
 from io import BytesIO
-from collections import defaultdict
 import concurrent.futures
 import threading
-
+import logging
 from src.core.errors import log_error
+
+logger = logging.getLogger(__name__)
 
 class AWSRekognitionHelper:
     def __init__(self, event_id: str, storage_backend=None):
@@ -213,6 +214,7 @@ class FaceUtils:
             Dictionary mapping face_id to list of match dictionaries (raw AWS responses)
         """
         # Shared variables for managing skips when reduce_calls=True
+        total_faces = len(face_ids)
         processed_faces = set()
         processed_lock = threading.Lock()
         results = {}
@@ -255,8 +257,12 @@ class FaceUtils:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_face = {executor.submit(process_single_face, fid): fid for fid in face_ids}
             
-            for future in concurrent.futures.as_completed(future_to_face):
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_face)):
                 face_id, matches = future.result()
+
+                if i % 1000 == 0 or i == total_faces:
+                    percentage = (i / total_faces) * 100
+                    logger.info(f"Progress: Processed {i}/{total_faces} faces ({percentage:.1f}%)")
                 
                 # Skip if we skipped this face (matches is None)
                 if matches is None:

@@ -9,7 +9,7 @@ import { imagesAPI, eventsAPI, uploadsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useToast } from '../../contexts/ToastContext';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
-import { useEventGeneralById } from '../../utils/dataManager';
+import { useEventGeneralById, useDataStore } from '../../utils/dataManager';
 import { formatDuration } from '../../utils/dateUtils';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
@@ -210,6 +210,8 @@ export default function UploadFormModal({
       currentStep = 'complete';
     } else if (uploadStatus === 'FAILED') {
       currentStep = 'error';
+    } else if (uploadStatus === 'CLUSTERING_FACES') {
+      currentStep = 'clustering';
     } else if (allImagesUploadedRef.current) {
       currentStep = 'processing';
     } else if (stillUploading) {
@@ -228,17 +230,22 @@ export default function UploadFormModal({
     const elapsedTime = startTime ? Date.now() - startTime : 0;
     
     // Build message - use callback's upload count for more accurate upload progress
-    // Use consistent format: "Uploaded X/Y | Ready: Z | Processing: N | Failed: M"
+    // Use consistent format: "Status | Uploaded X/Y | Processing: N | Ready: Z | Failed: M"
     let message;
     if (uploadStatus === 'COMPLETED') {
       message = `Complete | Ready: ${totalReady} | Failed: ${totalFailed}`;
+    } else if (uploadStatus === 'CLUSTERING_FACES') {
+      message = `${t('upload.clusteringFaces')} | Processing: ${totalProcessing + totalQueued} | Ready: ${totalReady} | Failed: ${totalFailed}`;
     } else if (currentStep === 'uploading') {
       // Use callback count for upload progress (more accurate)
       const uploadedCount = callbackUploadCount.total > 0 ? callbackUploadCount.completed : (total - totalUploading - totalPendingUpload);
       const uploadTotal = callbackUploadCount.total > 0 ? callbackUploadCount.total : total;
-      message = `Uploaded: ${uploadedCount}/${uploadTotal} | Ready: ${totalReady} | Processing: ${totalProcessing + totalQueued} | Failed: ${totalFailed}`;
+      message = `Uploaded: ${uploadedCount}/${uploadTotal} | Processing: ${totalProcessing + totalQueued} | Ready: ${totalReady} | Failed: ${totalFailed}`;
+    } else if (currentStep === 'processing') {
+      // All images uploaded, now processing
+      message = `${t('upload.processingImages')} | Processing: ${totalProcessing + totalQueued} | Ready: ${totalReady} | Failed: ${totalFailed}`;
     } else {
-      message = `Uploaded: ${total}/${total} | Ready: ${totalReady} | Processing: ${totalProcessing + totalQueued} | Failed: ${totalFailed}`;
+      message = `Uploaded: ${total}/${total} | Processing: ${totalProcessing + totalQueued} | Ready: ${totalReady} | Failed: ${totalFailed}`;
     }
     
     return {
@@ -254,7 +261,7 @@ export default function UploadFormModal({
       totalProcessing,
       totalQueued
     };
-  }, []);
+  }, [t]);
 
   // Fetch existing upload images when modal opens with existingUploadId
   useEffect(() => {
@@ -551,11 +558,12 @@ export default function UploadFormModal({
     const stepWeights = {
       'preparing': 2,       // 0-2% (getting presigned URLs)
       'uploading': 10,      // 2-12% (uploading to S3)
-      'processing': 88,      // 12-100% (image processing - face detection, clustering, etc.)
+      'processing': 70,     // 12-82% (image processing - face detection, etc.)
+      'clustering': 18,     // 82-100% (clustering faces)
       'complete': 100       // 100%
     };
     
-    const stepOrder = ['preparing', 'uploading', 'processing', 'complete'];
+    const stepOrder = ['preparing', 'uploading', 'processing', 'clustering', 'complete'];
     const currentStepIndex = stepOrder.indexOf(progress.step);
     
     if (currentStepIndex === -1) return 0;
@@ -675,23 +683,21 @@ export default function UploadFormModal({
             }
             
             if (uploadStatus === 'COMPLETED') {
-              // Get final upload details
+              // Get final upload details and wait for store to update
               try {
-                const uploadDetails = await uploadsAPI.getById(currentUploadId, eventUrl);
+                await uploadsAPI.getById(currentUploadId, eventUrl);
                 
-                let facesCount = 0;
-                let groupsCount = 0;
+                // Wait a bit for the store to process the changes
+                await new Promise(resolve => setTimeout(resolve, 100));
                 
-                if (uploadDetails.changes) {
-                  const uploadChange = uploadDetails.changes.find(
-                    change => change.entity === 'upload' && (change.type === 'UPSERT' || change.type === 'UPDATE')
-                  );
-                  if (uploadChange && uploadChange.items) {
-                    const uploadEntity = Object.values(uploadChange.items)[0];
-                    facesCount = uploadEntity?.faces_count || 0;
-                    groupsCount = uploadEntity?.groups_count || 0;
-                  }
-                }
+                // Get upload from store directly (like UploadsGalleryPage does)
+                const storeState = useDataStore.getState();
+                const uploadEntity = eventId && currentUploadId 
+                  ? storeState.entities?.[eventId]?.uploads?.[currentUploadId] || null
+                  : null;
+                
+                const facesCount = uploadEntity?.faces_count || 0;
+                const groupsCount = uploadEntity?.groups_count || 0;
                 
                 const successMsg = `${t('upload.successfullyProcessed')} ${progressData.totalReady} ${progressData.totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${groupsCount} ${groupsCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
                 
@@ -1255,6 +1261,7 @@ export default function UploadFormModal({
                              ? t('upload.imageFailedToProcess')
                              : t('upload.uploadFailed')
                          ) :
+                         existingUploadStatus === 'CLUSTERING_FACES' ? t('upload.clusteringFaces') :
                          t('upload.processing')}
                       </span>
                     )}

@@ -176,10 +176,12 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
             return True
         
         logger.info(f"Starting face matches fetch for {len(face_ids)} faces")
+
+        event.models.edit_upload(upload_id, {'status': 'CLUSTERING_FACES'})
         
         rekognition_request_id = event.models.edit_rekognition_requests(len(face_ids), request_type='FETCH_FACE_MATCHES')
         # Fetch face matches from AWS
-        face_matches = event.face_utils.fetch_face_matches(face_ids=face_ids)
+        face_matches = event.face_utils.fetch_face_matches(face_ids=face_ids, reduce_calls=True)
         
         # Store matches in database
         event.store_face_matches(face_matches, rekognition_request_id)
