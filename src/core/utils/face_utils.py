@@ -193,7 +193,7 @@ class FaceUtils:
         max_matches_faces: int = 100,
         max_workers: int = 50,
         reduce_calls: bool = False,
-        transitiviy_threshold: float = 98.0
+        transitivity_threshold: float = 98.0
     ) -> dict[str, list[dict]]:
         """
         Fetch face matches from AWS Rekognition for multiple faces in parallel.
@@ -205,7 +205,7 @@ class FaceUtils:
             max_matches_faces: maximum number of matches to retrieve per face
             max_workers: maximum number of parallel threads for processing
             reduce_calls: reduce the number of calls to Rekognition search_similar_faces
-            transitiviy_threshold: when reduce_calls=True, matches with similarity above this 
+            transitivity_threshold: when reduce_calls=True, matches with similarity above this 
                                  threshold will be skipped from separate processing
                                  (assuming that the similarity above this threshold is transitive)
         
@@ -246,7 +246,7 @@ class FaceUtils:
                         
                         # Transitivity trick: skip only very high confidence matches
                         # when reduce_calls is enabled
-                        if reduce_calls and similarity > transitiviy_threshold:
+                        if reduce_calls and similarity > transitivity_threshold:
                             processed_faces.add(match_id)
 
             return face_id, matches
@@ -267,79 +267,3 @@ class FaceUtils:
                     results[face_id] = matches
 
         return results
-
-    # TODO: remove this method
-    def cluster_faces(
-        self,
-        face_ids: list[str],
-        threshold_similarity: int = 90,
-        max_matches_faces: int = 100,
-        reduce_calls: bool = False
-    ) -> list[tuple[list[str], list[str]]]:
-        """
-        Clusters faces with transitive merging.
-
-        Args:
-            face_ids: list of AWS FaceIds (new faces to cluster)
-            threshold_similarity: similarity threshold for Rekognition search_similar_faces
-            max_matches_faces: maximum number of matches to retrieve per face
-            reduce_calls: reduce the number of calls to Rekognition search_similar_faces
-
-            if reduce_calls is True, the complete transitivity may be compromised.
-
-        Returns:
-            List of clusters found, each cluster is a tuple: (new_faces_list, similar_faces_list)
-            - new_faces_list: faces from the input face_ids that are in this cluster
-            - similar_faces_list: existing faces (not in face_ids) that are similar to this cluster
-        """
-        class UnionFind:
-            def __init__(self):
-                self.parent = {}
-
-            def find(self, x):
-                if x not in self.parent:
-                    self.parent[x] = x
-                if self.parent[x] != x:
-                    self.parent[x] = self.find(self.parent[x])
-                return self.parent[x]
-
-            def union(self, x, y):
-                self.parent[self.find(x)] = self.find(y)
-
-        uf = UnionFind()
-        all_faces = set(face_ids)
-        visited = set()
-        for face_id in face_ids:
-            if face_id in visited:
-                continue            
-            matches = self.rek_helper.search_similar_faces(face_id, threshold=threshold_similarity, max_faces=max_matches_faces)
-            for match in matches:
-                match_id = match['Face']['FaceId']
-                uf.union(face_id, match_id)
-                all_faces.add(match_id)
-                if reduce_calls and match_id in face_ids:
-                    visited.add(match_id)
-
-        # Group faces by root parent
-        clusters = defaultdict(list)
-        for face_id in all_faces:
-            clusters[uf.find(face_id)].append(face_id)
-        
-        # For each cluster, separate new faces from similar faces
-        result = []
-        for root, all_faces in clusters.items():
-            new_faces = [face_id for face_id in all_faces if face_id in face_ids]
-            similar_faces = [face_id for face_id in all_faces if face_id not in face_ids]
-            result.append((new_faces, similar_faces))
-        
-        return result
-
-
-    def duplicate_faces(self, face_details: list[dict], iou_threshold: float = 0.5) -> list[dict]:
-        """returns list of duplicate faces based on IOU threshold."""
-        return []
-
-
-    def calculate_iou(self, box1: dict, box2: dict) -> float:
-        """Calculates Intersection over Union (IOU) between two bounding boxes."""
-        return 0.0

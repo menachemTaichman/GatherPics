@@ -732,11 +732,40 @@ FROM albums_ctx ac
 LEFT JOIN albums_stats albums_stats_alias ON ac.album_id = albums_stats_alias.album_id;
 
 CREATE OR REPLACE VIEW uploads_ext AS
+WITH
+    images_stats AS (
+        SELECT
+            uc.upload_id,
+            COUNT(*) AS images_count
+        FROM images_ctx ic
+        GROUP BY ic.upload_id
+    ),
+    faces_stats AS (
+        SELECT
+            ufc.upload_id,
+            COUNT(*) AS faces_count
+        FROM uploads_faces_ctx ufc
+        GROUP BY ufc.upload_id
+    ),
+    groups_stats AS (
+        SELECT
+            ugc.upload_id,
+            COUNT(*) AS groups_count
+        FROM uploads_groups_ctx ugc
+        GROUP BY ugc.upload_id
+    )
 SELECT
     uc.*,
-    p.label AS profile_label
+    COALESCE(ims.images_count, 0) AS images_count,
+    COALESCE(fs.faces_count, 0) AS faces_count,
+    COALESCE(gs.groups_count, 0) AS groups_count,
+    p.label AS profile_label,
+    NOT EXISTS (SELECT 1 FROM images WHERE upload_id = uc.upload_id AND status = 'READY') AS is_deletable
 FROM uploads_ctx uc
-INNER JOIN profiles p ON uc.profile_id = p.profile_id;
+LEFT JOIN profiles p ON uc.profile_id = p.profile_id
+LEFT JOIN images_stats ims ON uc.upload_id = ims.upload_id
+LEFT JOIN faces_stats fs ON uc.upload_id = fs.upload_id
+LEFT JOIN groups_stats gs ON uc.upload_id = gs.upload_id;
 
 CREATE OR REPLACE VIEW uploads_groups_ext AS
 WITH

@@ -378,7 +378,7 @@ class DB:
             'uploads': {
                 'id_type': 'INTEGER',
                 'primary_key': 'upload_id',
-                'fields': ['started_at', 'completed_at', 'status', 'images_count', 'faces_count', 'clusters_count', 'moments_count', 'errors', 'notes', 'profile_id', 'profile_label'],
+                'fields': ['started_at', 'completed_at', 'status', 'requested_images_count', 'images_count', 'faces_count', 'groups_count', 'errors', 'notes', 'profile_id', 'profile_label'],
                 'relations': {
                     'images': {'relation_table': 'images', 'fields_needed': ['date_taken', 'is_archived', 'is_favorite', 'moment_id', 'width', 'height']},
                     'faces': {'relation_table': 'uploads_faces', 'fields_needed': ['image_id', 'group_id', 'upload_id']},

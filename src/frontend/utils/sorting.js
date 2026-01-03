@@ -192,7 +192,7 @@ export const sortUploads = (uploads, sortBy = 'started_at', sortOrder = 'desc') 
         break;
       case 'images_count':
       case 'faces_count':
-      case 'clusters_count':
+      case 'groups_count':
       case 'moments_count':
         comparison = (a[sortBy] || 0) - (b[sortBy] || 0);
         break;

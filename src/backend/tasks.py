@@ -10,8 +10,9 @@ from datetime import datetime, timedelta, timezone
 from src.backend.celery_worker import celery
 from src.backend.redis_client import get_redis_client
 from src.core.services.event import Event
-from src.core.errors import log_error
+from src.core.errors import log_error, Forbidden, PolicyError
 from src.core.database.db import DB, ReturnFormat
+from PIL import UnidentifiedImageError
 from src.core.audit_log import AuditAction, log_audit
 
 logger = get_task_logger(__name__)
@@ -100,29 +101,34 @@ def process_image_task(event_id: str, profile_id: str, upload_id: int, image_id:
         # If Redis is unavailable, log but continue processing
         log_error(f"Redis unavailable, continuing without tracking: {str(e)}", "RedisConnectionError", "")
     
+    event = None
     try:
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)
         
         event.models.update_image_status(image_id, 'PROCESSING')
-        result = event._process_single_image(image_id)
+        event._process_single_image(image_id)
         
-        if result:
-            event.models.update_image_status(image_id, 'READY')
-            return True
-        else:
-            event.models.update_image_status(image_id, 'FAILED')
-            return None
-            
+        event.models.update_image_status(image_id, 'READY')
+        return True
+
     except Exception as e:
-        error_msg = f"Error processing image {image_id}: {str(e)}"
-        log_error(error_msg, "ImageProcessingError", traceback.format_exc())
+        if isinstance(e, (Forbidden, PolicyError)):
+            user_msg = str(e)
+        elif isinstance(e, (UnidentifiedImageError, OSError)):
+            user_msg = "Invalid image format"
+        elif isinstance(e, FileNotFoundError):
+            user_msg = "File not found in storage"
+        else:
+            user_msg = "Internal error"
+            log_error(f"Error processing image {image_id}: {str(e)}", "ImageProcessingError", traceback.format_exc())
         
         try:
-            event.models.update_image_status(image_id, 'FAILED')
-        except:
-            pass
-        
+            if event:
+                event.models.update_image_status(image_id, 'FAILED')
+                event.models.edit_upload(upload_id, {'errors': [f"Image {image_id}: {user_msg}"]})
+        except Exception:
+            log_error(f"Error updating image status or editing upload for image {image_id}: {str(e)}", "ImageProcessingError", traceback.format_exc())
         return None
         
     finally:
@@ -152,31 +158,40 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
         profile_id: Profile ID (for context)
         upload_id: ID of the upload to fetch matches for
     """
+    event = None
     try:
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)
-        unready_images_count = len(event.models.get_upload_images(upload_id, status='FAILED'))
-        errors = [] if unready_images_count == 0 else [f'{unready_images_count} images failed to process']
-        event.models.edit('uploads', upload_id, {'errors': errors})
+        
+        face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
+        if not face_ids:
+            logger.info(f"No ready faces found for upload {upload_id}")
+            return {
+                'event_id': event_id,
+                'faces_processed': 0,
+                'total_faces_requested': 0
+            }
         
         logger.info(f"Starting face matches fetch for {len(face_ids)} faces")
-
-        face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
+        
         rekognition_request_id = event.models.edit_rekognition_requests(len(face_ids), request_type='FETCH_FACE_MATCHES')
         # Fetch face matches from AWS
         face_matches = event.face_utils.fetch_face_matches(face_ids=face_ids)
         
         # Store matches in database
-        event.store_face_matches(face_matches)
-        if len(face_matches) != len(face_ids):
-            event.models.edit_rekognition_requests(len(face_matches) - len(face_ids), rekognition_request_id, request_type='FETCH_FACE_MATCHES')
+        event.store_face_matches(face_matches, rekognition_request_id)
         
-        logger.info(f"Completed face matches fetch and storage for {len(face_matches)} faces")
-
+        # Adjust rekognition requests count if reduce_calls is enabled
+        if len(face_matches.keys()) != len(face_ids):
+            event.models.edit_rekognition_requests(len(face_matches.keys()) - len(face_ids), rekognition_request_id)
+        
+        logger.info(f"Completed face matches fetch and storage for {len(face_matches.keys())} faces")
+        
+        event.models.db.execute_query("ANALYZE images; ANALYZE faces; ANALYZE face_matches_raw;")
+        
         cluster_faces_task.delay(event_id, profile_id, upload_id)
 
         # Assign moments by time if requested
-        # Check if assign_moments flag is set in Redis
         assign_moments = False
         try:
             redis_client = get_redis_client()
@@ -186,25 +201,43 @@ def fetch_face_matches_task(event_id: str, profile_id: str, upload_id: int):
         except Exception as e:
             # If Redis is unavailable, log but continue without assigning moments
             log_error(f"Redis unavailable when checking assign_moments flag: {str(e)}", "RedisConnectionError", "")
-        
+
         if assign_moments:
             try:
-                ready_images = event.models.get_upload_images(upload_id, status='READY')
-                assigned_moments = event.models.assign_moments_by_time(ready_images)
-                logger.info(f"Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {len(assigned_moments)} moments for upload {upload_id}")
+                ready_image_ids = event.models.get_upload_images(upload_id, status='READY')
+                if ready_image_ids:
+                    assigned_moments = event.models.assign_moments_by_time(ready_image_ids)
+                    moments_count = len(assigned_moments.keys())
+                    logger.info(f"Assigned {sum(len(imgs) for imgs in assigned_moments.values())} images to {moments_count} moments for upload {upload_id}")
             except Exception as e:
-                error_msg = f"Error assigning moments for upload {upload_id}: {str(e)}"
-                log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
+                if isinstance(e, (Forbidden, PolicyError)):
+                    user_msg = str(e)
+                else:
+                    user_msg = "Moments assignment failed"
+                    error_msg = f"Error assigning moments for upload {upload_id}: {str(e)}"
+                    log_error(error_msg, "MomentAssignmentError", traceback.format_exc())
+                event.models.edit_upload(upload_id, {'errors': [f"Moments assignment: {user_msg}"]})
         
         return {
             'event_id': event_id,
-            'faces_processed': len(face_matches),
+            'faces_processed': len(face_matches.keys()),
             'total_faces_requested': len(face_ids)
         }
         
     except Exception as e:
-        error_msg = f"Error fetching face matches for event {event_id}: {str(e)}"
-        log_error(error_msg, "FaceMatchesFetchError", traceback.format_exc())
+        if isinstance(e, (Forbidden, PolicyError)):
+            user_msg = str(e)
+        else:
+            user_msg = "Internal error"
+            error_msg = f"Error fetching face matches for event {event_id}: {str(e)}"
+            log_error(error_msg, "FaceMatchesFetchError", traceback.format_exc())
+        
+        if event:
+            try:
+                event.models.edit_upload(upload_id, {'status': 'FAILED', 'errors': [f"Face matches fetch failed: {user_msg}"]})
+            except Exception as e:
+                error_msg = f"Error updating upload status to FAILED: {str(e)}"
+                log_error(error_msg, "FaceMatchesFetchError", traceback.format_exc())
         return None
 
 @celery.task(name='cluster_faces_task', time_limit=3600, soft_time_limit=1800)
@@ -222,6 +255,7 @@ def cluster_faces_task(
         profile_id: Profile ID (for context)
         upload_id: ID of the upload to cluster
     """
+    event = None
     try:
         # Create Event instance
         event = Event(event_id, profile_id=profile_id)
@@ -231,21 +265,26 @@ def cluster_faces_task(
         
         upload = event.models.get_entities('uploads', upload_id)
         if upload.get('status') != 'COMPLETED':
-            event.models.edit('uploads', upload_id, {'status': 'COMPLETED', 'completed_at': datetime.now().isoformat()})
+            event.models.edit_upload(upload_id, {'status': 'COMPLETED', 'completed_at': datetime.now().isoformat()})
         
         logger.info(f"completed cluster_faces_task for upload {upload_id}")
         
         return True
         
     except Exception as e:
-        error_msg = f"Error clustering faces for upload {upload_id}: {str(e)}"
-        log_error(error_msg, "ClusteringError", traceback.format_exc())
+        if isinstance(e, (Forbidden, PolicyError)):
+            user_msg = str(e)
+        else:
+            user_msg = "Internal error"
+            error_msg = f"Error clustering faces for upload {upload_id}: {str(e)}"
+            log_error(error_msg, "ClusteringError", traceback.format_exc())
         
-        try:
-            event.models.edit('uploads', upload_id, {'status': 'FAILED', 'errors': []})
-        except Exception as e:
-            log_error(f"Error updating upload status to FAILED: {str(e)}", "ClusteringError", traceback.format_exc())
-        
+        if event:
+            try:
+                event.models.edit_upload(upload_id, {'status': 'FAILED', 'errors': [f"Clustering faces failed: {user_msg}"]})
+            except Exception as e:
+                error_msg = f"Error updating upload status to FAILED: {str(e)}"
+                log_error(error_msg, "ClusteringError", traceback.format_exc())
         return None
 
 @celery.task(name='expire_pending_uploads_task')

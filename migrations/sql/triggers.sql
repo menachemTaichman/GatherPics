@@ -1634,10 +1634,7 @@ BEGIN
         started_at,
         completed_at,
         status,
-        images_count,
-        faces_count,
-        clusters_count,
-        moments_count,
+        requested_images_count,
         errors,
         notes
     )
@@ -1647,10 +1644,7 @@ BEGIN
         COALESCE(NEW.started_at, CURRENT_TIMESTAMP),
         NEW.completed_at,
         COALESCE(NEW.status, 'PROCESSING_IMAGES'),
-        COALESCE(NEW.images_count, 0),
-        COALESCE(NEW.faces_count, 0),
-        COALESCE(NEW.clusters_count, 0),
-        COALESCE(NEW.moments_count, 0),
+        NEW.requested_images_count,
         NEW.errors,
         NEW.notes
     )
@@ -1683,10 +1677,6 @@ BEGIN
     UPDATE uploads SET
         completed_at = NEW.completed_at,
         status = NEW.status,
-        images_count = NEW.images_count,
-        faces_count = NEW.faces_count,
-        clusters_count = NEW.clusters_count,
-        moments_count = NEW.moments_count,
         errors = NEW.errors,
         notes = NEW.notes
     WHERE upload_id = OLD.upload_id

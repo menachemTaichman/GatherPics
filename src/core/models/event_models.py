@@ -125,56 +125,6 @@ class EventModels(BaseModels):
 
         return valid_child_ids, detached_parents
 
-    # -------- events helpers --------
-    def ensure_rekognition_requests_limit(self, count: int) -> bool:
-        """Ensure rekognition requests limit.
-        Raises PolicyError if limit is reached.
-        """
-        event_data = self.get_entities('events', self.db.event_id, include_details=True)
-        requests_limit = event_data['rekognition_requests_limit']
-        requests_used = event_data['rekognition_requests_count']
-        if requests_used + count > requests_limit:
-            raise PolicyError(f"Policy error: cannot add more rekognition requests than the limit. Current: {requests_used}, Limit: {requests_limit}, Attempting to add: {count}")
-
-    def edit_rekognition_requests(self, count: int, rekognition_request_id: int | None = None, request_type: str = 'DETECT_FACES', details: dict = {}) -> int:
-        """Edit rekognition requests of the event.
-        Args:
-            count: number of rekognition requests to add or subtract (positive or negative number)
-            rekognition_request_id: rekognition request id (if not provided, a new one will be created)
-            request_type: type of the rekognition request (DETECT_FACES or FETCH_FACE_MATCHES)
-            details: details to add to the rekognition request for new rekognition request
-        Returns:
-            rekognition request id
-        """
-        if not self.db.event_profile_context['can_upload_and_delete_images']:
-            raise Forbidden("Permission denied: cannot upload and delete images")
-        
-        self.ensure_rekognition_requests_limit(count)
-
-        # Track rekognition usage
-        event_data = self.get_entities('events', self.db.event_id)
-        event_label = event_data.get('name', '')
-        profile_id = self.db.profile_context.get('profile_id')
-        profile_label = self.get_entities('current_profile', profile_id).get('label', '')
-
-        if rekognition_request_id:
-            self.edit('rekognition_requests', rekognition_request_id, {
-                'requests_count': count,
-            })
-
-        else:
-            rekognition_request_id = self.add('rekognition_requests', {
-                'event_id': self.db.event_id,
-                'event_label': event_label,
-                'profile_id': profile_id,
-                'profile_label': profile_label,
-                'requests_count': count,
-                'request_type': request_type,
-                'details': details,
-            })
-
-        return rekognition_request_id
-
     # -------- Moments helpers --------
     def get_images_to_moments(self) -> dict[str, Dict[str, Any]]:
         """Return images to moments.
@@ -444,6 +394,55 @@ class EventModels(BaseModels):
         return result
 
     # -------- Images processing helpers --------
+    def ensure_rekognition_requests_limit(self, count: int) -> bool:
+        """Ensure rekognition requests limit.
+        Raises PolicyError if limit is reached.
+        """
+        event_data = self.get_entities('events', self.db.event_id, include_details=True)
+        requests_limit = event_data['rekognition_requests_limit']
+        requests_used = event_data['rekognition_requests_count']
+        if requests_used + count > requests_limit:
+            raise PolicyError(f"Policy error: cannot add more rekognition requests than the limit. Current: {requests_used}, Limit: {requests_limit}, Attempting to add: {count}")
+
+    def edit_rekognition_requests(self, count: int, rekognition_request_id: int | None = None, request_type: str = 'DETECT_FACES', details: dict = {}) -> int:
+        """Edit rekognition requests of the event.
+        Args:
+            count: number of rekognition requests to add or subtract (positive or negative number)
+            rekognition_request_id: rekognition request id (if not provided, a new one will be created)
+            request_type: type of the rekognition request (DETECT_FACES or FETCH_FACE_MATCHES)
+            details: details to add to the rekognition request for new rekognition request
+        Returns:
+            rekognition request id
+        """
+        if not self.db.event_profile_context['can_upload_and_delete_images']:
+            raise Forbidden("Permission denied: cannot upload and delete images")
+        
+        self.ensure_rekognition_requests_limit(count)
+
+        # Track rekognition usage
+        event_data = self.get_entities('events', self.db.event_id)
+        event_label = event_data.get('name', '')
+        profile_id = self.db.profile_context.get('profile_id')
+        profile_label = self.get_entities('current_profile', profile_id).get('label', '')
+
+        if rekognition_request_id:
+            self.edit('rekognition_requests', rekognition_request_id, {
+                'requests_count': count,
+            })
+
+        else:
+            rekognition_request_id = self.add('rekognition_requests', {
+                'event_id': self.db.event_id,
+                'event_label': event_label,
+                'profile_id': profile_id,
+                'profile_label': profile_label,
+                'requests_count': count,
+                'request_type': request_type,
+                'details': details,
+            })
+
+        return rekognition_request_id
+
     def get_upload_images(self, upload_id: int, *, status: str | None = None, exclude_status: bool = False) -> list[dict] | list[str]:
         """Get upload images.
         
@@ -581,6 +580,22 @@ class EventModels(BaseModels):
 
         return assigned
     
+    def edit_upload(self, upload_id: int, data: dict, override_errors_field: bool = False) -> int:
+        """Edit an upload.
+        Args:
+            upload_id: upload id
+            data: data to edit
+            override_errors_field: if True, override errors field. if False, append errors to existing errors
+        Returns:
+            upload id
+        """
+        if not override_errors_field and 'errors' in data:
+            # Append to existing errors
+            existing_errors = self.get_entities('uploads', upload_id).get('errors', [])
+            data['errors'] = existing_errors + data.get('errors', [])
+        
+        return self.edit('uploads', upload_id, data)
+
     # -------- Profiles helpers --------
     def edit_accessibility(self, profile_id: str, entity: str, ids: List[str], set_accessible: bool = True) -> tuple[List[str], bool]:
         """Edit entities accessibility for a profile.

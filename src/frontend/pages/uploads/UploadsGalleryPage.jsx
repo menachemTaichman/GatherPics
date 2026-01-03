@@ -43,7 +43,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
       profile_label: '',
       images_count: 0,
       faces_count: 0,
-      clusters_count: 0,
+      groups_count: 0,
       status: '',
       notes: '',
       isPlaceholder: true
@@ -213,12 +213,12 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                     renderCell: (upload) => upload.faces_count || 0,
                   },
                   {
-                    key: 'clusters_count',
+                    key: 'groups_count',
                     label: t('uploadsGallery.groups'),
                     sortable: true,
                     align: 'center',
                     cellClassName: 'text-gray-700',
-                    renderCell: (upload) => upload.clusters_count || 0,
+                    renderCell: (upload) => upload.groups_count || 0,
                   },
                   {
                     key: 'status',

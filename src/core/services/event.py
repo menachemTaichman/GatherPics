@@ -248,12 +248,7 @@ class Event():
         
         return (face_id, face_file_size)
 
-    def _process_single_image(
-        self,
-        image_id: str,
-        display_size: int = 2048,
-        thumb_size: int = 512,
-    ) -> dict | None:
+    def _process_single_image(self, image_id: str, display_size: int = 2048, thumb_size: int = 512) -> dict | None:
         """
         Process a single image: resize, detect faces, crop faces, copy original.
         
@@ -387,7 +382,7 @@ class Event():
             gc.collect()
             raise
 
-    def _cluster_faces(self, face_ids: list[str], minimal_group_size: int = 2, cluster_threshold: int = 90):
+    def _cluster_faces(self, face_ids: list[str], minimal_group_size: int = 2, similarity_threshold: int = 90):
         """
         Cluster faces and create/update groups.
         Reads face matches from database and performs clustering using UnionFind.
@@ -395,12 +390,14 @@ class Event():
         Args:
             face_ids: List of face IDs to cluster
             minimal_group_size: Minimum number of faces required to create/join a group
-            cluster_threshold: Similarity threshold for face clustering (0-100) - used to filter matches
-        """        
-        # Get unassociated group ID
-        query = """
-            SELECT unassociated_group_id FROM events WHERE event_id = %s;
+            similarity_threshold: Similarity threshold for face clustering (0-100)
         """
+
+        if not face_ids:
+            return
+        
+        # Get unassociated group ID
+        query = "SELECT unassociated_group_id FROM events WHERE event_id = %s;"
         unassociated_group_id = self.models.db.execute_query(query, (self.event_id,), return_format=ReturnFormat.VALUE)
         
         # UnionFind data structure for clustering
@@ -429,7 +426,7 @@ class Event():
                 match_id = match['Face']['FaceId']
                 
                 # Filter by cluster_threshold (only include matches above threshold)
-                if similarity >= cluster_threshold:
+                if similarity >= similarity_threshold:
                     uf.union(face_id, match_id)
                     all_faces.add(match_id)
         
@@ -491,24 +488,37 @@ class Event():
                 self.models.db.execute_query(query, (add_faces, largest_group_id))
                 self.models.ensure_representative('groups', largest_group_id)
 
-    def store_face_matches(self, face_matches: dict[str, list[dict]]):
+        self.models.db.execute_query("ANALYZE groups;")
 
+    def store_face_matches(self, face_matches: dict[str, list[dict]], rekognition_request_id: int):
+        """
+        Store face matches in the database.
+        
+        Args:
+            face_matches: Dictionary mapping face_id to list of match dictionaries
+            rekognition_request_id: The rekognition request ID associated with these matches
+        """
         if not face_matches:
             return
-        
-        values = []
-        for face_id, matches in face_matches.items():
-            raw_matches_json = json.dumps(matches)
-            values.extend([face_id, raw_matches_json])
-        
-        query = f"""
-            INSERT INTO face_matches_raw (face_id, raw_matches)
-            VALUES {','.join(['(%s, %s::jsonb)'] * len(face_matches))}
-            ON CONFLICT (face_id) 
-            DO UPDATE SET 
-                raw_matches = EXCLUDED.raw_matches;
-        """
-        self.models.db.execute_query(query, values)
+
+        items = list(face_matches.items())
+        batch_size = 5000  # Safe number
+
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            values = []
+            for face_id, matches in batch:
+                raw_matches_json = json.dumps(matches)
+                values.extend([rekognition_request_id, face_id, raw_matches_json])
+            query = f"""
+                INSERT INTO face_matches_raw (rekognition_request_id, face_id, raw_matches)
+                VALUES {','.join(['(%s, %s, %s::jsonb)'] * len(batch))}
+                ON CONFLICT (face_id) 
+                DO UPDATE SET 
+                    rekognition_request_id = EXCLUDED.rekognition_request_id,
+                    raw_matches = EXCLUDED.raw_matches;
+            """
+            self.models.db.execute_query(query, values)
 
     def get_face_matches(self, face_ids: list[str]) -> dict[str, list[dict]]:
         """

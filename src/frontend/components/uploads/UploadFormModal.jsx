@@ -680,7 +680,7 @@ export default function UploadFormModal({
                 const uploadDetails = await uploadsAPI.getById(currentUploadId, eventUrl);
                 
                 let facesCount = 0;
-                let clustersCount = 0;
+                let groupsCount = 0;
                 
                 if (uploadDetails.changes) {
                   const uploadChange = uploadDetails.changes.find(
@@ -689,11 +689,11 @@ export default function UploadFormModal({
                   if (uploadChange && uploadChange.items) {
                     const uploadEntity = Object.values(uploadChange.items)[0];
                     facesCount = uploadEntity?.faces_count || 0;
-                    clustersCount = uploadEntity?.clusters_count || 0;
+                    groupsCount = uploadEntity?.groups_count || 0;
                   }
                 }
                 
-                const successMsg = `${t('upload.successfullyProcessed')} ${progressData.totalReady} ${progressData.totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${clustersCount} ${clustersCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
+                const successMsg = `${t('upload.successfullyProcessed')} ${progressData.totalReady} ${progressData.totalReady === 1 ? t('upload.image') : t('upload.imagesPlural')}, ${t('upload.detected')} ${facesCount} ${facesCount === 1 ? t('upload.face') : t('upload.facesPlural')}, ${t('upload.created')} ${groupsCount} ${groupsCount === 1 ? t('upload.group') : t('upload.groupsPlural')}`;
                 
                 setUploadProgress({ 
                   step: 'complete', 
@@ -722,7 +722,7 @@ export default function UploadFormModal({
                     upload_id: result.upload_id,
                     images_processed: progressData.totalReady,
                     faces_detected: facesCount,
-                    groups_created: clustersCount,
+                    groups_created: groupsCount,
                     errors: progressData.totalFailed > 0 ? [`${progressData.totalFailed} images failed to process`] : []
                   });
                 }
@@ -1254,7 +1254,7 @@ export default function UploadFormModal({
                          t('upload.processing')}
                       </span>
                     )}
-                    {isViewingExistingUpload && existingUploadStatus === 'COMPLETED' && failedImagesCount > 0 && (
+                    {isViewingExistingUpload && (existingUploadStatus === 'COMPLETED' || existingUploadStatus === 'FAILED') && failedImagesCount > 0 && (
                       <button
                         type="button"
                         onClick={handleDeleteUnreadyImagesClick}
