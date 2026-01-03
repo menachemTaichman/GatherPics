@@ -2,6 +2,7 @@ import os
 import traceback
 from PIL import Image
 import boto3
+from botocore.config import Config
 from io import BytesIO
 import concurrent.futures
 import threading
@@ -46,11 +47,21 @@ class AWSRekognitionHelper:
             else:
                 aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
                 aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+                
+                my_config = Config(
+                    max_pool_connections=50,
+                    retries={
+                        'max_attempts': 10,
+                        'mode': 'adaptive'
+                    }
+                )
+                
                 self.client = boto3.client(
                     'rekognition',
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_secret_access_key,
-                    region_name=os.getenv('AWS_REGION')
+                    region_name=os.getenv('AWS_REGION'),
+                    config=my_config
                 )
         except Exception as e:
             print(f"Error initializing AWS Rekognition client: {e}")
