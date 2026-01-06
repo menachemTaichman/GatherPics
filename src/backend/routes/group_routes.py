@@ -49,9 +49,11 @@ def get_group(event_id, group_id):
     faces = event.models.get_childs('groups', group_id, 'faces')
 
     if filter_enabled:
+        image_ids = list(images.keys())
+        images_groups_and_faces = event.models.get_images_groups_and_faces(image_ids)
         for image_id, image in images.items():
-            image['groups'] = event.models.get_childs('images', image_id, 'groups', return_ids=True)
-            image['faces'] = event.models.get_childs('images', image_id, 'faces', return_ids=True)
+            image['groups'] = images_groups_and_faces.get(image_id, {}).get('groups', [])
+            image['faces'] = images_groups_and_faces.get(image_id, {}).get('faces', [])
     
     result['changes'].append({
         'type': 'RELATION_SET',

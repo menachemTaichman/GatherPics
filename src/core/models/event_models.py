@@ -280,6 +280,51 @@ class EventModels(BaseModels):
         """
         return self.db.execute_query(query, (image_ids, group_id), return_format=ReturnFormat.LIST_VALUES)
 
+    def get_images_groups_and_faces(self, image_ids: list[str]) -> dict[str, dict[str, list[str]]]:
+        """Get groups and faces for multiple images efficiently.
+        Args:
+            image_ids: list of image ids
+        Returns:
+            dict mapping image_id to a dict with 'groups' and 'faces' keys, each containing a list of IDs
+        """
+        if not image_ids:
+            return {}
+        
+        result = {}
+        # Query 1: Get groups for all images
+        ctx_groups_images = 'groups_images_ctx'
+        query_groups = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            SELECT gi.image_id, gi.group_id
+            FROM {ctx_groups_images} gi
+            INNER JOIN image_ids ii ON gi.image_id = ii.image_id
+        """
+        groups_result = self.db.execute_query(query_groups, (image_ids,), return_format=ReturnFormat.LIST_TUPLES)
+        
+        # Populate groups in result
+        for image_id, group_id in groups_result:
+            result.setdefault(image_id, {}).setdefault('groups', []).append(group_id)
+        
+        # Query 2: Get faces for all images
+        ctx_faces = 'faces_ctx'
+        query_faces = f"""
+            WITH image_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS image_id
+            )
+            SELECT f.image_id, f.face_id
+            FROM {ctx_faces} f
+            INNER JOIN image_ids ii ON f.image_id = ii.image_id
+        """
+        faces_result = self.db.execute_query(query_faces, (image_ids,), return_format=ReturnFormat.LIST_TUPLES)
+        
+        # Populate faces in result
+        for image_id, face_id in faces_result:
+            result.setdefault(image_id, {}).setdefault('faces', []).append(face_id)
+        
+        return result
+
     def get_related_groups(self, group_ids: list[str], base_image_ids: list[str]) -> tuple[list[str], dict[str, list[str]]]:
         """Return related groups to images and groups.
         Args:
