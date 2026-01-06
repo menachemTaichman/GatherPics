@@ -300,14 +300,30 @@ class EventModels(BaseModels):
             WITH base_image_ids AS (
                 SELECT DISTINCT unnest(%s::uuid[]) AS image_id
             ),
+            group_ids AS (
+                SELECT DISTINCT unnest(%s::uuid[]) AS group_id
+            ),
+            filtered_faces AS (
+                SELECT DISTINCT f.group_id, f.image_id
+                FROM {ctx_faces} f
+                JOIN base_image_ids bii ON bii.image_id = f.image_id
+            )
             SELECT g.group_id, g.label, g.images_count, g.active_images_count
             FROM {ctx_groups} g
-            JOIN {ctx_faces} f ON g.group_id = f.group_id
-            INNER JOIN base_image_ids bii ON f.image_id = bii.image_id
-            WHERE g.group_id NOT IN (SELECT unnest(%s::uuid[]) AS group_id)
-            GROUP BY g.group_id, g.label, g.images_count, g.active_images_count
-            HAVING COUNT(f.face_id) > 0
-            ORDER BY COUNT(DISTINCT f.image_id) DESC, g.label ASC
+            JOIN filtered_faces ff ON g.group_id = ff.group_id
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM group_ids gi
+                WHERE gi.group_id = g.group_id
+            )
+            GROUP BY
+                g.group_id,
+                g.label,
+                g.images_count,
+                g.active_images_count
+            ORDER BY
+                COUNT(DISTINCT ff.image_id) DESC,
+                g.label ASC
         '''
         query_params = (base_image_ids, group_ids)
 

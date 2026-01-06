@@ -394,13 +394,6 @@ ids = {
 
 # test_timeit()
 
-test_profile_id = '2853b9db-1c22-4a35-b41a-89bfc827406e'
-test_event_id = 'b5c2cb37-f7bf-4223-92eb-eee4060eb553'
-event = Event(test_event_id, profile_id=test_profile_id)
-event_data = event.models.get_entities('events', test_event_id, include_details=True)
-print(event_data)
-print('--------------------------------')
-
 def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
 
     event = Event(event_id, profile_id=profile_id)
@@ -418,9 +411,15 @@ def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
     face_ids = event.models.get_ready_face_ids_in_upload(upload_id)
     event._cluster_faces(face_ids)
 
-# test_cluster_faces_task(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id, upload_id=18)
-print('--------------------------------')
 # # prod
+
+# event = Event(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id)
+# base_image_ids = event.models.get_childs('groups', '798b71cd-e53c-400d-8122-d3984cf043ed', 'images', return_ids=True)
+# with Timeit('get_related_groups'):
+#     result = event.models.get_related_groups(group_ids=['798b71cd-e53c-400d-8122-d3984cf043ed'], base_image_ids=base_image_ids)
+# # print(result)
+# print('--------------------------------')
+
 # event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
 # event = Event(event_id, profile_id=dev_profile_id)
 
