@@ -34,6 +34,20 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   const setCardSize = (value) => setPreference('general.size', value);
   const [cardSizeInputValue, setCardSizeInputValue] = useState();
   
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
   // Pinch-to-zoom for mobile
   const setGridContainerRef = usePinchToZoom(cardSize, setCardSize);
 
@@ -213,7 +227,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
       </div>
 
       {/* Content Area */}
-      <div className="px-4 sm:px-8 py-4 sm:py-8">
+      <div className="px-4 sm:px-8 pt-0 pb-0">
         {/* Gallery Grid */}
       {filteredAndSortedGroups.length === 0 ? (
         <motion.div
@@ -233,42 +247,44 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
           </p>
         </motion.div>
       ) : (
-        <AbsoluteMasonryGrid
-          items={filteredAndSortedGroups}
-          baseSize={Math.max(100, 175 * cardSize)}
-          imageClasses={{}}
-          heightMultiplier={1.2}
-          containerHeight="auto"
-          className="w-full"
-          onPinchRef={setGridContainerRef}
-          style={{
-            '--grid-scale': 1,
-            '--grid-z-index': 1,
-          }}
-          onItemRef={(group, index, el) => {
-            // No specific ref handling needed for groups
-          }}
-          renderItem={(group, index, isPortrait, setRef) => {
-            return (
-              <div
-                style={{ 
-                  width: '100%', 
-                  height: '100%',
-                  paddingTop: '4px',
-                  paddingBottom: '4px',
-                  overflow: 'visible'
-                }}
-              >
-                <FaceCard
-                  group={group}
-                  cardSize={cardSize}
-                  urlHelpers={urlHelpers}
-                  eventUrl={eventUrl}
-                />
-              </div>
-            );
-          }}
-        />
+        <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
+          <AbsoluteMasonryGrid
+            items={filteredAndSortedGroups}
+            baseSize={Math.max(100, 175 * cardSize)}
+            imageClasses={{}}
+            heightMultiplier={1.2}
+            containerHeight="100%"
+            className="w-full"
+            onPinchRef={setGridContainerRef}
+            style={{
+              '--grid-scale': 1,
+              '--grid-z-index': 1,
+            }}
+            onItemRef={(group, index, el) => {
+              // No specific ref handling needed for groups
+            }}
+            renderItem={(group, index, isPortrait, setRef) => {
+              return (
+                <div
+                  style={{ 
+                    width: '100%', 
+                    height: '100%',
+                    paddingTop: '4px',
+                    paddingBottom: '4px',
+                    overflow: 'visible'
+                  }}
+                >
+                  <FaceCard
+                    group={group}
+                    cardSize={cardSize}
+                    urlHelpers={urlHelpers}
+                    eventUrl={eventUrl}
+                  />
+                </div>
+              );
+            }}
+          />
+        </div>
       )}
       </div>
     </div>
