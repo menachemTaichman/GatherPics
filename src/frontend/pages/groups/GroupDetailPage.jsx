@@ -525,7 +525,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     showMergeConflictModal,
     clearConflict,
     setShowMergeModal
-  } = useGroupNameConflict(group, onRefreshGroups, eventUrl);
+  } = useGroupNameConflict(group, onRefreshGroups, eventUrl, eventId);
 
 
 

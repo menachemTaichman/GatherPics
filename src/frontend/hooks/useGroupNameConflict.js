@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { groupsAPI, handleAPIError } from '../utils/apiService';
 import { useDataStore } from '../utils/dataManager';
 
-export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl) {
+export function useGroupNameConflict(currentGroup, onRefreshGroups, eventUrl, eventId) {
   const [nameConflict, setNameConflict] = useState(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [conflictData, setConflictData] = useState(null);
