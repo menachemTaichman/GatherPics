@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FaceCard } from '../../components/groups';
-import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
+import SimpleVirtuosoGrid from '../../components/images/SimpleVirtuosoGrid';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
@@ -248,10 +248,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         </motion.div>
       ) : (
         <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
-          <AbsoluteMasonryGrid
+          <SimpleVirtuosoGrid
             items={filteredAndSortedGroups}
             baseSize={Math.max(100, 175 * cardSize)}
-            imageClasses={{}}
             heightMultiplier={1.2}
             containerHeight="100%"
             className="w-full"

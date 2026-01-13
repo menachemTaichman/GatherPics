@@ -14,8 +14,8 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { formatTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
-import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
-import { useImageComponent } from '../../hooks/useImage.jsx';
+import SimpleVirtuosoGrid from '../images/SimpleVirtuosoGrid';
+import { ImageComponent } from '../../hooks/useImage.jsx';
 
 // Stable empty Set to avoid creating new instances
 const EMPTY_SET = new Set();
@@ -757,13 +757,11 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
               {t('moments.noImages')}
             </div>
           ) : (
-            <AbsoluteMasonryGrid
+            <SimpleVirtuosoGrid
               items={filteredImages}
               baseSize={120}
-              imageClasses={{}}
               containerHeight="100%"
               className="w-full p-3 sm:p-4 md:p-6"
-              isSquareGrid={true}
               gap={12}
             style={{
               '--grid-scale': 1,
@@ -832,7 +830,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
                   data-image-id={image.id}
                 >
                   <div className="w-full h-full rounded-lg overflow-hidden">
-                    {useImageComponent(
+                    {ImageComponent(
                       image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id)),
                       {
                         width: 200,

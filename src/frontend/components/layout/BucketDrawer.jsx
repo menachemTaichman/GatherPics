@@ -10,7 +10,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { RemovableThumbnail } from '../common';
 import { useRTL } from '../../hooks/useRTL';
 import { downloadAsZip } from '../../utils/downloadHelper';
-import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
+import SimpleVirtuosoGrid from '../images/SimpleVirtuosoGrid';
 import { useEventId } from '../../utils/storeUtils';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 
@@ -272,11 +272,10 @@ export default function BucketDrawer() {
             {queue.length === 0 ? (
               <p className="text-sm text-gray-500">{t('bucketDrawer.noItemsInQueue')}</p>
             ) : (
-              <AbsoluteMasonryGrid
+              <SimpleVirtuosoGrid
                 items={queueItems}
                 baseSize={48}
                 gap={8}
-                isSquareGrid={true}
                 containerHeight="100%"
                 className="w-full"
                 renderItem={(item) => (
@@ -305,11 +304,10 @@ export default function BucketDrawer() {
               <p className="text-xs text-gray-400">{t('bucketDrawer.nothingYet')}</p>
             ) : (
               <div className="h-48 overflow-y-auto">
-                <AbsoluteMasonryGrid
+                <SimpleVirtuosoGrid
                   items={alreadyListItems}
                   baseSize={48}
                   gap={8}
-                  isSquareGrid={true}
                   containerHeight="auto"
                   className="w-full"
                   renderItem={(item) => (
