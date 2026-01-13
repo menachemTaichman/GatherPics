@@ -19,24 +19,38 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    server: env.VITE_API_BASE ? {
-      host: true,
-      proxy: {
-        '/api': {
-          target: env.VITE_API_BASE,
-          changeOrigin: true,
-          cookieDomainRewrite: '',  // Remove domain restriction for cookies
-          secure: false,  // Allow self-signed certificates in dev
-        },
-        '/images': {
-          target: env.VITE_API_BASE,
-          changeOrigin: true,
-          cookieDomainRewrite: '',  // Remove domain restriction for cookies
-          secure: false,  // Allow self-signed certificates in dev
+    server: {
+      ...(env.VITE_API_BASE ? {
+        host: true,
+        proxy: {
+          '/api': {
+            target: env.VITE_API_BASE,
+            changeOrigin: true,
+            cookieDomainRewrite: '',  // Remove domain restriction for cookies
+            secure: false,  // Allow self-signed certificates in dev
+          },
+          '/images': {
+            target: env.VITE_API_BASE,
+            changeOrigin: true,
+            cookieDomainRewrite: '',  // Remove domain restriction for cookies
+            secure: false,  // Allow self-signed certificates in dev
+          }
         }
+      } : {
+        host: true
+      }),
+      watch: {
+        ignored: [
+          '**/venv/**',
+          '**/node_modules/**',
+          '**/__pycache__/**',
+          '**/.git/**',
+          '**/dist/**',
+          '**/build/**',
+          '**/migrations/**',
+          '**/data/**'
+        ]
       }
-    } : {
-      host: true
     }
   }
 }) 
