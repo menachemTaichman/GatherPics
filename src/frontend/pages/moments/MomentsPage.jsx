@@ -346,70 +346,50 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
   // Detect current visible moment based on scroll position
   useEffect(() => {
     const gridContainer = gridContainerRef.current;
-    if (!gridContainer || sortedImages.length === 0) return;
+    if (!gridContainer || sortedImages.length === 0 || !gridRef.current) return;
     
     const handleScroll = () => {
-      const containerRect = gridContainer.getBoundingClientRect();
-      const scrollTop = gridContainer.scrollTop;
-      const viewportCenter = scrollTop + containerRect.height / 2;
+      // Use the grid's method to get the current visible moment header
+      const headerId = gridRef.current?.getCurrentVisibleMoment?.();
       
-      // Find which moment's images are in the viewport center
-      let currentMoment = null;
-      for (const moment of moments) {
-        const firstIndex = momentIndexes.get(moment.id);
-        if (firstIndex === undefined) continue;
-        
-        const momentImageCount = sortedImages.filter(img => img.moment_id === moment.id).length;
-        if (momentImageCount === 0) continue;
-        
-        // Estimate the position range for this moment's images
-        // This is approximate since we don't have exact positions without rendering
-        const imageElement = imageTileRefs.current[firstIndex];
-        if (imageElement) {
-          const imageRect = imageElement.getBoundingClientRect();
-          const containerRect = gridContainer.getBoundingClientRect();
-          const relativeTop = imageRect.top - containerRect.top + gridContainer.scrollTop;
-          
-          // If the first image of this moment is in the viewport, consider it current
-          if (relativeTop <= viewportCenter && relativeTop >= scrollTop - 200) {
-            currentMoment = moment;
-            break;
-          }
-        }
+      if (!headerId) {
+        // If no header found, try to find moment from first visible image
+        // This is a fallback for edge cases
+        return;
       }
       
-      // Fallback: find moment by checking which images are visible
-      if (!currentMoment) {
-        for (let i = 0; i < imageTileRefs.current.length; i++) {
-          const element = imageTileRefs.current[i];
-          if (!element) continue;
-          
-          const rect = element.getBoundingClientRect();
-          const containerRect = gridContainer.getBoundingClientRect();
-          
-          if (rect.top >= containerRect.top && rect.top <= containerRect.bottom) {
-            const image = sortedImages[i];
-            if (image) {
-              currentMoment = moments.find(m => m.id === image.moment_id);
-              if (currentMoment) break;
-            }
-          }
-        }
-      }
+      // Extract moment ID from header ID (format: "header-{momentId}")
+      const momentId = headerId.replace(/^header-/, '');
+      const moment = moments.find(m => m.id === momentId);
       
-      if (currentMoment && currentMoment.id !== currentVisibleMoment?.id) {
-        setCurrentVisibleMoment(currentMoment);
+      if (moment && moment.id !== currentVisibleMoment?.id) {
+        setCurrentVisibleMoment(moment);
       }
     };
     
-    gridContainer.addEventListener('scroll', handleScroll, { passive: true });
-    // Initial check
-    handleScroll();
+    // Throttle scroll events for better performance
+    let ticking = false;
+    const throttledHandleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          handleScroll();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+    
+    gridContainer.addEventListener('scroll', throttledHandleScroll, { passive: true });
+    // Initial check after a short delay to ensure grid is ready
+    const initialTimeout = setTimeout(() => {
+      handleScroll();
+    }, 100);
     
     return () => {
-      gridContainer.removeEventListener('scroll', handleScroll);
+      clearTimeout(initialTimeout);
+      gridContainer.removeEventListener('scroll', throttledHandleScroll);
     };
-  }, [sortedImages, moments, momentIndexes, currentVisibleMoment]);
+  }, [sortedImages, moments, currentVisibleMoment, itemsWithHeaders.length]);
 
   // Update URL when current visible moment changes
   useEffect(() => {

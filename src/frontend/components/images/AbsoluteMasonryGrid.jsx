@@ -263,8 +263,69 @@ const AbsoluteMasonryGrid = forwardRef(({
       setTimeout(() => {
         setHighlightedId(null);
       }, 1500);
+    },
+    
+    /**
+     * Get the current visible moment header based on scroll position
+     * @returns {string|null} The header ID of the current visible moment, or null if none found
+     */
+    getCurrentVisibleMoment: () => {
+      const container = internalContainerRef.current;
+      if (!container || !layout.length) return null;
+
+      // Use the tracked scrollTop state for consistency, but fall back to DOM if needed
+      const currentScrollTop = scrollTop || container.scrollTop;
+      const viewportHeight = dimensions.height || container.clientHeight;
+      const viewportCenter = currentScrollTop + viewportHeight / 2;
+
+      // Find all header items
+      const headers = layout.filter(item => item.isHeader);
+      if (headers.length === 0) return null;
+
+      // Find the header that is closest to the viewport center and above it
+      // Prefer headers that are visible or just above the viewport center
+      let bestHeader = null;
+      let bestDistance = Infinity;
+
+      for (const header of headers) {
+        const headerTop = header.top;
+        const headerBottom = header.top + header.height;
+        
+        // Check if header is in or near the viewport
+        const distanceFromCenter = Math.abs(headerTop - viewportCenter);
+        
+        // Prefer headers that are:
+        // 1. Above or at the viewport center (not too far below)
+        // 2. Closest to the viewport center
+        if (headerTop <= viewportCenter + 100 && distanceFromCenter < bestDistance) {
+          bestDistance = distanceFromCenter;
+          bestHeader = header;
+        }
+      }
+
+      // If no header found above center, use the first header that's below center
+      if (!bestHeader) {
+        for (const header of headers) {
+          if (header.top > viewportCenter) {
+            bestHeader = header;
+            break;
+          }
+        }
+      }
+
+      // If still no header and we're at the top, use the first header
+      if (!bestHeader && currentScrollTop < 50 && headers.length > 0) {
+        bestHeader = headers[0];
+      }
+
+      // If still no header, use the last header (we're at the bottom)
+      if (!bestHeader && headers.length > 0) {
+        bestHeader = headers[headers.length - 1];
+      }
+
+      return bestHeader ? bestHeader.id : null;
     }
-  }), [layout]); // Depend on layout to have up-to-date information
+  }), [layout, scrollTop, dimensions.height]); // Depend on layout, scrollTop, and dimensions
 
   // 3. הווירטואליזציה האמיתית
   const visibleItems = useMemo(() => {
