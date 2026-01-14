@@ -290,7 +290,7 @@ function ImageWithErrorFallback({ src, options = {} }) {
     height = 200,
     className = '',
     alt = '',
-    loading = 'lazy',
+    loading = 'eager', //'lazy',
     onError: propOnError,
     iconType = "image", // "image" or "person"
     ...imgProps
