@@ -521,6 +521,87 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
     moment?.end_date
   ]);
 
+  // Define renderItem separately to keep reference stable
+  const renderImageItem = useCallback((image, index) => {
+    const selectionState = getImageSelectionState(image.id);
+    const momentInfo = getImageMomentInfo(image.id);
+    const isInPeriod = isImageInPeriod(image.id);
+    const isFocused = index === focusedImageIndex;
+    
+    // Determine border color based on selection state - using outline for outer border
+    let borderStyle = {};
+    let borderClasses = 'border border-gray-200';
+    switch (selectionState) {
+      case 'marked-for-addition':
+        borderStyle = {
+          outline: '4px solid rgb(34, 197, 94)', // green-500
+          outlineOffset: '-4px',
+          boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
+        };
+        break;
+      case 'marked-for-removal':
+        borderStyle = {
+          outline: '4px solid rgb(239, 68, 68)', // red-500
+          outlineOffset: '-4px',
+          boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' // red-200 ring
+        };
+        break;
+      case 'in-moment':
+        borderStyle = {
+          outline: '4px solid rgb(34, 197, 94)', // green-500
+          outlineOffset: '-4px',
+          boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
+        };
+        break;
+      default:
+        borderStyle = {};
+    }
+    
+    return (
+      <div
+        className={`image-item relative cursor-pointer border rounded-lg overflow-visible hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
+          isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
+        }`}
+        style={{ width: '100%', height: '100%', ...borderStyle }}
+        onClick={() => toggleImage(image.id)}
+        onFocus={() => setFocusedImageIndex(index)}
+        onKeyDown={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            toggleImage(image.id);
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
+        data-image-id={image.id}
+      >
+        <div className="w-full h-full rounded-lg overflow-hidden">
+          {ImageComponent(
+            image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id)),
+            {
+              width: 200,
+              height: 200,
+              className: 'w-full h-24 object-cover',
+              alt: image.label || `Image ${image.id}`,
+              loading: 'eager' // Let Virtuoso handle the loading/unloading
+            }
+          )}
+          <div className="p-2 text-xs text-gray-600 truncate">
+            {image.date_taken ? formatTime(image.date_taken) : image.label}
+          </div>
+          {momentInfo && (
+            <div className={`absolute top-2 ${endClass('2')} text-white text-xs px-1 py-0.5 rounded ${
+              momentInfo.isCurrentMoment ? 'bg-green-500' : 'bg-red-500'
+            }`}>
+              {momentInfo.title}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }, [focusedImageIndex, imagesToAdd, imagesToRemove, currentMomentImageIds, imageMomentMap, moment, allImagesWithTimestamps, urlHelpers, endClass, momentId]);
+
   // Focus the image element when focusedImageIndex changes
   useEffect(() => {
     if (imageRefs.current[focusedImageIndex] && focusedImageIndex < imageRefs.current.length) {
@@ -757,103 +838,26 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
               {t('moments.noImages')}
             </div>
           ) : (
-            <SimpleVirtuosoGrid
-              items={filteredImages}
-              baseSize={120}
-              containerHeight="100%"
-              className="w-full p-3 sm:p-4 md:p-6"
-              gap={12}
-            style={{
-              '--grid-scale': 1,
-              '--grid-z-index': 1,
-            }}
-            onPinchRef={(node) => {
-              scrollContainerRef.current = node;
-            }}
-            onItemRef={(image, index, el) => {
-              if (el) {
-                imageRefs.current[index] = el;
-              }
-            }}
-            renderItem={(image, index, isPortrait, setRef) => {
-              const selectionState = getImageSelectionState(image.id);
-              const momentInfo = getImageMomentInfo(image.id);
-              const isInPeriod = isImageInPeriod(image.id);
-              const isFocused = index === focusedImageIndex;
-              
-              // Determine border color based on selection state - using outline for outer border
-              let borderStyle = {};
-              let borderClasses = 'border border-gray-200';
-              switch (selectionState) {
-                case 'marked-for-addition':
-                  borderStyle = {
-                    outline: '4px solid rgb(34, 197, 94)', // green-500
-                    outlineOffset: '-4px',
-                    boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
-                  };
-                  break;
-                case 'marked-for-removal':
-                  borderStyle = {
-                    outline: '4px solid rgb(239, 68, 68)', // red-500
-                    outlineOffset: '-4px',
-                    boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' // red-200 ring
-                  };
-                  break;
-                case 'in-moment':
-                  borderStyle = {
-                    outline: '4px solid rgb(34, 197, 94)', // green-500
-                    outlineOffset: '-4px',
-                    boxShadow: '0 0 0 4px rgba(34, 197, 94, 0.2)' // green-200 ring
-                  };
-                  break;
-                default:
-                  borderStyle = {};
-              }
-              
-              return (
-                <div
-                  className={`image-item relative cursor-pointer border rounded-lg overflow-visible hover:border-primary-500 transition-colors focus:outline-none ${borderClasses} ${
-                    isFocused ? 'shadow-[0_0_0_4px_rgba(59,130,246,0.5)]' : ''
-                  }`}
-                  style={{ width: '100%', height: '100%', ...borderStyle }}
-                  onClick={() => toggleImage(image.id)}
-                  onFocus={() => setFocusedImageIndex(index)}
-                  onKeyDown={(e) => {
-                    if (e.key === ' ' || e.key === 'Enter') {
-                      e.preventDefault();
-                      toggleImage(image.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Image ${image.label}${selectionState !== 'not-in-moment' ? ' (selected)' : ''}`}
-                  data-image-id={image.id}
-                >
-                  <div className="w-full h-full rounded-lg overflow-hidden">
-                    {ImageComponent(
-                      image.urls?.thumbnail || (urlHelpers && urlHelpers.getThumbnailUrl(image.id)),
-                      {
-                        width: 200,
-                        height: 200,
-                        className: 'w-full h-24 object-cover',
-                        alt: image.label || `Image ${image.id}`
-                      }
-                    )}
-                    <div className="p-2 text-xs text-gray-600 truncate">
-                      {image.date_taken ? formatTime(image.date_taken) : image.label}
-                    </div>
-                    {momentInfo && (
-                      <div className={`absolute top-2 ${endClass('2')} text-white text-xs px-1 py-0.5 rounded ${
-                        momentInfo.isCurrentMoment ? 'bg-green-500' : 'bg-red-500'
-                      }`}>
-                        {momentInfo.title}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            }}
-            />
+            <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-x-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
+              <SimpleVirtuosoGrid
+                items={filteredImages}
+                baseSize={120}
+                containerHeight="100%"
+                className="w-full h-full overflow-x-hidden"
+                gap={12}
+                overscan={1500}
+                style={{ flex: '1 1 0', minHeight: 0 }}
+                onPinchRef={(node) => {
+                  scrollContainerRef.current = node;
+                }}
+                onItemRef={(image, index, el) => {
+                  if (el) {
+                    imageRefs.current[index] = el;
+                  }
+                }}
+                renderItem={renderImageItem}
+              />
+            </div>
           )}
         </div>
       </motion.div>

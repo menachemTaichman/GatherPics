@@ -5,7 +5,7 @@ import { useImageComponent } from '../../hooks/useImage.jsx';
 import { getRepresentativeUrl } from '../../utils/storeUtils';
 
 
-export default function FaceCard({ group, cardSize = 1.0, urlHelpers: injectedUrlHelpers, eventUrl }) {
+export default function FaceCard({ group, cardSize = 1.0, urlHelpers: injectedUrlHelpers, eventUrl, loading }) {
   // Resolve eventUrl from props or route params
   const params = useParams();
   const evUrl = eventUrl || params?.eventUrl || '';
@@ -50,7 +50,8 @@ export default function FaceCard({ group, cardSize = 1.0, urlHelpers: injectedUr
         key: `${imageSrc || 'null'}:${getImageCount(group)}`,
         style: {
           objectPosition: 'center center'
-        }
+        },
+        loading // Pass through loading prop for performance optimization
       })}
             
             {/* Shadow overlay on hover */}

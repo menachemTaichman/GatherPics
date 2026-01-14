@@ -1,20 +1,35 @@
-import React, { useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useMemo, useRef, useCallback, useEffect, useState } from 'react';
 import { VirtuosoGrid } from 'react-virtuoso';
 
-/**
- * SimpleVirtuosoGrid - A lightweight wrapper around VirtuosoGrid for uniform grids
- * 
- * This component is designed for simpler grids that don't need masonry layout,
- * headers, or variable item heights. It provides:
- * - Uniform grid layout (square items)
- * - Responsive column calculation based on baseSize
- * - Pinch-to-zoom support via onPinchRef
- * - Item ref callbacks
- * - Gap spacing
- * 
- * For complex grids with masonry layout, headers, or variable heights,
- * use AbsoluteMasonryGrid instead.
- */
+// Debounce helper to prevent layout thrashing
+const useDebouncedDimensions = (ref, delay = 100) => {
+  const [dimensions, setDimensions] = useState({ width: 0 });
+
+  useEffect(() => {
+    if (!ref.current) return;
+    
+    let timeoutId;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0].contentRect.width;
+      // Only update if width actually changed significantly (avoid fractional pixel jitter)
+      if (Math.abs(width - dimensions.width) > 1) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          setDimensions({ width });
+        }, delay);
+      }
+    });
+
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeoutId);
+    };
+  }, [ref, delay, dimensions.width]);
+
+  return dimensions;
+};
+
 const SimpleVirtuosoGrid = React.forwardRef(({
   items = [],
   renderItem,
@@ -24,214 +39,165 @@ const SimpleVirtuosoGrid = React.forwardRef(({
   containerHeight = '100%',
   className = '',
   style = {},
-  onItemRef = null,
   onPinchRef = null,
-  overscan = 200,
+  // Increase overscan significantly for images to prevent "blank" areas during scroll
+  overscan = 1200,
+  // Allow disabling minHeight for flex containers to prevent gaps
+  disableMinHeight = false,
 }, ref) => {
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
-  const [dimensions, setDimensions] = React.useState({ width: 0 });
+  
+  // Use debounced width to prevent excessive re-renders during resize
+  const { width } = useDebouncedDimensions(containerRef, 50);
 
-  // Merge refs: internal container ref + onPinchRef callback
+  // Calculate columns - Memoized
+  const gridLayout = useMemo(() => {
+    if (!width) return { columns: 3, itemWidth: baseSize, itemHeight: baseSize * heightMultiplier };
+    
+    const columns = Math.max(1, Math.floor((width + gap) / (baseSize + gap)));
+    const itemWidth = (width - (columns - 1) * gap) / columns;
+    
+    return {
+      columns,
+      itemWidth,
+      itemHeight: itemWidth * heightMultiplier
+    };
+  }, [width, baseSize, gap, heightMultiplier]);
+
+  // Handle refs
   const setMultiRef = useCallback((node) => {
     containerRef.current = node;
-    // Use scroll element if available, otherwise use container
     const elementForPinch = scrollRef.current || node;
-    if (onPinchRef && elementForPinch) {
-      onPinchRef(elementForPinch);
-    }
+    if (onPinchRef && elementForPinch) onPinchRef(elementForPinch);
   }, [onPinchRef]);
 
-  // Get the actual scroll element from VirtuosoGrid
   const handleScrollerRef = useCallback((element) => {
     scrollRef.current = element;
-    // Update pinch ref when scroll element is available
-    if (onPinchRef && element) {
-      onPinchRef(element);
-    }
+    if (onPinchRef && element) onPinchRef(element);
   }, [onPinchRef]);
 
-  // Track container width for responsive column calculation
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const element = containerRef.current;
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      setDimensions({
-        width: entry.contentRect.width
-      });
-    });
-
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  // Calculate responsive columns based on baseSize
-  const columnCount = useMemo(() => {
-    if (!dimensions.width) return 3; // Default fallback
-    return Math.max(1, Math.floor((dimensions.width + gap) / (baseSize + gap)));
-  }, [dimensions.width, baseSize, gap]);
-
-  // Calculate item width (fills available space with gap)
-  const itemWidth = useMemo(() => {
-    if (!dimensions.width || columnCount === 0) return baseSize;
-    return (dimensions.width - (columnCount - 1) * gap) / columnCount;
-  }, [dimensions.width, columnCount, gap, baseSize]);
-
-  // Calculate item height (square by default, or multiplied)
-  const itemHeight = useMemo(() => {
-    return itemWidth * heightMultiplier;
-  }, [itemWidth, heightMultiplier]);
-
-  // Styled components for VirtuosoGrid
+  // Stable ItemContainer to prevent remounts
+  // We construct the styles outside to avoid recreating objects inside the render function
   const ItemContainer = useMemo(() => {
-    const ItemComponent = React.forwardRef(({ children, ...props }, ref) => {
-      const itemIndex = props['data-index'];
-      const item = items[itemIndex];
-      const itemRef = React.useRef(null);
-
-      // Merge external ref with internal ref
-      React.useEffect(() => {
-        if (ref) {
-          if (typeof ref === 'function') {
-            ref(itemRef.current);
-          } else {
-            ref.current = itemRef.current;
-          }
-        }
-      }, [ref]);
-
-      // Call onItemRef when element is mounted
-      React.useEffect(() => {
-        if (itemRef.current && onItemRef && item) {
-          onItemRef(item, itemIndex, itemRef.current);
-        }
-      }, [item, itemIndex, onItemRef]);
-
-      // Extract padding from props.style if it exists to avoid conflicts
-      const { padding, paddingTop, paddingRight, paddingBottom, paddingLeft, ...restStyle } = props.style || {};
-      
+    return ({ children, style: propStyle, ...restProps }) => {
+      // Only extract style - don't spread other props to avoid passing non-DOM props to div
+      // VirtuosoGrid may pass internal props that shouldn't be on DOM elements
       return (
         <div
-          {...props}
-          ref={itemRef}
           style={{
-            ...restStyle,
-            paddingTop: paddingTop || `${gap / 2}px`,
-            paddingRight: paddingRight || `${gap / 2}px`,
-            paddingBottom: paddingBottom || `${gap / 2}px`,
-            paddingLeft: paddingLeft || `${gap / 2}px`,
-            width: `${100 / columnCount}%`,
+            ...propStyle,
+            width: `${100 / gridLayout.columns}%`,
+            padding: `${gap / 2}px`,
             display: 'flex',
-            flex: 'none',
-            alignContent: 'stretch',
             boxSizing: 'border-box',
+            // Critical for performance:
+            contentVisibility: 'auto', 
+            containIntrinsicSize: `${gridLayout.itemHeight}px` 
           }}
         >
-          <div
-            style={{
-              width: '100%',
-              height: `${itemHeight}px`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <div style={{ width: '100%', height: `${gridLayout.itemHeight}px` }}>
             {children}
           </div>
         </div>
       );
-    });
-    
-    ItemComponent.displayName = 'ItemContainer';
-    return React.memo(ItemComponent);
-  }, [columnCount, gap, itemHeight, items, onItemRef]);
+    };
+  }, [gridLayout.columns, gridLayout.itemHeight, gap]);
 
   const ListContainer = useMemo(() => {
-    const ListComponent = React.forwardRef(({ children, ...props }, ref) => {
-      // Extract padding from props.style if it exists to avoid conflicts
-      const { padding, paddingTop, paddingRight, paddingBottom, paddingLeft, ...restStyle } = props.style || {};
-      
+    return React.forwardRef(({ style, children, ...restProps }, listRef) => {
+      // Only extract style - don't spread other props to avoid passing non-DOM props to div
+      // VirtuosoGrid may pass internal props that shouldn't be on DOM elements
       return (
         <div
-          {...props}
-          ref={ref}
+          ref={listRef}
           style={{
-            ...restStyle,
-            paddingTop: paddingTop || `${gap / 2}px`,
-            paddingRight: paddingRight || `${gap / 2}px`,
-            paddingBottom: paddingBottom || `${gap / 2}px`,
-            paddingLeft: paddingLeft || `${gap / 2}px`,
+            ...style,
             display: 'flex',
             flexWrap: 'wrap',
+            // Remove padding from container to handle gaps strictly via Item padding
+            // Negative margin compensates for item padding, so we don't need to add to width
+            margin: `-${gap/2}px`,
+            width: '100%',
+            boxSizing: 'border-box'
           }}
         >
           {children}
         </div>
       );
     });
-    
-    ListComponent.displayName = 'ListContainer';
-    return React.memo(ListComponent);
   }, [gap]);
 
-  // Expose scrollToIndex via ref if needed
-  React.useImperativeHandle(ref, () => ({
-    scrollToIndex: (index) => {
-      // VirtuosoGrid doesn't expose scrollToIndex directly via ref,
-      // but we can access it through the container if needed
-      // For now, this is a placeholder for future enhancement
-    }
-  }), []);
+  // Stable item content renderer
+  const itemContent = useCallback((index) => {
+    return renderItem(items[index], index);
+  }, [items, renderItem]);
+
+  // Optimized key computation
+  const computeItemKey = useCallback((index) => {
+    const item = items[index];
+    // Ensure we return a string or number, fallback to index is dangerous for lazy loading
+    return item?.id ?? item?.group_id ?? item?.key ?? index;
+  }, [items]);
 
   if (!items.length) return null;
+
+  // Calculate container style
+  const containerStyle = useMemo(() => {
+    const baseStyle = {
+      width: '100%',
+      height: containerHeight,
+      position: 'relative',
+      touchAction: 'pan-y', // Improves scrolling on mobile
+      overflow: 'hidden', // Prevent horizontal scrolling
+      ...style,
+    };
+    
+    // If containerHeight is 100% and no custom minHeight/height is set,
+    // add a reasonable minHeight for initial render (unless disabled for flex containers)
+    if (containerHeight === '100%' && !style.minHeight && !style.height && !disableMinHeight) {
+      // Use a reasonable minHeight for initial render (allows grid to calculate layout)
+      baseStyle.minHeight = '300px';
+    } else if (containerHeight === '100%' && disableMinHeight) {
+      // For flex containers, use minHeight: 0 to allow proper flex behavior
+      baseStyle.minHeight = style.minHeight || 0;
+    }
+    
+    return baseStyle;
+  }, [containerHeight, style]);
 
   return (
     <div
       ref={setMultiRef}
       className={className}
-      style={{
-        width: '100%',
-        height: containerHeight,
-        position: 'relative',
-        willChange: 'scroll-position',
-        touchAction: 'pan-y',
-        ...style,
-      }}
+      style={containerStyle}
     >
       <VirtuosoGrid
-        style={{ height: '100%', width: '100%' }}
+        style={{ 
+          height: '100%', 
+          width: '100%',
+          overflowX: 'hidden' // Prevent horizontal scrolling
+        }}
         totalCount={items.length}
         overscan={overscan}
+        // Fixed item height helps VirtuosoGrid calculate which items to render
+        // Total height = itemHeight + gap (padding top + bottom)
+        // Safe to use now - we don't spread props to DOM elements in ItemContainer/ListContainer
+        // fixedItemHeight={gridLayout.itemHeight + gap}  // removed beacuse of "Warning: React does not recognize the `fixedItemHeight` prop on a DOM element"
+        // Increase viewport by additional pixels to prevent cut-offs
+        // This renders extra items beyond the visible area
+        increaseViewportBy={{ top: 400, bottom: 400 }}
         scrollerRef={handleScrollerRef}
         components={{
           Item: ItemContainer,
           List: ListContainer,
         }}
-        itemContent={(index) => {
-          const item = items[index];
-          if (!item) return null;
-          
-          // Call renderItem similar to AbsoluteMasonryGrid API
-          // renderItem receives (item, index, isPortrait, setRef)
-          // For uniform grid, isPortrait is always false
-          const rendered = renderItem(item, index, false, (el) => {
-            // setRef callback can be used by renderItem if needed
-            if (onItemRef && el) {
-              onItemRef(item, index, el);
-            }
-          });
-          
-          return rendered;
-        }}
+        itemContent={itemContent}
+        computeItemKey={computeItemKey}
       />
     </div>
   );
 });
 
 SimpleVirtuosoGrid.displayName = 'SimpleVirtuosoGrid';
-
 export default SimpleVirtuosoGrid;

@@ -100,6 +100,20 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
     return sortGroups(filtered, sortBy, sortOrder);
   }, [currentGroups, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
+  // Define renderItem separately to keep reference stable
+  const renderFaceCard = useCallback((group, index) => {
+    return (
+      // No need for extra wrapper div here, the ItemContainer handles the sizing
+      <FaceCard
+        group={group}
+        cardSize={cardSize}
+        urlHelpers={urlHelpers}
+        eventUrl={eventUrl}
+        // PERFORMANCE TIP: Pass specific image props
+        loading="eager" // Important! Let Virtuoso handle the loading/unloading
+      />
+    );
+  }, [cardSize, urlHelpers, eventUrl]); // Dependencies
 
   return (
     <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -255,33 +269,9 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
             containerHeight="100%"
             className="w-full"
             onPinchRef={setGridContainerRef}
-            style={{
-              '--grid-scale': 1,
-              '--grid-z-index': 1,
-            }}
-            onItemRef={(group, index, el) => {
-              // No specific ref handling needed for groups
-            }}
-            renderItem={(group, index, isPortrait, setRef) => {
-              return (
-                <div
-                  style={{ 
-                    width: '100%', 
-                    height: '100%',
-                    paddingTop: '4px',
-                    paddingBottom: '4px',
-                    overflow: 'visible'
-                  }}
-                >
-                  <FaceCard
-                    group={group}
-                    cardSize={cardSize}
-                    urlHelpers={urlHelpers}
-                    eventUrl={eventUrl}
-                  />
-                </div>
-              );
-            }}
+            // Overscan increased by default in component, but you can override:
+            overscan={1500}
+            renderItem={renderFaceCard} // Use the callback
           />
         </div>
       )}

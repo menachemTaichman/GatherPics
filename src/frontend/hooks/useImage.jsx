@@ -72,7 +72,7 @@ export function useImage(src, options = {}) {
     height = 200,
     className = '',
     alt = '',
-    loading = 'lazy',
+    loading = 'eager',
     onLoad: customOnLoad,
     onError: customOnError,
     iconType = "image", // "image" or "person"

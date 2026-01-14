@@ -1574,6 +1574,38 @@ const isProfileEditable = useMemo(() => {
     }
   };
 
+  // Define renderItem callbacks separately to keep references stable
+  // MUST be before early return to follow Rules of Hooks
+  const renderProfileImage = useCallback((image) => (
+    <ProfileImageThumb
+      imageId={image.id}
+      eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+      urlHelpers={dynamicUrlHelpers}
+      onRemove={() => handleRemoveImage(image.id)}
+      title={t('editProfile.clickToRemove')}
+    />
+  ), [selectedEventId, eventUrl, dynamicUrlHelpers, t, handleRemoveImage]);
+
+  const renderProfileAlbum = useCallback((album) => (
+    <ProfileAlbumThumb
+      album={album}
+      eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+      urlHelpers={dynamicUrlHelpers}
+      onRemove={() => handleRemoveAlbum(album.id)}
+      title={t('editProfile.clickToRemove')}
+    />
+  ), [selectedEventId, eventUrl, dynamicUrlHelpers, t, handleRemoveAlbum]);
+
+  const renderProfileGroup = useCallback((group) => (
+    <ProfileGroupThumb
+      group={group}
+      eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
+      urlHelpers={dynamicUrlHelpers}
+      onRemove={() => handleRemoveGroup(group.id)}
+      title={t('editProfile.clickToRemove')}
+    />
+  ), [selectedEventId, eventUrl, dynamicUrlHelpers, t, handleRemoveGroup]);
+
   if (!isOpen || !editingProfile) return null;
 
   const maxRank = (currentProfile?.hierarchy_rank || 0) - 1;
@@ -2568,15 +2600,8 @@ const isProfileEditable = useMemo(() => {
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    renderItem={(image) => (
-                      <ProfileImageThumb
-                        imageId={image.id}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveImage(image.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    )}
+                    overscan={1500}
+                    renderItem={renderProfileImage}
                   />
                 )}
               </div>
@@ -2616,15 +2641,8 @@ const isProfileEditable = useMemo(() => {
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    renderItem={(album) => (
-                      <ProfileAlbumThumb
-                        album={album}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveAlbum(album.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    )}
+                    overscan={1500}
+                    renderItem={renderProfileAlbum}
                   />
                 )}
               </div>
@@ -2664,15 +2682,8 @@ const isProfileEditable = useMemo(() => {
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    renderItem={(group) => (
-                      <ProfileGroupThumb
-                        group={group}
-                        eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
-                        urlHelpers={dynamicUrlHelpers}
-                        onRemove={() => handleRemoveGroup(group.id)}
-                        title={t('editProfile.clickToRemove')}
-                      />
-                    )}
+                    overscan={1500}
+                    renderItem={renderProfileGroup}
                   />
                 )}
               </div>

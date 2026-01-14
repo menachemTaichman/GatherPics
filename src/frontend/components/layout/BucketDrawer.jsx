@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Check, Upload, Download, Image as ImageIcon } from 'lucide-react';
 import { useParams } from 'react-router-dom';
@@ -95,6 +95,15 @@ export default function BucketDrawer() {
   const alreadyListItems = useMemo(() => {
     return alreadyList.map(id => ({ id, imageId: id }));
   }, [alreadyList]);
+
+  // Define renderItem callbacks separately to keep references stable
+  const renderQueueItem = useCallback((item) => (
+    <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="medium" removeFrom="queue" />
+  ), [eventUrl]);
+
+  const renderAlreadyListItem = useCallback((item) => (
+    <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
+  ), [eventUrl, mode]);
 
   const handlePrimaryAction = async () => {
     if (queue.length === 0) return;
@@ -278,9 +287,9 @@ export default function BucketDrawer() {
                 gap={8}
                 containerHeight="100%"
                 className="w-full"
-                renderItem={(item) => (
-                  <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="medium" removeFrom="queue" />
-                )}
+                overscan={1500}
+                disableMinHeight={true}
+                renderItem={renderQueueItem}
               />
             )}
           </div>
@@ -310,9 +319,8 @@ export default function BucketDrawer() {
                   gap={8}
                   containerHeight="auto"
                   className="w-full"
-                  renderItem={(item) => (
-                    <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
-                  )}
+                  overscan={1500}
+                  renderItem={renderAlreadyListItem}
                 />
               </div>
             )}
