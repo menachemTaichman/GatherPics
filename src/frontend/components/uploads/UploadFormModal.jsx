@@ -13,6 +13,7 @@ import { useEventGeneralById, useDataStore } from '../../utils/dataManager';
 import { formatDuration } from '../../utils/dateUtils';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
+import { LongPressHoverButton } from '../common';
 
 export default function UploadFormModal({ 
   isOpen, 
@@ -1188,7 +1189,7 @@ export default function UploadFormModal({
                         disabled={uploading}
                         className="hidden"
                       />
-                      <button
+                      <LongPressHoverButton
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
@@ -1197,7 +1198,7 @@ export default function UploadFormModal({
                         aria-label={t('upload.selectFiles')}
                       >
                         {t('upload.selectFiles')}
-                      </button>
+                      </LongPressHoverButton>
                     </div>
                   </div>
                 </div>

@@ -10,6 +10,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/authContext';
 import { useNavigate } from 'react-router-dom';
 import jwtService from '../../utils/jwtService';
+import { LongPressHoverButton } from '../common';
 
 export default function ResetPasswordModal({ isOpen, onClose, token }) {
   const { t } = useTranslation();
@@ -249,7 +250,7 @@ export default function ResetPasswordModal({ isOpen, onClose, token }) {
                         autoComplete="new-password"
                         required
                       />
-                      <button
+                      <LongPressHoverButton
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
                         className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
@@ -257,7 +258,7 @@ export default function ResetPasswordModal({ isOpen, onClose, token }) {
                         aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                       >
                         {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
+                      </LongPressHoverButton>
                     </div>
                   </div>
 

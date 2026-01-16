@@ -12,6 +12,7 @@ import { getRepresentativeUrl, useEventId, useApplyScopes } from '../../utils/st
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import { LongPressHoverButton } from '../common';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function getGroupStatus(groupData) {
@@ -501,25 +502,25 @@ export default function RequestDetailModal({
             {/* Navigation buttons */}
             {totalRequests > 1 && onNavigate && (
               <>
-                <button
+                <LongPressHoverButton
                   onClick={() => handleNavigate('prev')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('requestDetail.previousRequest')}
                   aria-label={t('requestDetail.previousRequest')}
                 >
                   {isRTL ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-                </button>
-                <button
+                </LongPressHoverButton>
+                <LongPressHoverButton
                   onClick={() => handleNavigate('next')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('requestDetail.nextRequest')}
                   aria-label={t('requestDetail.nextRequest')}
                 >
                   {isRTL ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                </button>
+                </LongPressHoverButton>
               </>
             )}
-            <button
+            <LongPressHoverButton
               onClick={handleClose}
               disabled={loading}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
@@ -527,7 +528,7 @@ export default function RequestDetailModal({
               aria-label={t('requestDetail.close')}
             >
               <X className="w-5 h-5" />
-            </button>
+            </LongPressHoverButton>
           </div>
         </div>
 

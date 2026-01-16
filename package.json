@@ -24,10 +24,12 @@
     "react-datepicker": "^9.1.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^16.3.5",
+    "react-long-press": "^0.1.6",
     "react-router-dom": "^6.30.1",
     "react-virtuoso": "^4.17.0",
     "react-window": "^2.2.3",
     "streamsaver": "^2.0.6",
+    "use-long-press": "^3.3.0",
     "vaul": "^1.1.2",
     "zustand": "^5.0.6"
   },

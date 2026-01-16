@@ -17,6 +17,7 @@ import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
+import { LongPressHoverButton } from '../../components/common';
 
 export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup, onRefreshGroups, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -161,7 +162,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 <Filter className={`absolute ${endClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none`} />
               </div>
               
-              <button
+              <LongPressHoverButton
                 onClick={() => setSortOrder(toggleSortOrder(sortOrder))}
                 className="p-2 min-w-[2.5rem] min-h-[2.5rem] border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-1"
                 title={`${t('groupsGallery.sort')} ${sortOrder === 'asc' ? t('groupsGallery.ascending') : t('groupsGallery.descending')}`}
@@ -172,11 +173,11 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-              </button>
+              </LongPressHoverButton>
 
               {/* Size Control */}
               <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 sm:px-3 py-2">
-                <button
+                <LongPressHoverButton
                   onClick={() => {
                     const currentPercent = Math.round(cardSize * 100);
                     const next25 = Math.ceil(currentPercent / 25) * 25;
@@ -191,7 +192,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                   aria-label={t('groupsGallery.decreaseSize')}
                 >
                   <Minus className="w-4 h-4" />
-                </button>
+                </LongPressHoverButton>
                 <input
                   type="text"
                   id="card-size-input"
@@ -218,7 +219,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                   className="text-sm font-medium text-gray-700 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                   style={{width: '3rem'}}
                 />
-                <button
+                <LongPressHoverButton
                   onClick={() => {
                     const currentPercent = Math.round(cardSize * 100);
                     const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
@@ -232,7 +233,7 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
                   aria-label={t('groupsGallery.increaseSize')}
                 >
                   <Plus className="w-4 h-4" />
-                </button>
+                </LongPressHoverButton>
               </div>
             </div>
           </div>

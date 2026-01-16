@@ -7,7 +7,7 @@ import useBucketStore from '../../utils/bucketStore';
 import { urlHelpers, downloadAPI, imagesAPI } from '../../utils/apiService';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
-import { RemovableThumbnail } from '../common';
+import { RemovableThumbnail, LongPressHoverButton } from '../common';
 import { useRTL } from '../../hooks/useRTL';
 import { downloadAsZip } from '../../utils/downloadHelper';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
@@ -203,14 +203,14 @@ export default function BucketDrawer() {
               {mode === 'download' ? <Download className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
               <span>{t('bucketDrawer.bucket')}</span>
             </h3>
-            <button 
+            <LongPressHoverButton 
               onClick={close} 
               className="p-2 hover:bg-gray-100 rounded-lg"
               title={t('account.close')}
               aria-label={t('account.close')}
             >
               <X className="w-5 h-5 text-gray-600" />
-            </button>
+            </LongPressHoverButton>
           </div>
 
           {/* Preferences */}
@@ -257,7 +257,7 @@ export default function BucketDrawer() {
               <span className="text-sm text-gray-700">
                 {mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               </span>
-              <button
+              <LongPressHoverButton
                 onClick={() => setExcludeAlready(!excludeAlready)}
                 className={`w-10 h-6 rounded-full relative transition-colors ${excludeAlready ? 'bg-primary-600' : 'bg-gray-300'}`}
                 aria-pressed={excludeAlready}
@@ -265,7 +265,7 @@ export default function BucketDrawer() {
                 aria-label={mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               >
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${excludeAlready ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
 
@@ -273,7 +273,7 @@ export default function BucketDrawer() {
           <div className="px-4 pb-2">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-gray-700">{t('bucketDrawer.queue')} ({queue.length})</h4>
-              <button 
+              <LongPressHoverButton 
                 onClick={clearQueue} 
                 className="text-xs text-red-600 hover:underline flex items-center gap-1"
                 title={t('bucketDrawer.clear')}
@@ -281,7 +281,7 @@ export default function BucketDrawer() {
               >
                 <Trash2 className="w-3 h-3" />
                 <span>{t('bucketDrawer.clear')}</span>
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
           <div className="px-4 flex-1 overflow-y-auto">

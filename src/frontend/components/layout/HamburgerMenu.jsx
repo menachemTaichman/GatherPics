@@ -11,6 +11,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { APP_CONFIG } from '../../config/appConfig';
 import { useRTL } from '../../hooks/useRTL';
 import { setPreference } from '../../utils/settings';
+import { LongPressHoverButton } from '../common';
 
 export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -199,7 +200,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
               
               if (item.onClick) {
                 return (
-                  <button
+                  <LongPressHoverButton
                     key={item.id}
                     onClick={item.onClick}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
@@ -209,7 +210,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                   >
                     <Icon className="w-5 h-5 text-gray-500" />
                     <span className="text-sm font-medium">{item.label}</span>
-                  </button>
+                  </LongPressHoverButton>
                 );
               }
 
@@ -241,7 +242,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                   <span className="text-sm font-medium text-gray-700">{t('menu.language')}</span>
                 </div>
                 <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
-                  <button
+                  <LongPressHoverButton
                     onClick={async () => {
                       await setPreference('general.language', 'en');
                       i18n.changeLanguage('en');
@@ -255,8 +256,8 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                     aria-label={t('menu.english')}
                   >
                     {t('menu.english')}
-                  </button>
-                  <button
+                  </LongPressHoverButton>
+                  <LongPressHoverButton
                     onClick={async () => {
                       await setPreference('general.language', 'he');
                       i18n.changeLanguage('he');
@@ -270,7 +271,7 @@ export default function HamburgerMenu({ eventName, eventUrl, variant = 'dark' })
                     aria-label={t('menu.hebrew')}
                   >
                     {t('menu.hebrew')}
-                  </button>
+                  </LongPressHoverButton>
                 </div>
               </div>
             </div>

@@ -26,6 +26,7 @@ import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { MergeConflictModal, TransferFacesModal } from '../../components/groups';
 import { ManageAccessModal } from '../../components/profiles';
 import { FloatingSelectionControls } from '../../components/layout';
+import { LongPressHoverButton } from '../../components/common';
 import { sortImages, toggleSortOrder, filterImages } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
 import { setPreference, getImageCount } from '../../utils/settings';
@@ -1596,7 +1597,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 </div>
                 {group?.representative_face && (
                   <PermissionGate requires="canEdit">
-                    <button
+                    <LongPressHoverButton
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
@@ -1611,7 +1612,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                       aria-label={t('groupDetail.removeRepresentative')}
                     >
                       <Minus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    </button>
+                    </LongPressHoverButton>
                   </PermissionGate>
                 )}
               </div>
@@ -1653,22 +1654,22 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                           </div>
                         )}
                       </div>
-                      <button
+                      <LongPressHoverButton
                         onClick={handleTitleSave}
                         className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
                         title={t('groupDetail.save')}
                         aria-label={t('groupDetail.save')}
                       >
                         <Check className="w-4 h-4 text-green-600" />
-                      </button>
-                      <button
+                      </LongPressHoverButton>
+                      <LongPressHoverButton
                         onClick={handleTitleCancel}
                         className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"
                         title={t('groupDetail.cancel')}
                         aria-label={t('groupDetail.cancel')}
                       >
                         <X className="w-4 h-4 text-red-600" />
-                      </button>
+                      </LongPressHoverButton>
                     </div>
                     <div className="relative">
                       <p className="text-sm sm:text-base text-gray-600 whitespace-nowrap">
@@ -1746,7 +1747,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
               </select>
               */}
 
-              <button
+              <LongPressHoverButton
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 title={sortOrder === 'asc' ? t('groupDetail.sortAscending') : t('groupDetail.sortDescending')}
@@ -1757,10 +1758,10 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-              </button>
+              </LongPressHoverButton>
 
               {/* Filter Toggle */}
-              <button
+              <LongPressHoverButton
                 onClick={handleFilterVisibilityToggle}
                 className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                   filterVisible ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100'
@@ -1769,12 +1770,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 aria-label={filterVisible ? t('groupDetail.hidePeopleFilter') : t('groupDetail.showPeopleFilter')}
               >
                 <Filter className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </div>
             
             {/* Group 2: Zoom, Crops */}
             <div className="flex items-center gap-2 sm:gap-4">
-              <button
+              <LongPressHoverButton
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
                   const next25 = Math.ceil(currentPercent / 25) * 25;
@@ -1789,7 +1790,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 aria-label={t('groupDetail.decreaseSize')}
               >
                 <Minus className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
               <input
                 type="text"
                 id="face-detail-image-size"
@@ -1815,7 +1816,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 className="text-sm font-medium text-gray-700 text-center bg-transparent border-b border-gray-300 focus:outline-none focus:border-primary-500"
                 style={{width: '3rem'}}
               />
-              <button
+              <LongPressHoverButton
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
                   const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
@@ -1829,9 +1830,9 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 aria-label={t('groupDetail.increaseSize')}
               >
                 <Plus className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
 
-              <button
+              <LongPressHoverButton
                 onClick={() => setShowCrops(!showCrops)}
                 className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                   showCrops 
@@ -1842,13 +1843,13 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 aria-label={showCrops ? t('groupDetail.showFullPhotos') : t('groupDetail.showFaces')}
               >
                 {showCrops ? <ImageIcon className="w-4 h-4" /> : <User className="w-4 h-4" />}
-              </button>
+              </LongPressHoverButton>
             </div>
 
             {/* Group 3: Selection Mode Toggle */}
             {sortedImages.length > 0 && (
               <div className="flex items-center gap-2 sm:gap-4">
-                <button
+                <LongPressHoverButton
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                     selectionMode 
@@ -1859,7 +1860,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                   aria-label={selectionMode ? t('groupDetail.cancelSelectionMode') : t('groupDetail.showCheckboxes')}
                 >
                   {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                </button>
+                </LongPressHoverButton>
               </div>
             )}
 
@@ -1867,14 +1868,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
             {!isUnassociatedGroup && (
               <div className="flex items-center gap-2 sm:gap-4">
                 <PermissionGate requires="isProfilesManager">
-                  <button
+                  <LongPressHoverButton
                     onClick={() => setShowManageAccessModal(true)}
                     className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-blue-100 text-blue-600 flex items-center justify-center"
                     title={t('groupDetail.manageProfileAccess')}
                     aria-label={t('groupDetail.manageProfileAccess')}
                   >
                     <Key className="w-4 h-4" />
-                  </button>
+                  </LongPressHoverButton>
                 </PermissionGate>
               </div>
             )}

@@ -15,7 +15,7 @@ import { RequestDetailModal } from '../../components/requests';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useRequestViewerController from '../../hooks/useRequestViewerController';
-import { ScrollableTable } from '../../components/common';
+import { ScrollableTable, LongPressHoverButton } from '../../components/common';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 function getRequestStatus(request) {
@@ -332,7 +332,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
               {/* Delete All Button */}
               {isAuthenticated && sortedRequests.length > 0 && (
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
+                  <LongPressHoverButton
                     onClick={handleDeleteAll}
                     className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors"
                     title={t('requestsGallery.deleteAll')}
@@ -340,7 +340,7 @@ export default function RequestsGalleryPage({ eventUrl, urlHelpers }) {
                   >
                     <Trash className="w-3 h-3 sm:w-4 sm:h-4" />
                     <span>{t('requestsGallery.deleteAll')}</span>
-                  </button>
+                  </LongPressHoverButton>
                 </div>
               )}
             </div>

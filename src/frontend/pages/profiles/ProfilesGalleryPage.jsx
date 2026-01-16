@@ -19,7 +19,7 @@ import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { useParams, Link } from 'react-router-dom';
 import { useEventUrls } from '../../hooks/useEventUrls';
-import { ScrollableTable } from '../../components/common';
+import { ScrollableTable, LongPressHoverButton } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 import i18n from '../../i18n';
 
@@ -1005,7 +1005,7 @@ export default function ProfilesGalleryPage() {
                 <>
                   {Boolean(profile.has_public_access_code) ? (
                     <>
-                      <button
+                      <LongPressHoverButton
                         onClick={(e) => {
                           e.stopPropagation();
                           handleCopyPublicLink(profile);
@@ -1014,8 +1014,8 @@ export default function ProfilesGalleryPage() {
                         title={t('profilesGallery.copyPublicLink')}
                       >
                         <LinkIcon className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button
+                      </LongPressHoverButton>
+                      <LongPressHoverButton
                         onClick={(e) => {
                           e.stopPropagation();
                           handleResetPublicCode(profile);
@@ -1024,8 +1024,8 @@ export default function ProfilesGalleryPage() {
                         title={t('profilesGallery.resetPublicAccessCode')}
                       >
                         <RotateCcw className="w-4 h-4 text-yellow-600" />
-                      </button>
-                      <button
+                      </LongPressHoverButton>
+                      <LongPressHoverButton
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemovePublicCode(profile);
@@ -1034,7 +1034,7 @@ export default function ProfilesGalleryPage() {
                         title={t('profilesGallery.removePublicAccessCode')}
                       >
                         <Minus className="w-4 h-4 text-red-600" />
-                      </button>
+                      </LongPressHoverButton>
                     </>
                   ) : (
                     <button

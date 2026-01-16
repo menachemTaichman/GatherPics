@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { TopNavigationBar } from '../components/layout';
 import { FeedbackFormModal } from '../components/feedbacks';
+import { LongPressHoverButton } from '../components/common';
 import { APP_CONFIG } from '../config/appConfig';
 import { useRTL } from '../hooks/useRTL';
 
@@ -733,7 +734,7 @@ export default function AboutPage() {
                   const Icon = section.icon;
                   const isActive = activeSection === section.id;
                   return (
-                    <button
+                    <LongPressHoverButton
                       key={section.id}
                       onClick={() => setActiveSection(section.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${
@@ -746,7 +747,7 @@ export default function AboutPage() {
                     >
                       <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? section.iconActiveClasses : section.iconInactiveClasses}`} />
                       <span className="text-sm">{section.title}</span>
-                    </button>
+                    </LongPressHoverButton>
                   );
                 })}
                 

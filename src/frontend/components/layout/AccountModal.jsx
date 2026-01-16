@@ -19,7 +19,7 @@ import { ChangePasswordModal } from '../profiles';
 import { ConfirmDelete } from '../modals';
 import { RequestFormModal } from '../requests';
 import { FeedbackFormModal } from '../feedbacks';
-import { PermissionGate } from '../common';
+import { PermissionGate, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatDate } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
@@ -355,14 +355,14 @@ export default function AccountModal({ hideButton = false }) {
                   <p className="text-sm text-gray-500">{t('account.manageAccountSettings')}</p>
                 </div>
               </div>
-              <button
+              <LongPressHoverButton
                 onClick={() => setIsOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                 title={t('account.close')}
                 aria-label={t('account.close')}
               >
                 <X className="w-5 h-5" />
-              </button>
+              </LongPressHoverButton>
             </div>
 
             {/* Content */}
@@ -446,34 +446,34 @@ export default function AccountModal({ hideButton = false }) {
                                 placeholder={t('account.enterEmailOptional')}
                                 autoFocus
                               />
-                              <button
+                              <LongPressHoverButton
                                 onClick={handleEmailSave}
                                 className={`p-1 hover:bg-green-100 rounded transition-colors ${ms('2')}`}
                                 title={t('account.saveEnter')}
                                 aria-label={t('account.saveEnter')}
                               >
                                 <Check className="w-4 h-4 text-green-600" />
-                              </button>
-                              <button
+                              </LongPressHoverButton>
+                              <LongPressHoverButton
                                 onClick={handleEmailCancel}
                                 className={`p-1 hover:bg-red-100 rounded transition-colors ${ms('2')}`}
                                 title={t('account.cancelEsc')}
                                 aria-label={t('account.cancelEsc')}
                               >
                                 <X className="w-4 h-4 text-red-600" />
-                              </button>
+                              </LongPressHoverButton>
                             </>
                           ) : (
                             <>
                               <span className={`text-sm font-medium text-gray-900 ${ms('2')}`}>{currentProfile?.email || t('account.notSet')}</span>
-                              <button
+                              <LongPressHoverButton
                                 onClick={handleEmailEdit}
                                 className={`p-1 hover:bg-blue-100 rounded transition-colors ${ms('2')}`}
                                 title={t('account.editEmail')}
                                 aria-label={t('account.editEmail')}
                               >
                                 <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                              </button>
+                              </LongPressHoverButton>
                             </>
                           )}
                         </div>
@@ -496,7 +496,7 @@ export default function AccountModal({ hideButton = false }) {
                                 <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
                               </div>
                             </div>
-                            <button
+                            <LongPressHoverButton
                               onClick={() => handleIncludeArchivedChange(!includeArchived)}
                               className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
                               aria-pressed={includeArchived}
@@ -504,7 +504,7 @@ export default function AccountModal({ hideButton = false }) {
                               aria-label={t('account.includeArchived')}
                             >
                               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${includeArchived ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
-                            </button>
+                            </LongPressHoverButton>
                           </div>
                         </PermissionGate>
                         

@@ -12,7 +12,7 @@ import { useApplyScopes, useChilds, useEventId, getEventUrlFromId as getEventUrl
 import { useDataStore } from '../../utils/dataManager';
 import { useEventGeneralById, useProfileById, useEventProfileById, useEventsGeneralList } from '../../utils/dataManager';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { RemovableThumbnail } from '../common';
+import { RemovableThumbnail, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
 import ConfirmDelete from '../modals/ConfirmDelete';
@@ -1748,7 +1748,7 @@ const isProfileEditable = useMemo(() => {
                             placeholder={t('editProfile.enterPasswordRequired')}
                             required
                           />
-                          <button
+                          <LongPressHoverButton
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
                             className={`absolute ${endClass('2')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
@@ -1756,7 +1756,7 @@ const isProfileEditable = useMemo(() => {
                             aria-label={showPassword ? t('editProfile.hidePassword') : t('editProfile.showPassword')}
                           >
                             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
+                          </LongPressHoverButton>
                         </div>
                       </div>
                     )}

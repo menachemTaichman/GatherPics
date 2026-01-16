@@ -14,6 +14,7 @@ import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/st
 import { sortMoments } from '../../utils/sorting';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function MoveToMomentModal({ 
   isOpen, 
@@ -521,7 +522,7 @@ export default function MoveToMomentModal({
                 <option value="date">{t('moveToMoment.sortByDate')}</option>
                 <option value="name">{t('moveToMoment.sortByName')}</option>
               </select>
-              <button
+              <LongPressHoverButton
                 onClick={handleToggleSortOrder}
                 disabled={removeFromCurrent}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center disabled:opacity-50"
@@ -533,7 +534,7 @@ export default function MoveToMomentModal({
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
 

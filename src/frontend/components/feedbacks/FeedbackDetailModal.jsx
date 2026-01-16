@@ -13,6 +13,7 @@ import CloseFeedbackModal from './CloseFeedbackModal';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function FeedbackDetailModal({ 
   isOpen, 
@@ -300,32 +301,32 @@ export default function FeedbackDetailModal({
               {/* Navigation buttons */}
               {totalFeedbacks > 1 && onNavigate && (
                 <>
-                  <button
+                  <LongPressHoverButton
                     onClick={() => handleNavigate('prev')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                     title={t('feedbackDetail.previousFeedback')}
                     aria-label={t('feedbackDetail.previousFeedback')}
                   >
                     <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <button
+                  </LongPressHoverButton>
+                  <LongPressHoverButton
                     onClick={() => handleNavigate('next')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                     title={t('feedbackDetail.nextFeedback')}
                     aria-label={t('feedbackDetail.nextFeedback')}
                   >
                     <ChevronRight className="w-5 h-5" />
-                  </button>
+                  </LongPressHoverButton>
                 </>
               )}
-              <button
+              <LongPressHoverButton
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                 title={t('feedbackDetail.close')}
                 aria-label={t('feedbackDetail.close')}
               >
                 <X className="w-5 h-5" />
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
 

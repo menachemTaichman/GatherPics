@@ -9,6 +9,7 @@ import { settingsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function AuditLogDetailModal({ 
   isOpen, 
@@ -203,32 +204,32 @@ export default function AuditLogDetailModal({
             {/* Navigation buttons */}
             {totalLogs > 1 && onNavigate && (
               <>
-                <button
+                <LongPressHoverButton
                   onClick={() => handleNavigate('prev')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('auditLogDetail.previousAuditLog')}
                   aria-label={t('auditLogDetail.previousAuditLog')}
                 >
                   <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
+                </LongPressHoverButton>
+                <LongPressHoverButton
                   onClick={() => handleNavigate('next')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('auditLogDetail.nextAuditLog')}
                   aria-label={t('auditLogDetail.nextAuditLog')}
                 >
                   <ChevronRight className="w-5 h-5" />
-                </button>
+                </LongPressHoverButton>
               </>
             )}
-            <button
+            <LongPressHoverButton
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
               title={t('auditLogDetail.close')}
               aria-label={t('auditLogDetail.close')}
             >
               <X className="w-5 h-5" />
-            </button>
+            </LongPressHoverButton>
           </div>
         </div>
 

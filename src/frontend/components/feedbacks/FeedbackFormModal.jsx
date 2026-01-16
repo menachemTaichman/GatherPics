@@ -13,6 +13,7 @@ import { useApplyScopes } from '../../utils/storeUtils';
 import { useMyFeedbackById } from '../../utils/dataManager';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function FeedbackFormModal({ 
   isOpen, 
@@ -310,7 +311,7 @@ export default function FeedbackFormModal({
               </p>
             </div>
           </div>
-          <button
+          <LongPressHoverButton
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
             disabled={loading}
@@ -318,7 +319,7 @@ export default function FeedbackFormModal({
             aria-label={t('feedbackForm.close')}
           >
             <X className="w-5 h-5" />
-          </button>
+          </LongPressHoverButton>
         </div>
 
         {/* Content */}

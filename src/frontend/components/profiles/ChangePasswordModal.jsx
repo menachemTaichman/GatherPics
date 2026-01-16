@@ -9,6 +9,7 @@ import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
 import RequestPasswordResetModal from '../auth/RequestPasswordResetModal';
+import { LongPressHoverButton } from '../common';
 
 export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
   const { t } = useTranslation();
@@ -170,14 +171,14 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                 <p className="text-sm text-gray-500">{profileLabel}</p>
               </div>
             </div>
-            <button
+            <LongPressHoverButton
               onClick={handleClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
               title={t('account.close')}
               aria-label={t('account.close')}
             >
               <X className="w-5 h-5" />
-            </button>
+            </LongPressHoverButton>
           </div>
 
           {/* Content */}
@@ -207,7 +208,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                       autoComplete="current-password"
                       required
                     />
-                    <button
+                    <LongPressHoverButton
                       type="button"
                       onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                       className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
@@ -215,7 +216,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                       aria-label={showCurrentPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                    </LongPressHoverButton>
                   </div>
                   <button
                     type="button"
@@ -249,7 +250,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                       autoComplete="new-password"
                       required
                     />
-                    <button
+                    <LongPressHoverButton
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors`}
@@ -257,7 +258,7 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                       aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                    </LongPressHoverButton>
                   </div>
                 </div>
 

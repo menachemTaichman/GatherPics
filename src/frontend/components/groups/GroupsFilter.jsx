@@ -21,6 +21,7 @@ import {
   Minus
 } from 'lucide-react';
 import { ImageComponent } from '../../hooks/useImage.jsx';
+import { LongPressHoverButton } from '../common';
 
 export default function GroupsFilter({ 
   group,
@@ -511,7 +512,7 @@ export default function GroupsFilter({
             <span className="text-sm font-medium text-gray-700">{t('groupsFilter.filterByPeople')}</span>
             
             {/* Filter Mode Toggle - Single button with icon only */}
-            <button
+            <LongPressHoverButton
               onClick={() => onModeChange(filterMode === 'and' ? 'or' : 'and')}
               className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
               title={`${filterMode === 'and' ? t('groupsFilter.andMode') : t('groupsFilter.orMode')} - ${t('groupsFilter.clickToSwitchTo')} ${filterMode === 'and' ? t('groupsFilter.orMode') : t('groupsFilter.andMode')} ${t('groupsFilter.mode')}`}
@@ -522,10 +523,10 @@ export default function GroupsFilter({
               ) : (
                 <Users className="w-4 h-4 text-gray-700" />
               )}
-            </button>
+            </LongPressHoverButton>
 
             {/* Only Selected Checkbox - Box style button */}
-            <button
+            <LongPressHoverButton
               onClick={() => onOnlySelectedChange(!onlySelected)}
               className={`w-8 h-8 rounded-md transition-colors flex items-center justify-center ${
                 onlySelected 
@@ -536,18 +537,18 @@ export default function GroupsFilter({
               aria-label={onlySelected ? t('groupsFilter.showAllGroups') : t('groupsFilter.showOnlySelectedGroups')}
             >
               <Eye className="w-4 h-4" />
-            </button>
+            </LongPressHoverButton>
 
             {/* Reset Button - Now after the "only" button */}
             {showResetButton && (
-              <button
+              <LongPressHoverButton
                 onClick={handleReset}
                 className="w-8 h-8 rounded-md transition-colors bg-gray-50 hover:bg-gray-100 flex items-center justify-center"
                 title={t('groupsFilter.resetAllFilters')}
                 aria-label={t('groupsFilter.resetAllFilters')}
               >
                 <RefreshCw className="w-4 h-4 text-gray-700" />
-              </button>
+              </LongPressHoverButton>
             )}
           </div>
         </div>

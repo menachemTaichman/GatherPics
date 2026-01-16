@@ -7,6 +7,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { useRTL } from '../../hooks/useRTL';
 import RequestPasswordResetModal from './RequestPasswordResetModal';
+import { LongPressHoverButton } from '../common';
 
 export default function LoginModal({ isOpen, onClose, onLogin, error }) {
   const { t } = useTranslation();
@@ -296,7 +297,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                       className={`w-full ${isRTL ? 'pr-10 pl-12' : 'pl-10 pr-12'} py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all`}
                       disabled={isLoading}
                     />
-                    <button
+                      <LongPressHoverButton
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className={`absolute ${endClass('3')} top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors`}
@@ -309,7 +310,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, error }) {
                       ) : (
                         <Eye className="w-5 h-5" />
                       )}
-                    </button>
+                    </LongPressHoverButton>
                   </div>
                 </div>
 

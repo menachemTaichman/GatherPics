@@ -17,6 +17,7 @@ import { toggleSortOrder } from '../../utils/sorting';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { API_BASE } from '../../utils/apiService';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { LongPressHoverButton } from '../common';
 
 export default function RequestFormModal({ 
   isOpen, 
@@ -786,7 +787,7 @@ export default function RequestFormModal({
               )}
             </div>
           </div>
-          <button
+          <LongPressHoverButton
             onClick={handleClose}
             disabled={loading}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
@@ -794,7 +795,7 @@ export default function RequestFormModal({
             aria-label={t('requestForm.close')}
           >
             <X className="w-5 h-5" />
-          </button>
+          </LongPressHoverButton>
         </div>
 
         {/* Content */}

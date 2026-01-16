@@ -15,6 +15,7 @@ import { formatTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
+import { LongPressHoverButton } from '../common';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 
 // Stable empty Set to avoid creating new instances
@@ -707,30 +708,30 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           <div className="flex justify-between items-center gap-2 flex-wrap">
             <h3 className="text-base sm:text-lg font-bold truncate min-w-0">{t('moments.editPhotosTitle')} {currentMoment?.label || moment.label}</h3>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <button 
+              <LongPressHoverButton 
                 onClick={handleReset} 
                 className="w-8 h-8 rounded-md hover:bg-gray-100 text-gray-700 flex items-center justify-center"
                 title={t('moments.reset')}
                 aria-label={t('moments.reset')}
               >
                 <RotateCcw className="w-4 h-4" />
-              </button>
-              <button 
+              </LongPressHoverButton>
+              <LongPressHoverButton 
                 onClick={handleSaveImages} 
                 className="w-8 h-8 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center"
                 title={t('moments.saveChanges')}
                 aria-label={t('moments.saveChanges')}
               >
                 <CheckCheck className="w-4 h-4" />
-              </button>
-              <button 
+              </LongPressHoverButton>
+              <LongPressHoverButton 
                 onClick={handleClose} 
                 className="w-8 h-8 rounded-md hover:bg-red-100 text-red-700 flex items-center justify-center"
                 title={t('moments.cancel')}
                 aria-label={t('moments.cancel')}
               >
                 <X className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
           {error && (

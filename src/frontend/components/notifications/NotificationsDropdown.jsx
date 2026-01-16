@@ -11,6 +11,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalManager } from '../../utils/modalManager';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { LongPressHoverButton } from '../common';
 
 export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const { showToast } = useToast();
@@ -189,29 +190,29 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
           <span>{t('notifications.notifications')}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <LongPressHoverButton
             onClick={handleMarkAllRead}
             className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
             title={t('notifications.markAllAsRead')}
             disabled={notifications.length === 0}
           >
             <CheckCheck className="w-4 h-4" />
-          </button>
-          <button
+          </LongPressHoverButton>
+          <LongPressHoverButton
             onClick={handleDeleteAll}
             className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
             title={t('notifications.deleteAll')}
             disabled={notifications.length === 0}
           >
             <Trash2 className="w-4 h-4" />
-          </button>
-          <button
+          </LongPressHoverButton>
+          <LongPressHoverButton
             onClick={handleRefresh}
             className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
             title={t('notifications.refresh')}
           >
             <RefreshCw className={"w-4 h-4 " + (refreshing ? 'animate-spin' : '')} />
-          </button>
+          </LongPressHoverButton>
         </div>
       </div>
       {notifications.length === 0 ? (

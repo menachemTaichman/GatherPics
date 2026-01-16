@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { feedbacksAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useFeedbackById } from '../../utils/dataManager';
+import { LongPressHoverButton } from '../common';
 
 export default function CloseFeedbackModal({ 
   isOpen, 
@@ -176,7 +177,7 @@ export default function CloseFeedbackModal({
         </div>
 
         <div className="flex justify-end gap-3">
-          <button
+          <LongPressHoverButton
             type="button"
             onClick={() => onClose(false)}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
@@ -185,7 +186,7 @@ export default function CloseFeedbackModal({
             aria-label={t('closeFeedback.cancel')}
           >
             {t('closeFeedback.cancel')}
-          </button>
+          </LongPressHoverButton>
           <button
             type="button"
             data-is-save-button="true"

@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { settingsAPI } from '../../utils/apiService';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
+import { LongPressHoverButton } from '../common';
 
 export default function ErrorDetailModal({ 
   isOpen, 
@@ -195,32 +196,32 @@ export default function ErrorDetailModal({
             {/* Navigation buttons */}
             {totalErrors > 1 && onNavigate && (
               <>
-                <button
+                <LongPressHoverButton
                   onClick={() => handleNavigate('prev')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('errorDetail.previousError')}
                   aria-label={t('errorDetail.previousError')}
                 >
                   <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
+                </LongPressHoverButton>
+                <LongPressHoverButton
                   onClick={() => handleNavigate('next')}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                   title={t('errorDetail.nextError')}
                   aria-label={t('errorDetail.nextError')}
                 >
                   <ChevronRight className="w-5 h-5" />
-                </button>
+                </LongPressHoverButton>
               </>
             )}
-            <button
+            <LongPressHoverButton
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
               title={t('errorDetail.close')}
               aria-label={t('errorDetail.close')}
             >
               <X className="w-5 h-5" />
-            </button>
+            </LongPressHoverButton>
           </div>
         </div>
 

@@ -7,6 +7,7 @@ import { useModalStore } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { formatErrorMessage } from '../../utils/errorHandler';
+import { LongPressHoverButton } from '../common';
 
 export default function PublicProfilePasswordModal({ isOpen, onClose, profileId, profileLabel, eventUrl }) {
   const { t } = useTranslation();
@@ -157,7 +158,7 @@ export default function PublicProfilePasswordModal({ isOpen, onClose, profileId,
                     autoComplete="new-password"
                     required
                   />
-                  <button
+                  <LongPressHoverButton
                     type="button"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     tabIndex={-1}
@@ -166,7 +167,7 @@ export default function PublicProfilePasswordModal({ isOpen, onClose, profileId,
                     aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
+                  </LongPressHoverButton>
                 </div>
               </div>
 

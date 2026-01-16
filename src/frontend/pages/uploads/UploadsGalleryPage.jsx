@@ -15,7 +15,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { UploadFormModal } from '../../components/uploads';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
-import { ScrollableTable } from '../../components/common';
+import { ScrollableTable, LongPressHoverButton } from '../../components/common';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 
 export default function UploadsGallery({ eventUrl, urlHelpers }) {
@@ -255,7 +255,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                     renderCell: (upload) => (
                       <div className="flex items-center justify-end gap-2">
                         {upload.is_deletable !== false && (
-                          <button
+                          <LongPressHoverButton
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeleteUpload(upload);
@@ -265,7 +265,7 @@ export default function UploadsGallery({ eventUrl, urlHelpers }) {
                             aria-label={t('uploadsGallery.deleteUpload')}
                           >
                             <Trash2 className="w-4 h-4 text-red-600" />
-                          </button>
+                          </LongPressHoverButton>
                         )}
                       </div>
                     ),

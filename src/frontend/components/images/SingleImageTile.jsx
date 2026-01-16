@@ -2,7 +2,7 @@ import React, { forwardRef, useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../../hooks/useImage.jsx';
-import { PermissionGate } from '../common';
+import { PermissionGate, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { generateImageAltText } from '../../utils/accessibility';
 import { formatTime } from '../../utils/dateUtils';
@@ -282,7 +282,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
 
       {/* Representative star button - positioned after heart and archive */}
       {showRepresentativeButton && (permissions.canEdit || isRepresentative) && (
-        <button
+        <LongPressHoverButton
           type="button"
           aria-pressed={isRepresentative}
           className={`absolute bottom-2 z-10 transition-opacity bg-transparent p-0 appearance-none border-0 focus:outline-none focus:ring-0 ${
@@ -315,7 +315,7 @@ const SingleImageTile = forwardRef(function SingleImageTile({
             <title>Representative</title>
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
-        </button>
+        </LongPressHoverButton>
       )}
     </div>
   );

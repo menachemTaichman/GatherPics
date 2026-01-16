@@ -32,6 +32,7 @@ import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { SingleImageTile } from '../../components/images';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
+import { LongPressHoverButton } from '../../components/common/LongPressHoverButton';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -1021,18 +1022,18 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
             {/* Group 1: Edit Moments Button */}
             <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
               <PermissionGate requires="canEdit">
-                <button
+                <LongPressHoverButton
                   onClick={() => setShowEditMomentsModal(true)}
                   className="w-8 h-8 border border-transparent rounded-md transition-colors hover:bg-gray-100 text-gray-700 flex items-center justify-center"
                   title={t('moments.editMomentsTitle')}
                   aria-label={t('moments.editMomentsTitle')}
                 >
                   <Pencil className="w-4 h-4" />
-                </button>
+                </LongPressHoverButton>
               </PermissionGate>
               
               {/* Sort Direction Toggle */}
-              <button
+              <LongPressHoverButton
                 onClick={() => {
                   const newOrder = toggleSortOrder(momentSortOrder);
                   setMomentSortOrder(newOrder);
@@ -1046,7 +1047,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-              </button>
+              </LongPressHoverButton>
             </div>
             
             {/* Group 2: View and Size Controls */}
@@ -1058,7 +1059,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 </div>
               )}
               
-              <button
+              <LongPressHoverButton
                 onClick={() => {
                   const currentPercent = Math.round(imageSize * 100);
                   const next25 = Math.ceil(currentPercent / 25) * 25;
@@ -1073,7 +1074,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 aria-label={t('moments.decreaseSize')}
               >
                 <Minus className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1095,7 +1096,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     style={{width: '3rem'}}
                     dir={isRTL ? 'rtl' : 'ltr'}
                   />
-                  <button
+                  <LongPressHoverButton
                     onClick={() => {
                       const currentPercent = Math.round(imageSize * 100);
                       const next25 = Math.ceil((currentPercent + 1) / 25) * 25;
@@ -1109,7 +1110,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     aria-label={t('moments.increaseSize')}
                   >
                     <Plus className="w-4 h-4" />
-                  </button>
+                  </LongPressHoverButton>
             </div>
 
             {/* Group 3: Selection Controls */}
@@ -1121,7 +1122,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                 </div>
               ) : (
                 <>
-                  <button
+                  <LongPressHoverButton
                     onClick={() => setSelectionMode(!selectionMode)}
                     className={`w-8 h-8 border border-transparent rounded-md transition-colors flex items-center justify-center ${
                       selectionMode 
@@ -1132,12 +1133,12 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     aria-label={selectionMode ? t('moments.cancelSelectionMode') : t('moments.showCheckboxes')}
                   >
                     {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                  </button>
+                  </LongPressHoverButton>
                   
                   {/* Split Carousel Button: Moment Label + Toggle */}
                   <div className="flex items-center border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
                     {/* Left part: Current moment label (clickable to jump) */}
-                    <button
+                    <LongPressHoverButton
                       onClick={() => {
                         if (currentVisibleMoment) {
                           handleJumpToMoment({ id: currentVisibleMoment.id });
@@ -1150,9 +1151,9 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                       <span className="truncate max-w-[120px] sm:max-w-[150px]">
                         {currentVisibleMoment ? currentVisibleMoment.label : t('moments.timeline')}
                       </span>
-                    </button>
+                    </LongPressHoverButton>
                     {/* Right part: Narrow toggle button */}
-                    <button
+                    <LongPressHoverButton
                       onClick={() => setCarouselVisible(!carouselVisible)}
                       className="px-2 py-2 border-l border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-center flex-shrink-0"
                       title={carouselVisible ? t('moments.hideCarousel') : t('moments.showCarousel')}
@@ -1163,7 +1164,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                       ) : (
                         <ChevronDown className="w-4 h-4 text-gray-600" />
                       )}
-                    </button>
+                    </LongPressHoverButton>
                   </div>
                 </>
               )}

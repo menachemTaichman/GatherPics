@@ -15,6 +15,7 @@ import { ConfirmDelete } from '../modals';
 import { formatDateTimeLocale, formatDateDDMMYYYY, parseDatabaseTimestamp } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefreshImages, onToast, onClose, urlHelpers: injectedUrlHelpers }) {
   const urlHelpers = injectedUrlHelpers;
@@ -863,22 +864,22 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           <div className="flex justify-between items-center gap-2">
             <h3 className="text-base sm:text-lg font-bold truncate">{t('moments.editMoments')}</h3>
             <div className="flex gap-2 flex-shrink-0">
-              <button 
+              <LongPressHoverButton 
                 onClick={addMoment} 
                 className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-primary-100 text-primary-700"
                 title={t('moments.addMoment')}
                 aria-label={t('moments.addMoment')}
               >
                 <Plus className="w-4 h-4" />
-              </button>
-              <button 
+              </LongPressHoverButton>
+              <LongPressHoverButton 
                 onClick={handleClose} 
                 className="w-8 h-8 border border-transparent rounded-lg transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
                 title={t('moments.close')}
                 aria-label={t('moments.close')}
               >
                 <X className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
         </div>

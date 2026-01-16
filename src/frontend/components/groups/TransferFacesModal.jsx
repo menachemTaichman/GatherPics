@@ -13,6 +13,7 @@ import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { getRepresentativeUrl, useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function TransferFacesModal({ 
   isOpen, 
@@ -422,7 +423,7 @@ export default function TransferFacesModal({
                 <option value="name">{t('transferFaces.sortByName')}</option>
                 <option value="count">{t('transferFaces.sortByCount')}</option>
               </select>
-              <button
+              <LongPressHoverButton
                 onClick={handleToggleSortOrder}
                 className="w-8 h-8 border border-transparent rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 title={sortOrder === 'asc' ? t('transferFaces.sortAscending') : t('transferFaces.sortDescending')}
@@ -433,7 +434,7 @@ export default function TransferFacesModal({
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-              </button>
+              </LongPressHoverButton>
             </div>
           </div>
 

@@ -37,7 +37,7 @@ import { ConfirmDelete } from '../../components/modals';
 import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
 import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
-import { PermissionGate } from '../../components/common';
+import { PermissionGate, LongPressHoverButton } from '../../components/common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 import { useRTL } from '../../hooks/useRTL';
@@ -610,7 +610,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                 </div>
                 {album?.representative_image && (
                   <PermissionGate requires="canEdit">
-                    <button
+                    <LongPressHoverButton
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
@@ -625,7 +625,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                       aria-label={t('albumDetail.removeRepresentative')}
                     >
                       <Minus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    </button>
+                    </LongPressHoverButton>
                   </PermissionGate>
                 )}
               </div>
@@ -667,14 +667,14 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                           </div>
                         )}
                       </div>
-                      <button
+                      <LongPressHoverButton
                         onClick={handleTitleSave}
                         className="p-1 hover:bg-green-100 rounded transition-colors flex-shrink-0"
                         title={t('albumDetail.save')}
                         aria-label={t('albumDetail.save')}
                       >
                         <Check className="w-4 h-4 text-green-600" />
-                      </button>
+                      </LongPressHoverButton>
                       <button
                         onClick={handleTitleCancel}
                         className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0"

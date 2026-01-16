@@ -22,6 +22,7 @@ import { TransferFacesModal } from '../../components/groups';
 import UploadFormModal from '../../components/uploads/UploadFormModal';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import useImageSelection from '../../hooks/useImageSelection';
+import { LongPressHoverButton } from '../../components/common';
 import useImageViewerController from '../../hooks/useImageViewerController.js';
 import { useImageViewerGridSync } from '../../hooks/useImageViewerGridSync';
 import { useFaceImageMapping } from '../../hooks/useFaceImageMapping';
@@ -1033,14 +1034,14 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                 )}
 
                 {/* Sort */}
-                <button
+                <LongPressHoverButton
                   onClick={toggleSortDir}
                   className="w-6 h-6 border border-transparent rounded-md transition-colors hover:bg-gray-100 flex items-center justify-center"
                   title={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
                   aria-label={sortDir === 'asc' ? t('uploadDetail.sortAscending') : t('uploadDetail.sortDescending')}
                 >
                   {sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                </button>
+                </LongPressHoverButton>
 
                 {/* Zoom Controls */}
                 <button

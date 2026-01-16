@@ -5,6 +5,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { useModalStore } from '../../utils/modalManager';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 /**
  * Compact confirmation modal for delete actions
@@ -151,14 +152,14 @@ function ConfirmDelete({
               <AlertTriangle className="w-5 h-5 text-red-500" />
               <h3 className="text-lg font-semibold text-gray-900">{displayTitle}</h3>
             </div>
-            <button 
+            <LongPressHoverButton 
               onClick={onClose} 
               className="w-8 h-8 rounded-lg transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700"
               title={t('confirmDelete.close')}
               aria-label={t('confirmDelete.close')}
             >
               <X className="w-4 h-4" />
-            </button>
+            </LongPressHoverButton>
           </div>
 
           {/* Content */}

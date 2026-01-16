@@ -14,6 +14,7 @@ import { useModalFocus } from '../../hooks/useModalFocus';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useRTL } from '../../hooks/useRTL';
 import i18n from '../../i18n';
+import { LongPressHoverButton } from '../common';
 
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})/;
 
@@ -831,14 +832,14 @@ export default function EditEventModal({
                   <p className="text-sm text-gray-500">{modalSubtitle}</p>
                 </div>
               </div>
-              <button
+              <LongPressHoverButton
                 onClick={onClose}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
                 title={t('account.close')}
                 aria-label={t('account.close')}
               >
                 <X className="h-5 w-5" />
-              </button>
+              </LongPressHoverButton>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0">

@@ -13,6 +13,7 @@ import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useEventId } from '../../utils/storeUtils';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 export default function AlbumQuickAddButton({ 
   selectedImages, 
@@ -507,7 +508,7 @@ export default function AlbumQuickAddButton({
 
   return (
     <>
-      <button
+      <LongPressHoverButton
         ref={setButtonRef}
         onClick={(e) => {
           e.stopPropagation();
@@ -523,7 +524,7 @@ export default function AlbumQuickAddButton({
         aria-expanded={open}
       >
         <PlusIcon className="w-5 h-5 md:w-4 md:h-4" />
-      </button>
+      </LongPressHoverButton>
       {open && (buttonRef || externalButtonPosition) && createPortal(
         <div 
           ref={modalRef} 

@@ -19,7 +19,7 @@ import { sortImages, sortGroups, sortByField, filterImages, sortMoments } from '
 import { useModalStore } from '../../utils/modalManager';
 import { useImageComponent, ImageComponent } from '../../hooks/useImage.jsx';
 import { formatErrorMessage } from '../../utils/errorHandler';
-import { PermissionGate } from '../common';
+import { PermissionGate, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../../contexts/authContext';
 import { useRTL } from '../../hooks/useRTL';
@@ -97,40 +97,40 @@ function ImageViewerActions({
         )}
 
         {/* Add to bucket / Remove from bucket */}
-        <button
+        <LongPressHoverButton
           onClick={imageActions.toggleBucket}
           className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-gray-100 text-gray-700`}
           title={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
           aria-label={imageActions.allInBucket ? t('imageViewer.removeFromBucket') : t('imageViewer.addToBucket')}
         >
           <ShoppingBag className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.allInBucket ? 'fill-blue-400' : ''}`} />
-        </button>
+        </LongPressHoverButton>
 
         {/* Separator before management buttons - only if action buttons exist AND management buttons exist */}
         {hasActionButtons && hasManagementButtons && <span className="text-gray-300">|</span>}
 
         {/* Delete image */}
         <PermissionGate requires="canUploadAndDeleteImages">
-          <button
+          <LongPressHoverButton
             onClick={imageActions.deleteImages}
             className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-red-100 text-red-600`}
             title={t('imageViewer.deletePhoto')}
             aria-label={t('imageViewer.deletePhoto')}
           >
             <Trash2 className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
-          </button>
+          </LongPressHoverButton>
         </PermissionGate>
 
         {/* Manage Access */}
         <PermissionGate requires="isProfilesManager">
-          <button
+          <LongPressHoverButton
             onClick={() => onOpenManageAccess && onOpenManageAccess()}
             className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-blue-100 text-blue-600`}
             title={t('imageViewer.manageProfileAccess')}
             aria-label={t('imageViewer.manageProfileAccess')}
           >
             <Key className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
-          </button>
+          </LongPressHoverButton>
         </PermissionGate>
 
         {/* Separator before representative button - only if management buttons exist AND can set representative */}
@@ -141,7 +141,7 @@ function ImageViewerActions({
         {/* Set as representative */}
         {imageActions.canSetRepresentative && !isUnassociatedGroup && (
           <PermissionGate requires="canEdit">
-            <button
+            <LongPressHoverButton
               onClick={() => imageActions.setRepresentative()}
               className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} border border-transparent rounded-md transition-colors flex items-center justify-center hover:bg-yellow-50 ${
                 imageActions.isRepresentative
@@ -151,7 +151,7 @@ function ImageViewerActions({
               title={imageActions.representativeTooltip}
             >
               <Star className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${imageActions.isRepresentative ? 'fill-current' : ''}`} />
-            </button>
+            </LongPressHoverButton>
           </PermissionGate>
         )}
 

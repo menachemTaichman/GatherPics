@@ -12,6 +12,7 @@ import { getCurrentProfile } from '../../utils/profileService';
 import { useAuth } from '../../contexts/authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import NotificationsDropdown from '../notifications/NotificationsDropdown.jsx';
+import { LongPressHoverButton } from '../common';
 
 export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef, notifOpen: notifOpenProp, setNotifOpen: setNotifOpenProp, variant = 'dark', showBackground = false, mode = 'full' }) {
   const { toggle, lastPulseTs, queue } = useBucketStore();
@@ -106,32 +107,35 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
             <HamburgerMenu eventName={eventName} eventUrl={eventUrl} variant="dark" />
         {/* Bucket */}
         {eventUrl && (
-          <motion.button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggle();
-            }}
-            className={buttonClass}
-            style={iconStyle}
-            title={t('navigation.bucket')}
+          <motion.div
             animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
             transition={{ duration: 0.4 }}
             key={lastPulseTs}
-            data-bucket-toggle="true"
           >
-            <div className="relative">
-                  <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
-              {queue.length > 0 && (
-                <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
-                  {queue.length}
-                </span>
-              )}
-            </div>
-          </motion.button>
+            <LongPressHoverButton
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
+              className={buttonClass}
+              style={iconStyle}
+              title={t('navigation.bucket')}
+              data-bucket-toggle="true"
+            >
+              <div className="relative">
+                    <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
+                {queue.length > 0 && (
+                  <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
+                    {queue.length}
+                  </span>
+                )}
+              </div>
+            </LongPressHoverButton>
+          </motion.div>
         )}
         {/* Notifications */}
         {(effectiveCounts?.totalCount || 0) > 0 && (
-          <button
+          <LongPressHoverButton
             ref={setNotifButtonRef}
             onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
             className={buttonClass}
@@ -147,7 +151,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                     </span>
                   )}
                 </div>
-              </button>
+              </LongPressHoverButton>
             )}
           </div>
         </div>
@@ -212,33 +216,36 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
           
           {/* Bucket */}
           {eventUrl && (
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggle();
-              }}
-              className={buttonClass}
-              style={iconStyle}
-              title={t('navigation.bucket')}
+            <motion.div
               animate={{ scale: lastPulseTs ? [1, 1.15, 1] : 1 }}
               transition={{ duration: 0.4 }}
               key={lastPulseTs}
-              data-bucket-toggle="true"
             >
-              <div className="relative">
-                <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
-                {queue.length > 0 && (
-                  <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
-                    {queue.length}
-                  </span>
-                )}
-              </div>
-            </motion.button>
+              <LongPressHoverButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle();
+                }}
+                className={buttonClass}
+                style={iconStyle}
+                title={t('navigation.bucket')}
+                data-bucket-toggle="true"
+              >
+                <div className="relative">
+                  <ShoppingBag className={`w-5 h-5 ${iconColorClass}`} style={iconStyle} />
+                  {queue.length > 0 && (
+                    <span className={`absolute -top-1 ${isRTL ? '-left-1' : '-right-1'} bg-primary-600 text-white text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold shadow-sm`}>
+                      {queue.length}
+                    </span>
+                  )}
+                </div>
+              </LongPressHoverButton>
+            </motion.div>
           )}
           
           {/* Notifications */}
           {(effectiveCounts?.totalCount || 0) > 0 && (
-            <button
+            <LongPressHoverButton
               ref={setNotifButtonRef}
               onClick={(e) => { e.stopPropagation(); setNotifOpen((v) => !v); }}
               className={buttonClass}
@@ -254,7 +261,7 @@ export default function TopNavigationBar({ eventName, eventUrl, onNotifButtonRef
                 </span>
               )}
             </div>
-          </button>
+          </LongPressHoverButton>
         )}
         </div>
       </div>

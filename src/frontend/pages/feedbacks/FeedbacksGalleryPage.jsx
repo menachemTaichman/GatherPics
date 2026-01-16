@@ -17,7 +17,7 @@ import { LoginModal } from '../../components/auth';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import useFeedbackViewerController from '../../hooks/useFeedbackViewerController';
 import { TopNavigationBar } from '../../components/layout';
-import { ScrollableTable } from '../../components/common';
+import { ScrollableTable, LongPressHoverButton } from '../../components/common';
 import { APP_CONFIG } from '../../config/appConfig';
 import { formatDateTimeLocale } from '../../utils/dateUtils';
 import { useRTL } from '../../hooks/useRTL';
@@ -244,7 +244,7 @@ export default function FeedbacksGalleryPage() {
             {/* Delete All Button - Desktop */}
             {isAuthenticated && sortedFeedbacks.length > 0 && (
               <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-                <button
+                <LongPressHoverButton
                   onClick={handleDeleteAll}
                   className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
                   title={t('feedbacksGallery.deleteAllTooltip')}
@@ -252,7 +252,7 @@ export default function FeedbacksGalleryPage() {
                 >
                   <Trash className="w-4 h-4" />
                   <span>{t('feedbacksGallery.deleteAll')}</span>
-                </button>
+                </LongPressHoverButton>
               </div>
             )}
           </div>
@@ -305,7 +305,7 @@ export default function FeedbacksGalleryPage() {
             {/* Delete All Button - Mobile */}
             {isAuthenticated && sortedFeedbacks.length > 0 && (
               <div className="flex sm:hidden items-center gap-2 flex-shrink-0">
-                <button
+                <LongPressHoverButton
                   onClick={handleDeleteAll}
                   className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
                   title={t('feedbacksGallery.deleteAllTooltip')}
@@ -313,7 +313,7 @@ export default function FeedbacksGalleryPage() {
                 >
                   <Trash className="w-3 h-3" />
                   <span>{t('feedbacksGallery.deleteAll')}</span>
-                </button>
+                </LongPressHoverButton>
               </div>
             )}
           </div>

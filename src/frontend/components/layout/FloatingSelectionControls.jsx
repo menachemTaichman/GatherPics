@@ -21,7 +21,7 @@ import { ManageAccessModal } from '../profiles';
 import { useDataStore } from '../../utils/dataManager';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { PermissionGate } from '../common';
+import { PermissionGate, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useEventId } from '../../utils/storeUtils';
 import { useTranslation } from 'react-i18next';
@@ -200,14 +200,14 @@ export default function FloatingSelectionControls({
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-lg md:rounded-full px-2 py-2 md:px-4 flex items-center gap-1.5 md:gap-3 max-w-[calc(100vw-2rem)] md:max-w-none overflow-x-auto md:overflow-visible z-30" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg rounded-lg md:rounded-full px-2 py-2 md:px-4 flex items-center gap-1.5 md:gap-3 max-w-[calc(100vw-2rem)] md:max-w-none overflow-x-auto md:overflow-visible overflow-y-visible z-30" dir={isRTL ? 'rtl' : 'ltr'}>
         <span className="text-xs md:text-sm text-gray-700 whitespace-nowrap flex-shrink-0">{selectedCount} {t('floatingSelectionControls.selected')}</span>
       
       {/* Select all button - only visible when not all are selected */}
       {selectedCount < totalCount && (
         <>
           <span className="text-gray-300 flex-shrink-0 hidden md:inline">|</span>
-          <button
+          <LongPressHoverButton
             onClick={onSelectAll}
             className={`w-10 h-10 md:w-8 md:h-8 rounded-md transition-colors flex items-center justify-center flex-shrink-0 ${
               selectedCount > 0 
@@ -218,20 +218,20 @@ export default function FloatingSelectionControls({
             aria-label={t('floatingSelectionControls.selectAllPhotos')}
           >
             <CheckCheck className="w-5 h-5 md:w-4 md:h-4" />
-          </button>
+          </LongPressHoverButton>
         </>
       )}
       
       {/* Clear selection - only show when there are selected items */}
       {selectedCount > 0 && (
-        <button
+        <LongPressHoverButton
           onClick={onClearSelection}
           className="w-10 h-10 md:w-8 md:h-8 rounded-md bg-red-100 text-red-700 hover:bg-red-200 active:bg-red-300 flex items-center justify-center flex-shrink-0"
           title={t('floatingSelectionControls.clearSelection')}
           aria-label={t('floatingSelectionControls.clearSelection')}
         >
           <X className="w-5 h-5 md:w-4 md:h-4" />
-        </button>
+        </LongPressHoverButton>
       )}
       
       {/* Action buttons - only show when images are selected */}
@@ -243,7 +243,7 @@ export default function FloatingSelectionControls({
           {/* Add to Favorites */}
           {showFavorites && (
             <PermissionGate requires={["canEdit", "hasFavoritesAlbum"]}>
-              <button
+              <LongPressHoverButton
                 onClick={selectedImageActions.toggleFavorite}
                 className={`w-10 h-10 md:w-8 md:h-8 rounded-md flex items-center justify-center flex-shrink-0 ${
                   shouldShowFavorited 
@@ -254,14 +254,14 @@ export default function FloatingSelectionControls({
                 aria-label={shouldShowFavorited ? t('floatingSelectionControls.removeFromFavorites') : t('floatingSelectionControls.addToFavorites')}
               >
                 <HeartIcon className={`w-5 h-5 md:w-4 md:h-4 ${shouldShowFavorited ? 'fill-current' : ''}`} />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
           
           {/* Move to Archive */}
           {showArchive && (
             <PermissionGate requires={["canEdit", "hasArchiveAlbum"]}>
-              <button
+              <LongPressHoverButton
                 onClick={selectedImageActions.toggleArchive}
                 className={`w-10 h-10 md:w-8 md:h-8 rounded-md flex items-center justify-center flex-shrink-0 ${
                   shouldShowArchived 
@@ -274,20 +274,20 @@ export default function FloatingSelectionControls({
                 <svg viewBox="0 0 24 24" className="w-5 h-5 md:w-4 md:h-4" fill={shouldShowArchived ? '#d1d5db' : 'none'} stroke="currentColor" strokeWidth="2">
                   <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
                 </svg>
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
           
           {/* Add to Bucket */}
           {showBucket && (
-            <button
+            <LongPressHoverButton
               onClick={selectedImageActions.toggleBucket}
               className="w-10 h-10 md:w-8 md:h-8 rounded-md hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 flex-shrink-0"
               title={selectedImageActions.allInBucket ? t('floatingSelectionControls.removeFromBucket') : t('floatingSelectionControls.addToBucket')}
               aria-label={selectedImageActions.allInBucket ? t('floatingSelectionControls.removeFromBucket') : t('floatingSelectionControls.addToBucket')}
             >
               <ShoppingBag className={`w-5 h-5 md:w-4 md:h-4 ${selectedImageActions.allInBucket ? 'fill-blue-400' : ''}`} />
-            </button>
+            </LongPressHoverButton>
           )}
 
           {/* Desktop: Show all other buttons */}
@@ -314,28 +314,28 @@ export default function FloatingSelectionControls({
           {/* Delete Images - Desktop only */}
           {showDelete && (
             <PermissionGate requires="canUploadAndDeleteImages">
-              <button
+              <LongPressHoverButton
                 onClick={selectedImageActions.deleteImages}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-red-100 active:bg-red-200 items-center justify-center text-red-600 flex-shrink-0"
                 title={t('floatingSelectionControls.deleteSelectedPhotos')}
                 aria-label={t('floatingSelectionControls.deleteSelectedPhotos')}
               >
                 <Trash2 className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
 
           {/* Manage Access - Desktop only */}
           {showManageAccess && (
             <PermissionGate requires="isProfilesManager">
-              <button
+              <LongPressHoverButton
                 onClick={() => setShowManageAccessModal(true)}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-blue-100 active:bg-blue-200 items-center justify-center text-blue-600 flex-shrink-0"
                 title={t('floatingSelectionControls.manageProfileAccess')}
                 aria-label={t('floatingSelectionControls.manageProfileAccess')}
               >
                 <Key className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
 
@@ -345,7 +345,7 @@ export default function FloatingSelectionControls({
           {/* Set as representative - Desktop only */}
           {showSetRepresentative && !isUnassociatedGroup && (selectedImageActions.canSetRepresentative || canSetRepInFacesMode) && (
             <PermissionGate requires="canEdit">
-              <button
+              <LongPressHoverButton
                 onClick={() => {
                   if (isFacesMode && canSetRepInFacesMode && onSetRepresentative) {
                     const faceId = Array.from(selectedImages)[0];
@@ -363,63 +363,63 @@ export default function FloatingSelectionControls({
                 aria-label={isFacesMode ? t('floatingSelectionControls.setAsRepresentative') : (selectedImageActions.isRepresentative ? t('floatingSelectionControls.currentRepresentative') : t('floatingSelectionControls.setAsRepresentative'))}
               >
                 <Star className={`w-4 h-4 ${selectedImageActions.isRepresentative ? 'fill-current' : ''}`} />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
 
           {/* Transfer faces - Desktop only */}
           {showTransferFaces && (
             <PermissionGate requires="canEdit">
-              <button
+              <LongPressHoverButton
                 onClick={onTransferFaces}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-orange-100 active:bg-orange-200 text-orange-700 items-center justify-center flex-shrink-0"
                 title={t('floatingSelectionControls.transferFaces')}
                 aria-label={t('floatingSelectionControls.transferFaces')}
               >
                 <Users className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
           
           {/* Remove from moment - Desktop only */}
           {showRemoveFromMoment && (
             <PermissionGate requires="canEdit">
-              <button
+              <LongPressHoverButton
                 onClick={onRemoveFromMoment}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-red-100 active:bg-red-200 text-red-700 items-center justify-center flex-shrink-0"
                 title={t('floatingSelectionControls.removeFromMoment')}
                 aria-label={t('floatingSelectionControls.removeFromMoment')}
               >
                 <Trash2 className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
           
           {/* Move to moment - Desktop only */}
           {showMoveToMoment && (
             <PermissionGate requires="canEdit">
-              <button
+              <LongPressHoverButton
                 onClick={onMoveToMoment}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-blue-100 active:bg-blue-200 text-blue-700 items-center justify-center flex-shrink-0"
                 title={t('floatingSelectionControls.moveOrRemoveFromMoment')}
                 aria-label={t('floatingSelectionControls.moveOrRemoveFromMoment')}
               >
                 <Clock className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
           
           {/* Remove from album - Desktop only */}
           {showRemoveFromAlbum && (
             <PermissionGate requires="canEdit">
-              <button
+              <LongPressHoverButton
                 onClick={onRemoveFromAlbum}
                 className="hidden md:flex w-8 h-8 rounded-md hover:bg-red-100 active:bg-red-200 text-red-700 items-center justify-center flex-shrink-0"
                 title={t('floatingSelectionControls.removeFromAlbum')}
                 aria-label={t('floatingSelectionControls.removeFromAlbum')}
               >
                 <Minus className="w-4 h-4" />
-              </button>
+              </LongPressHoverButton>
             </PermissionGate>
           )}
 
@@ -428,7 +428,7 @@ export default function FloatingSelectionControls({
             <>
               <span className="text-gray-300 flex-shrink-0 md:hidden">|</span>
               <div className="relative md:hidden">
-                <button
+                <LongPressHoverButton
                   ref={menuButtonRef}
                   onClick={() => setShowMoreMenu(!showMoreMenu)}
                   className="w-10 h-10 rounded-md hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 flex-shrink-0"
@@ -437,7 +437,7 @@ export default function FloatingSelectionControls({
                   aria-expanded={showMoreMenu}
                 >
                   <MoreVertical className="w-5 h-5" />
-                </button>
+                </LongPressHoverButton>
               </div>
             </>
           )}

@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, LogIn } from 'lucide-react';
 import { TopNavigationBar } from '../components/layout';
-import { LoadingSpinner } from '../components/common';
+import { LoadingSpinner, LongPressHoverButton } from '../components/common';
 import { LoginModal } from '../components/auth';
 import { ResetPasswordModal } from '../components/profiles';
 import { useTranslation } from 'react-i18next';
@@ -266,7 +266,7 @@ export default function HomePage() {
                   </Link>
                 )}
                 {!isAuthenticated && (
-                  <button
+                  <LongPressHoverButton
                     onClick={openLoginModal}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-200 shadow-md hover:shadow-lg"
                     title={t('homePage.logIn')}
@@ -274,7 +274,7 @@ export default function HomePage() {
                   >
                     <LogIn className={`w-5 h-5 ${me('2')}`} />
                     {t('homePage.logIn')}
-                  </button>
+                  </LongPressHoverButton>
                 )}
               </motion.div>
             )}

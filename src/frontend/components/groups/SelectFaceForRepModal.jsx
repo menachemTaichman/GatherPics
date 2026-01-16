@@ -6,6 +6,7 @@ import { useModalStore } from '../../utils/modalManager';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../common';
 
 /**
  * Modal for selecting which face to use as representative when an image has multiple faces from the same group
@@ -139,14 +140,14 @@ export default function SelectFaceForRepModal({ isOpen, onClose, faces, urlHelpe
             <h2 className="text-xl font-semibold text-gray-900">
               {t('selectFaceForRep.selectFaceFor')} {groupLabel}
             </h2>
-            <button
+            <LongPressHoverButton
               onClick={handleCancel}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               title={t('selectFaceForRep.cancel')}
               aria-label={t('selectFaceForRep.cancel')}
             >
               <X className="w-5 h-5 text-gray-500" />
-            </button>
+            </LongPressHoverButton>
           </div>
 
           {/* Content */}

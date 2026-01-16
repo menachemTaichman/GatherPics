@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/authContext';
 import { useAuthRefresh } from '../../hooks/useAuthRefresh';
 import { useEventDefaultAlbums } from '../../hooks/useEventDefaultAlbums';
 import { useRTL } from '../../hooks/useRTL';
+import { LongPressHoverButton } from '../../components/common';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
 import i18n from '../../i18n';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -310,7 +311,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
               />
             </div>
             
-            <button
+            <LongPressHoverButton
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
               className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1 flex-shrink-0"
               title={t('albumsGallery.sort') + ' ' + (sortOrder === 'asc' ? t('albumsGallery.ascending') : t('albumsGallery.descending'))}
@@ -320,7 +321,7 @@ export default function AlbumsGallery({ eventUrl, urlHelpers: injectedUrlHelpers
               ) : (
                 <ArrowDown className="w-4 h-4" />
               )}
-            </button>
+            </LongPressHoverButton>
 
             {/* Size Control */}
             <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 sm:px-3 py-2 flex-shrink-0">
