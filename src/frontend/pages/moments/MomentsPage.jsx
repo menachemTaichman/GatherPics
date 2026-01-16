@@ -1211,7 +1211,10 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
               {/* Carousel Container */}
               <div 
                 ref={carouselRef}
-                className="carousel-container flex items-center gap-0 overflow-x-scroll overflow-y-hidden scrollbar-hide h-32 sm:h-36"
+                className={`carousel-container flex items-center gap-0 overflow-x-scroll overflow-y-hidden h-32 sm:h-36 ${!isMobile ? 'scrollbar-hide' : ''}`}
+                style={{
+                  touchAction: 'pan-x'
+                }}
               >
               {moments.length === 0 && (
                 <div className="h-32 min-w-[200px] flex items-center justify-center text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">

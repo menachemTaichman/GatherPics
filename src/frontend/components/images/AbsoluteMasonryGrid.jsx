@@ -1,4 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
+import { useRTL } from '../../hooks/useRTL';
 
 // --- אופטימיזציה 1: הגדרת הקומפוננטה מחוץ ללולאה ---
 const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId }) => {
@@ -181,20 +183,87 @@ const AbsoluteMasonryGrid = forwardRef(({
   isListLayout = false,
   listItemHeight = 80,
   heightMultiplier = 1.0,
+  useCustomScrollbar = undefined, // undefined means auto-detect mobile
 }, ref) => {
   const internalContainerRef = useRef(null);
+  const overlayScrollbarsRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 800 });
   const [scrollTop, setScrollTop] = useState(0);
   const [highlightedId, setHighlightedId] = useState(null);
+  const { isRTL } = useRTL();
+  
+  // Auto-detect mobile if useCustomScrollbar is undefined
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Use custom scrollbar on mobile by default, or if explicitly set
+  const shouldUseCustomScrollbar = useCustomScrollbar !== undefined 
+    ? useCustomScrollbar 
+    : isMobile;
 
-  const setMultiRef = useCallback((node) => {
-    internalContainerRef.current = node;
-    if (onPinchRef) onPinchRef(node);
+  // Get the actual scrollable element from OverlayScrollbars
+  const getScrollableElement = useCallback(() => {
+    if (shouldUseCustomScrollbar && overlayScrollbarsRef.current) {
+      try {
+        // OverlayScrollbars creates a wrapper, we need the actual scrollable element
+        const instance = overlayScrollbarsRef.current.osInstance();
+        if (instance) {
+          const elements = instance.elements();
+          return elements?.viewport || internalContainerRef.current;
+        }
+      } catch (error) {
+        // Fallback if instance not ready yet
+        return internalContainerRef.current;
+      }
+    }
+    return internalContainerRef.current;
+  }, [shouldUseCustomScrollbar]);
+
+  // Handle OverlayScrollbars initialization
+  const handleOverlayScrollbarsInit = useCallback((instance) => {
+    if (!instance) return;
+    try {
+      const elements = instance.elements();
+      const viewport = elements?.viewport;
+      if (viewport) {
+        internalContainerRef.current = viewport;
+        if (onPinchRef) onPinchRef(viewport);
+        // Trigger initial dimensions update
+        setTimeout(() => {
+          const element = viewport;
+          if (element) {
+            setDimensions({
+              width: element.clientWidth,
+              height: element.clientHeight
+            });
+          }
+        }, 0);
+      }
+    } catch (error) {
+      console.warn('Error initializing OverlayScrollbars:', error);
+    }
   }, [onPinchRef]);
 
+  const setMultiRef = useCallback((node) => {
+    if (!shouldUseCustomScrollbar) {
+      internalContainerRef.current = node;
+      if (onPinchRef) onPinchRef(node);
+    }
+  }, [onPinchRef, shouldUseCustomScrollbar]);
+
   useEffect(() => {
-    if (!internalContainerRef.current) return;
-    const element = internalContainerRef.current;
+    const element = getScrollableElement();
+    if (!element) return;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -217,7 +286,7 @@ const AbsoluteMasonryGrid = forwardRef(({
       observer.disconnect();
       element.removeEventListener('scroll', handleScroll);
     };
-  }, []);
+  }, [getScrollableElement]);
 
   const { layout, totalHeight } = useMemo(() => {
     if (isListLayout) {
@@ -228,7 +297,7 @@ const AbsoluteMasonryGrid = forwardRef(({
 
   useImperativeHandle(ref, () => ({
     scrollToItem: (itemId) => {
-      const container = internalContainerRef.current;
+      const container = getScrollableElement();
       if (!container) return;
       const itemLayout = layout.find(item => item.id === itemId);
       if (!itemLayout) return;
@@ -236,7 +305,7 @@ const AbsoluteMasonryGrid = forwardRef(({
       container.scrollTo({ top: itemLayout.top - 20, behavior: 'smooth' });
     },
     scrollToMoment: (headerId) => {
-      const container = internalContainerRef.current;
+      const container = getScrollableElement();
       if (!container) return;
       const itemLayout = layout.find(item => item.id === headerId && item.isHeader);
       if (!itemLayout) return;
@@ -246,7 +315,7 @@ const AbsoluteMasonryGrid = forwardRef(({
       setTimeout(() => setHighlightedId(null), 1500);
     },
     getCurrentVisibleMoment: () => {
-      const container = internalContainerRef.current;
+      const container = getScrollableElement();
       if (!container || !layout.length) return null;
 
       const currentScrollTop = scrollTop || container.scrollTop;
@@ -288,7 +357,7 @@ const AbsoluteMasonryGrid = forwardRef(({
 
       return bestHeader ? bestHeader.id : null;
     }
-  }), [layout, scrollTop, dimensions.height]);
+  }), [layout, scrollTop, dimensions.height, getScrollableElement]);
 
   // --- אופטימיזציה 2: שימוש בחיפוש בינארי במקום Filter מלא ---
   const visibleItems = useMemo(() => {
@@ -317,6 +386,69 @@ const AbsoluteMasonryGrid = forwardRef(({
 
   if (!items.length) return null;
 
+  const content = (
+    <div 
+      style={{ 
+        height: totalHeight, 
+        width: '100%', 
+        position: 'relative',
+        pointerEvents: 'auto' 
+      }}
+    >
+      {visibleItems.map((itemLayout) => (
+        <GridItem 
+           key={itemLayout.id}
+           itemLayout={itemLayout}
+           renderItem={renderItem}
+           renderHeader={renderHeader}
+           onItemRef={onItemRef}
+           highlightedId={highlightedId}
+        />
+      ))}
+    </div>
+  );
+
+  if (shouldUseCustomScrollbar) {
+    // Use OverlayScrollbars for custom scrollbar
+    return (
+      <OverlayScrollbarsComponent
+        ref={overlayScrollbarsRef}
+        element="div"
+        className={className}
+        options={{
+          scrollbars: {
+            theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+            autoHide: 'never', // Always show on mobile for easier grabbing
+            autoHideDelay: 0,
+            clickScroll: true,
+            dragScroll: true,
+            pointers: ['mouse', 'touch', 'pen'],
+            visibility: 'visible',
+            size: '10px', // Default size, will be overridden by CSS on mobile
+          },
+          overflow: {
+            x: 'hidden',
+            y: 'scroll',
+          },
+        }}
+        events={{
+          initialized: handleOverlayScrollbarsInit,
+          updated: handleOverlayScrollbarsInit,
+        }}
+        style={{ 
+          width: '100%', 
+          height: containerHeight,
+          position: 'relative',
+          touchAction: 'pan-y',
+          ...style 
+        }}
+      >
+        {content}
+      </OverlayScrollbarsComponent>
+    );
+  }
+
+  // Default native scrollbar
   return (
     <div 
       ref={setMultiRef}
@@ -325,31 +457,15 @@ const AbsoluteMasonryGrid = forwardRef(({
         width: '100%', 
         height: containerHeight, 
         overflowY: 'auto', 
+        overflowX: 'hidden',
         position: 'relative',
         willChange: 'scroll-position',
-        touchAction: 'pan-y', 
+        touchAction: 'pan-y',
+        WebkitOverflowScrolling: 'touch',
         ...style 
       }}
     >
-      <div 
-        style={{ 
-          height: totalHeight, 
-          width: '100%', 
-          position: 'relative',
-          pointerEvents: 'auto' 
-        }}
-      >
-        {visibleItems.map((itemLayout) => (
-          <GridItem 
-             key={itemLayout.id}
-             itemLayout={itemLayout}
-             renderItem={renderItem}
-             renderHeader={renderHeader}
-             onItemRef={onItemRef}
-             highlightedId={highlightedId}
-          />
-        ))}
-      </div>
+      {content}
     </div>
   );
 });
