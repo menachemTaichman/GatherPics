@@ -1574,7 +1574,10 @@
     "downloadingProgress": "מוריד {{current}} מתוך {{total}}",
     "downloading": "מוריד...",
     "downloadComplete": "ההורדה הושלמה!",
-    "downloadFailed": "ההורדה נכשלה: {{error}}"
+    "downloadFailed": "ההורדה נכשלה: {{error}}",
+    "addAllToQueue": "הוסף הכל לתור",
+    "addAll": "הוסף הכל",
+    "addedAllToQueue": "{{count}} פריטים הוספו לתור"
   },
   "imageActions": {
     "addedTo": "נוסף ל-",

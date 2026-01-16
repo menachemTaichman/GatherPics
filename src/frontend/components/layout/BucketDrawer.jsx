@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Check, Upload, Download, Image as ImageIcon } from 'lucide-react';
+import { X, Trash2, Check, Upload, Download, Image as ImageIcon, Plus } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useBucketStore from '../../utils/bucketStore';
@@ -45,7 +45,8 @@ export default function BucketDrawer() {
     clearUploaded,
     markDownloaded,
     markUploaded,
-    removeManyFromQueue
+    removeManyFromQueue,
+    addToQueue
   } = useBucketStore();
 
   const { registerModal, unregisterModal } = useModalManager();
@@ -104,6 +105,12 @@ export default function BucketDrawer() {
   const renderAlreadyListItem = useCallback((item, index, isPortrait, setRef) => (
     <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
   ), [eventUrl, mode]);
+
+  const handleAddAllToQueue = () => {
+    if (alreadyList.length === 0) return;
+    addToQueue(alreadyList);
+    setNote(t('bucketDrawer.addedAllToQueue', { count: alreadyList.length }));
+  };
 
   const handlePrimaryAction = async () => {
     if (queue.length === 0) return;
@@ -300,14 +307,27 @@ export default function BucketDrawer() {
               <h4 className="text-sm font-medium text-gray-700">
                 {mode === 'download' ? t('bucketDrawer.alreadyDownloaded') : t('bucketDrawer.alreadyUploaded')} ({alreadyList.length})
               </h4>
-              <button
-                onClick={mode === 'download' ? clearDownloaded : clearUploaded}
-                className="text-xs text-gray-600 hover:underline"
-                title={t('bucketDrawer.clearList')}
-                aria-label={t('bucketDrawer.clearList')}
-              >
-                {t('bucketDrawer.clearList')}
-              </button>
+              <div className="flex items-center gap-2">
+                {alreadyList.length > 0 && (
+                  <button
+                    onClick={handleAddAllToQueue}
+                    className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                    title={t('bucketDrawer.addAllToQueue')}
+                    aria-label={t('bucketDrawer.addAllToQueue')}
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{t('bucketDrawer.addAll')}</span>
+                  </button>
+                )}
+                <button
+                  onClick={mode === 'download' ? clearDownloaded : clearUploaded}
+                  className="text-xs text-gray-600 hover:underline"
+                  title={t('bucketDrawer.clearList')}
+                  aria-label={t('bucketDrawer.clearList')}
+                >
+                  {t('bucketDrawer.clearList')}
+                </button>
+              </div>
             </div>
             {alreadyList.length === 0 ? (
               <p className="text-xs text-gray-400">{t('bucketDrawer.nothingYet')}</p>

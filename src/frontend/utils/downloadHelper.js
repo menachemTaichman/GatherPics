@@ -96,19 +96,28 @@ export async function downloadAsZip(filesOrPromise, zipFilename = 'images.zip', 
 
     for (const file of files) {
       try {
-        // 4. Use FETCH (GET) instead of HttpReader (HEAD)
-        // This solves the 403 Forbidden issue
-        // Include authorization header for API endpoints (local storage)
-        const token = jwtService.getTokenSync();
-        const headers = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
+        const isR2SignedUrl = file.url.includes('r2.cloudflarestorage.com') || 
+                             file.url.includes('X-Amz-Signature') ||
+                             file.url.includes('X-Amz-Algorithm');
+
+        const fetchOptions = {};
         
-        const response = await fetch(file.url, {
-          credentials: 'include', // Include cookies as fallback
-          headers: headers
-        });
+        if (isR2SignedUrl) {
+          // R2 Signed URL strategy:
+          // 1. No Authorization header (auth is in query params)
+          // 2. No credentials (cookies) -> This is CRITICAL to avoid Preflight if possible
+          fetchOptions.credentials = 'omit'; 
+        } else {
+          // API Strategy:
+          const token = jwtService.getTokenSync();
+          fetchOptions.credentials = 'include';
+          if (token) {
+            fetchOptions.headers = { 'Authorization': `Bearer ${token}` };
+          }
+        }
+
+        // ביצוע הבקשה
+        const response = await fetch(file.url, fetchOptions);
         
         if (!response.ok) {
           throw new Error(`HTTP error ${response.status}`);

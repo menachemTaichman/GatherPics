@@ -1573,7 +1573,10 @@
     "downloadingProgress": "Downloading {{current}} of {{total}}",
     "downloading": "Downloading...",
     "downloadComplete": "Download complete!",
-    "downloadFailed": "Download failed: {{error}}"
+    "downloadFailed": "Download failed: {{error}}",
+    "addAllToQueue": "Add all to queue",
+    "addAll": "Add all",
+    "addedAllToQueue": "Added {{count}} item(s) to queue"
   },
   "imageActions": {
     "addedTo": "Added to",
