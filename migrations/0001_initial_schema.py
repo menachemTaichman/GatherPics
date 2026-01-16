@@ -780,6 +780,7 @@ step(
             ('UploadsGallery', 'sortBy', 'str', 'started_at'),
             ('UploadDetail', 'mode', 'str', 'groups'),
             ('UploadDetail', 'sortDir', 'str', 'asc'),
+            ('UploadDetail', 'groupsSortBy', 'str', 'name'),
             ('EventsGallery', 'filterVisibility', 'str', 'all'),
             ('EventsGallery', 'sortDir', 'str', 'desc'),
             ('EventsGallery', 'sortBy', 'str', 'date'),

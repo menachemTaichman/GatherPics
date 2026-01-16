@@ -4,12 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
 import usePinchToZoom from '../../hooks/usePinchToZoom';
-import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key, Info } from 'lucide-react';
+import { Upload, Image as ImageIcon, Users, Clock, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ArrowLeft, Square, CheckSquare, Edit2, Save, RotateCcw, Minus, Plus, User, AlertCircle, Key, Info, Filter } from 'lucide-react';
 import { uploadsAPI, groupsAPI, momentsAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { useUploadById, useDataStore } from '../../utils/dataManager';
 import { useApplyScopes, useChilds, useEventId } from '../../utils/storeUtils';
-import { sortImages } from '../../utils/sorting';
+import { sortImages, sortGroups } from '../../utils/sorting';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { formatErrorMessage } from '../../utils/errorHandler';
@@ -36,7 +36,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const params = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { isRTL } = useRTL();
+  const { isRTL, startClass, endClass, ps, pe } = useRTL();
   const uploadId = params.uploadId;
   const eventId = useEventId(eventUrl);
   const { isAuthenticated } = useAuth();
@@ -44,6 +44,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const [mode, setMode] = useState(() => getPreference('UploadDetail.mode', 'images'));
   const sortDir = usePreference('UploadDetail.sortDir', 'asc');
   const setSortDir = (value) => setPreference('UploadDetail.sortDir', value);
+  const groupsSortBy = usePreference('UploadDetail.groupsSortBy', 'name');
+  const setGroupsSortBy = (value) => setPreference('UploadDetail.groupsSortBy', value);
   const selectionMode = usePreference('general.select', false);
   const setSelectionMode = (value) => setPreference('general.select', value);
   const imageSize = usePreference('general.size', 1.0);
@@ -207,21 +209,17 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     }));
   }, []);
   
-  // Sort groups by label
+  // Sort groups by name or count
   const uploadGroups = useMemo(() => {
     // Use placeholders when not authenticated
     const groups = isAuthenticated ? rawUploadGroups : placeholderGroups;
     
-    return [...groups].sort((a, b) => {
-      const labelA = (a.label || '').toLowerCase();
-      const labelB = (b.label || '').toLowerCase();
-      if (sortDir === 'asc') {
-        return labelA.localeCompare(labelB);
-      } else {
-        return labelB.localeCompare(labelA);
-      }
-    });
-  }, [rawUploadGroups, placeholderGroups, sortDir, isAuthenticated]);
+    // Skip sorting for placeholders
+    if (!isAuthenticated) return groups;
+    
+    // Use sortGroups utility (supports 'name' and 'count' sorting)
+    return sortGroups(groups, groupsSortBy, sortDir);
+  }, [rawUploadGroups, placeholderGroups, groupsSortBy, sortDir, isAuthenticated]);
   
   // Sort moments by label (which contains time)
   const uploadMoments = useMemo(() => {
@@ -889,10 +887,10 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   }, [upload?.started_at, upload?.completed_at]);
 
   return (
-    <div className="w-full overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="h-[4rem]"></div>
       {/* Sticky Header */}
-      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200 px-4 sm:px-8 py-2 sm:py-4 shadow-sm">
+      <div className="sticky top-[4rem] z-30 bg-white border-b border-gray-200/50 px-4 sm:px-8 py-2 sm:py-4 shadow-sm">
         {/* Title Row - Mobile: includes controls in same row, Desktop: title only */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0 flex-1 sm:flex-initial">
@@ -1018,6 +1016,22 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             {/* Controls */}
             {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Sort By - Only show in groups mode */}
+                {mode === 'groups' && (
+                  <div className="relative">
+                    <select
+                      value={groupsSortBy}
+                      onChange={(e) => setGroupsSortBy(e.target.value)}
+                      dir={isRTL ? 'rtl' : 'ltr'}
+                      className={`appearance-none ${ps('2')} ${pe('10')} py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white`}
+                    >
+                      <option value="name">{t('groupsGallery.sortByName')}</option>
+                      <option value="count">{t('groupsGallery.sortByCount')}</option>
+                    </select>
+                    <Filter className={`absolute ${endClass('2')} top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 pointer-events-none`} />
+                  </div>
+                )}
+
                 {/* Sort */}
                 <button
                   onClick={toggleSortDir}
@@ -1200,6 +1214,24 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
             {/* Controls */}
             {(mode === 'images' || mode === 'groups' || mode === 'moments') && (
               <>
+                {/* Sort By - Only show in groups mode */}
+                {mode === 'groups' && (
+                  <div className="flex items-center gap-3 px-4">
+                    <div className="relative">
+                      <select
+                        value={groupsSortBy}
+                        onChange={(e) => setGroupsSortBy(e.target.value)}
+                        dir={isRTL ? 'rtl' : 'ltr'}
+                        className={`appearance-none ${ps('3')} ${pe('10')} py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white`}
+                      >
+                        <option value="name">{t('groupsGallery.sortByName')}</option>
+                        <option value="count">{t('groupsGallery.sortByCount')}</option>
+                      </select>
+                      <Filter className={`absolute ${endClass('3')} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none`} />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 px-4">
                   {/* Sort */}
                   <button
