@@ -17,7 +17,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import PermissionGate from '../common/PermissionGate';
 import ConfirmDelete from '../modals/ConfirmDelete';
 import PublicProfilePasswordModal from './PublicProfilePasswordModal';
-import SimpleVirtuosoGrid from '../images/SimpleVirtuosoGrid';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 
 export default function EditProfileModal({ isOpen, onClose, profile, eventUrl, urlHelpers, onSave, isCreating = false, initialEventId = null }) {
   const { t } = useTranslation();
@@ -1576,7 +1576,7 @@ const isProfileEditable = useMemo(() => {
 
   // Define renderItem callbacks separately to keep references stable
   // MUST be before early return to follow Rules of Hooks
-  const renderProfileImage = useCallback((image) => (
+  const renderProfileImage = useCallback((image, index, isPortrait, setRef) => (
     <ProfileImageThumb
       imageId={image.id}
       eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
@@ -1586,7 +1586,7 @@ const isProfileEditable = useMemo(() => {
     />
   ), [selectedEventId, eventUrl, dynamicUrlHelpers, t, handleRemoveImage]);
 
-  const renderProfileAlbum = useCallback((album) => (
+  const renderProfileAlbum = useCallback((album, index, isPortrait, setRef) => (
     <ProfileAlbumThumb
       album={album}
       eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
@@ -1596,7 +1596,7 @@ const isProfileEditable = useMemo(() => {
     />
   ), [selectedEventId, eventUrl, dynamicUrlHelpers, t, handleRemoveAlbum]);
 
-  const renderProfileGroup = useCallback((group) => (
+  const renderProfileGroup = useCallback((group, index, isPortrait, setRef) => (
     <ProfileGroupThumb
       group={group}
       eventUrl={getEventUrlFromId(selectedEventId) || eventUrl}
@@ -2594,13 +2594,14 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificPhotosConfigured')}
                   </p>
                 ) : (
-                  <SimpleVirtuosoGrid
+                  <AbsoluteMasonryGrid
                     items={profileImages.map(img => ({ id: img.id, ...img }))}
                     baseSize={48}
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    overscan={1500}
+                    imageClasses={{}}
+                    bufferMultiplier={3.0}
                     renderItem={renderProfileImage}
                   />
                 )}
@@ -2635,13 +2636,14 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificAlbumsConfigured')}
                   </p>
                 ) : (
-                  <SimpleVirtuosoGrid
+                  <AbsoluteMasonryGrid
                     items={profileAlbums.map(album => ({ id: album.id, ...album }))}
                     baseSize={48}
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    overscan={1500}
+                    imageClasses={{}}
+                    bufferMultiplier={3.0}
                     renderItem={renderProfileAlbum}
                   />
                 )}
@@ -2676,13 +2678,14 @@ const isProfileEditable = useMemo(() => {
                     {t('editProfile.noSpecificPeopleConfigured')}
                   </p>
                 ) : (
-                  <SimpleVirtuosoGrid
+                  <AbsoluteMasonryGrid
                     items={profileGroups.map(group => ({ id: group.id, ...group }))}
                     baseSize={48}
                     gap={4}
                     containerHeight="192px"
                     className="w-full"
-                    overscan={1500}
+                    imageClasses={{}}
+                    bufferMultiplier={3.0}
                     renderItem={renderProfileGroup}
                   />
                 )}

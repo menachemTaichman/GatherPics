@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Search, Filter, User, Minus, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FaceCard } from '../../components/groups';
-import SimpleVirtuosoGrid from '../../components/images/SimpleVirtuosoGrid';
+import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { useApplyScopes, useEventId } from '../../utils/storeUtils';
 import { sortGroups, toggleSortOrder } from '../../utils/sorting';
 import { usePreference } from '../../hooks/useSettings';
@@ -101,16 +101,15 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
   }, [currentGroups, searchTerm, sortBy, sortOrder, isAuthenticated]);
 
   // Define renderItem separately to keep reference stable
-  const renderFaceCard = useCallback((group, index) => {
+  const renderFaceCard = useCallback((group, index, isPortrait, setRef) => {
     return (
-      // No need for extra wrapper div here, the ItemContainer handles the sizing
       <FaceCard
         group={group}
         cardSize={cardSize}
         urlHelpers={urlHelpers}
         eventUrl={eventUrl}
         // PERFORMANCE TIP: Pass specific image props
-        loading="eager" // Important! Let Virtuoso handle the loading/unloading
+        loading="eager" // Important! Let AbsoluteMasonryGrid handle the loading/unloading
       />
     );
   }, [cardSize, urlHelpers, eventUrl]); // Dependencies
@@ -262,16 +261,16 @@ export default function Gallery({ eventUrl, groups, onUpdateGroup, onDeleteGroup
         </motion.div>
       ) : (
         <div className="w-full" style={{ height: `calc(100vh - ${isMobile ? '15rem' : '16rem'})`, marginTop: '1rem' }}>
-          <SimpleVirtuosoGrid
+          <AbsoluteMasonryGrid
             items={filteredAndSortedGroups}
             baseSize={Math.max(100, 175 * cardSize)}
             heightMultiplier={1.2}
             containerHeight="100%"
             className="w-full"
             onPinchRef={setGridContainerRef}
-            // Overscan increased by default in component, but you can override:
-            overscan={1500}
-            renderItem={renderFaceCard} // Use the callback
+            imageClasses={{}}
+            bufferMultiplier={3.0}
+            renderItem={renderFaceCard}
           />
         </div>
       )}

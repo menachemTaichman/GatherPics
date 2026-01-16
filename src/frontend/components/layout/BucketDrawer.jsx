@@ -10,7 +10,7 @@ import { useModalManager } from '../../utils/modalManager';
 import { RemovableThumbnail } from '../common';
 import { useRTL } from '../../hooks/useRTL';
 import { downloadAsZip } from '../../utils/downloadHelper';
-import SimpleVirtuosoGrid from '../images/SimpleVirtuosoGrid';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 import { useEventId } from '../../utils/storeUtils';
 import { useImageComponent } from '../../hooks/useImage.jsx';
 
@@ -97,11 +97,11 @@ export default function BucketDrawer() {
   }, [alreadyList]);
 
   // Define renderItem callbacks separately to keep references stable
-  const renderQueueItem = useCallback((item) => (
+  const renderQueueItem = useCallback((item, index, isPortrait, setRef) => (
     <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="medium" removeFrom="queue" />
   ), [eventUrl]);
 
-  const renderAlreadyListItem = useCallback((item) => (
+  const renderAlreadyListItem = useCallback((item, index, isPortrait, setRef) => (
     <BucketThumb eventUrl={eventUrl} imageId={item.imageId} size="small" removeFrom={mode === 'download' ? 'downloaded' : 'uploaded'} />
   ), [eventUrl, mode]);
 
@@ -281,14 +281,14 @@ export default function BucketDrawer() {
             {queue.length === 0 ? (
               <p className="text-sm text-gray-500">{t('bucketDrawer.noItemsInQueue')}</p>
             ) : (
-              <SimpleVirtuosoGrid
+              <AbsoluteMasonryGrid
                 items={queueItems}
                 baseSize={48}
                 gap={8}
                 containerHeight="100%"
                 className="w-full"
-                overscan={1500}
-                disableMinHeight={true}
+                imageClasses={{}}
+                bufferMultiplier={3.0}
                 renderItem={renderQueueItem}
               />
             )}
@@ -313,13 +313,14 @@ export default function BucketDrawer() {
               <p className="text-xs text-gray-400">{t('bucketDrawer.nothingYet')}</p>
             ) : (
               <div className="h-48 overflow-y-auto">
-                <SimpleVirtuosoGrid
+                <AbsoluteMasonryGrid
                   items={alreadyListItems}
                   baseSize={48}
                   gap={8}
                   containerHeight="auto"
                   className="w-full"
-                  overscan={1500}
+                  imageClasses={{}}
+                  bufferMultiplier={3.0}
                   renderItem={renderAlreadyListItem}
                 />
               </div>

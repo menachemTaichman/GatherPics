@@ -14,7 +14,7 @@ import { formatErrorMessage } from '../../utils/errorHandler';
 import { formatTime } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { useRTL } from '../../hooks/useRTL';
-import SimpleVirtuosoGrid from '../images/SimpleVirtuosoGrid';
+import AbsoluteMasonryGrid from '../images/AbsoluteMasonryGrid';
 import { ImageComponent } from '../../hooks/useImage.jsx';
 
 // Stable empty Set to avoid creating new instances
@@ -522,7 +522,7 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
   ]);
 
   // Define renderItem separately to keep reference stable
-  const renderImageItem = useCallback((image, index) => {
+  const renderImageItem = useCallback((image, index, isPortrait, setRef) => {
     const selectionState = getImageSelectionState(image.id);
     const momentInfo = getImageMomentInfo(image.id);
     const isInPeriod = isImageInPeriod(image.id);
@@ -839,13 +839,14 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
             </div>
           ) : (
             <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-x-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
-              <SimpleVirtuosoGrid
+              <AbsoluteMasonryGrid
                 items={filteredImages}
                 baseSize={120}
                 containerHeight="100%"
                 className="w-full h-full overflow-x-hidden"
                 gap={12}
-                overscan={1500}
+                imageClasses={{}}
+                bufferMultiplier={3.0}
                 style={{ flex: '1 1 0', minHeight: 0 }}
                 onPinchRef={(node) => {
                   scrollContainerRef.current = node;
