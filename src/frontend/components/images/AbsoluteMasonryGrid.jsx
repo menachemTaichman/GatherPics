@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useRTL } from '../../hooks/useRTL';
+import { useSwipeSelection } from '../../hooks/useSwipeSelection';
 
 // --- אופטימיזציה 1: הגדרת הקומפוננטה מחוץ ללולאה ---
-const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId }) => {
+const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId, extraProps }) => {
   // Handle header items
   if (itemLayout.isHeader) {
     const isHighlighted = highlightedId === itemLayout.id;
@@ -66,7 +67,7 @@ const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, 
       <div style={{ width: '100%', height: '100%', overflow: 'visible' }}>
         {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
           if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
-        })}
+        }, extraProps)}
       </div>
     </div>
   );
@@ -212,6 +213,7 @@ const AbsoluteMasonryGrid = forwardRef(({
   listItemHeight = 80,
   heightMultiplier = 1.0,
   useCustomScrollbar = undefined, // undefined means auto-detect mobile
+  onSelectRange = null, // Prop חדש: פונקציה שמקבלת ID ומטפלת בבחירה
 }, ref) => {
   const internalContainerRef = useRef(null);
   const overlayScrollbarsRef = useRef(null);
@@ -257,38 +259,6 @@ const AbsoluteMasonryGrid = forwardRef(({
     return internalContainerRef.current;
   }, [shouldUseCustomScrollbar]);
 
-  // Handle OverlayScrollbars initialization
-  const handleOverlayScrollbarsInit = useCallback((instance) => {
-    if (!instance) return;
-    try {
-      const elements = instance.elements();
-      const viewport = elements?.viewport;
-      if (viewport) {
-        internalContainerRef.current = viewport;
-        if (onPinchRef) onPinchRef(viewport);
-        // Trigger initial dimensions update
-        setTimeout(() => {
-          const element = viewport;
-          if (element) {
-            setDimensions({
-              width: element.clientWidth,
-              height: element.clientHeight
-            });
-          }
-        }, 0);
-      }
-    } catch (error) {
-      console.warn('Error initializing OverlayScrollbars:', error);
-    }
-  }, [onPinchRef]);
-
-  const setMultiRef = useCallback((node) => {
-    if (!shouldUseCustomScrollbar) {
-      internalContainerRef.current = node;
-      if (onPinchRef) onPinchRef(node);
-    }
-  }, [onPinchRef, shouldUseCustomScrollbar]);
-
   useEffect(() => {
     const element = getScrollableElement();
     if (!element) return;
@@ -322,6 +292,65 @@ const AbsoluteMasonryGrid = forwardRef(({
     }
     return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, heightMultiplier, isRTL);
   }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight, heightMultiplier, isRTL]);
+
+  // 1. הגדרת ה-Hook החדש (אחרי חישוב layout)
+  const { containerRef: swipeContainerRef, startDrag, events: swipeEvents } = useSwipeSelection({
+    layout,       // יש לך את זה כבר מ-useMemo
+    scrollTop,    // יש לך את זה מה-State
+    enable: !!onSelectRange, // מפעיל רק אם הועברה פונקציה
+    scrollerRef: internalContainerRef, // מעבירים את הרפרנס לאלמנט שנגלל
+    onSelectionChange: (ids, isStart) => {
+        // כאן אנחנו קוראים לפונקציה מההורה
+        // ההורה צריך לדעת לנהל את ה-Set של הבחירה
+        // מעבירים את כל ה-IDs לבחירת טווח (כמו Shift)
+        if (onSelectRange && ids.length > 0) {
+             onSelectRange(ids, isStart);
+        }
+    }
+  });
+  
+  // Handle OverlayScrollbars initialization (אחרי swipeContainerRef מוגדר)
+  const handleOverlayScrollbarsInit = useCallback((instance) => {
+    if (!instance) return;
+    try {
+      const elements = instance.elements();
+      const viewport = elements?.viewport;
+      if (viewport) {
+        internalContainerRef.current = viewport; // עבור גלילה
+        swipeContainerRef.current = viewport;    // עבור חישובי מיקום
+        if (onPinchRef) onPinchRef(viewport);
+        // Trigger initial dimensions update
+        setTimeout(() => {
+          const element = viewport;
+          if (element) {
+            setDimensions({
+              width: element.clientWidth,
+              height: element.clientHeight
+            });
+          }
+        }, 0);
+      }
+    } catch (error) {
+      console.warn('Error initializing OverlayScrollbars:', error);
+    }
+  }, [onPinchRef, swipeContainerRef]);
+  
+  // 2. שילוב Refs - קריטי!
+  const setMultiRef = useCallback((node) => {
+    if (!shouldUseCustomScrollbar) {
+      internalContainerRef.current = node; // עבור גלילה
+      swipeContainerRef.current = node;    // עבור חישובי מיקום
+      if (onPinchRef) onPinchRef(node);
+    }
+  }, [onPinchRef, shouldUseCustomScrollbar, swipeContainerRef]);
+  
+  // Update swipeContainerRef when scrollable element changes
+  useEffect(() => {
+    const element = getScrollableElement();
+    if (element && swipeContainerRef.current !== element) {
+      swipeContainerRef.current = element;
+    }
+  }, [getScrollableElement, swipeContainerRef]);
 
   useImperativeHandle(ref, () => ({
     scrollToItem: (itemId) => {
@@ -416,23 +445,36 @@ const AbsoluteMasonryGrid = forwardRef(({
 
   const content = (
     <div 
+      ref={swipeContainerRef} // הוספת ה-ref כדי לקבל boundingClientRect
       style={{ 
         height: totalHeight, 
         width: '100%', 
         position: 'relative',
+        touchAction: 'pan-y', // מאפשר גלילה רגילה, אבל מאפשר לנו לבטל אותה בקוד
+        userSelect: 'none', // מונע בחירת טקסט כחולה מעצבנת
+        WebkitUserSelect: 'none',
         pointerEvents: 'auto' 
       }}
+      // האירועים מתווספים באופן ידני ב-useSwipeSelection עם { passive: false }
     >
-      {visibleItems.map((itemLayout) => (
-        <GridItem 
-           key={itemLayout.id}
-           itemLayout={itemLayout}
-           renderItem={renderItem}
-           renderHeader={renderHeader}
-           onItemRef={onItemRef}
-           highlightedId={highlightedId}
-        />
-      ))}
+      {visibleItems.map((itemLayout) => {
+        // Prepare extraProps for this item
+        const extraProps = onSelectRange ? { 
+          startDrag: () => startDrag(itemLayout.id)
+        } : undefined;
+        
+        return (
+          <GridItem 
+             key={itemLayout.id}
+             itemLayout={itemLayout}
+             renderItem={renderItem}
+             renderHeader={renderHeader}
+             onItemRef={onItemRef}
+             highlightedId={highlightedId}
+             extraProps={extraProps}
+          />
+        );
+      })}
     </div>
   );
 

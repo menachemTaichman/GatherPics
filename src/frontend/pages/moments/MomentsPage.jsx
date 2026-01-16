@@ -720,6 +720,63 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
     handleImageSelect(imageId, event);
   };
 
+  // Swipe selection support
+  const lastSwipedIdsRef = useRef(new Set());
+  
+  const handleSelectRange = useCallback((ids, isStart) => {
+    // ids הוא מערך של כל הפריטים שנבחרו בטווח (כמו Shift)
+    // ב-MomentsPage, ה-ids הם image IDs, אבל ה-selection משתמש ב-keys של `${momentId}:${imageId}`
+    if (!ids || ids.length === 0) return;
+
+    // אם זו תחילת לחיצה ארוכה (checkbox)
+    if (isStart) {
+      setSelectionMode(true); // כניסה למצב בחירה
+      // בוחרים את כל הפריטים בטווח
+      ids.forEach(imageId => {
+        const image = sortedImages.find(img => img.id === imageId);
+        if (image) {
+          const key = `${image.moment_id}:${imageId}`;
+          if (!selectedKeys.has(key)) {
+            toggleKey(key);
+          }
+        }
+      });
+      lastSwipedIdsRef.current = new Set(ids);
+      return;
+    }
+
+    // בזמן גרירה - עדכון הבחירה לכל הפריטים בטווח
+    const currentIds = new Set(ids);
+    
+    // הסרת פריטים שיצאו מהטווח
+    lastSwipedIdsRef.current.forEach(imageId => {
+      if (!currentIds.has(imageId)) {
+        const image = sortedImages.find(img => img.id === imageId);
+        if (image) {
+          const key = `${image.moment_id}:${imageId}`;
+          if (selectedKeys.has(key)) {
+            toggleKey(key);
+          }
+        }
+      }
+    });
+    
+    // הוספת פריטים חדשים שנכנסו לטווח
+    currentIds.forEach(imageId => {
+      if (!lastSwipedIdsRef.current.has(imageId)) {
+        const image = sortedImages.find(img => img.id === imageId);
+        if (image) {
+          const key = `${image.moment_id}:${imageId}`;
+          if (!selectedKeys.has(key)) {
+            toggleKey(key);
+          }
+        }
+      }
+    });
+    
+    lastSwipedIdsRef.current = currentIds;
+  }, [toggleKey, selectedKeys, setSelectionMode, sortedImages]);
+
   const selectAllImages = () => {
     if (allKeys.length === 0) return;
     const allCurrentImages = new Set(allKeys);
@@ -1306,6 +1363,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                   setPinchRef(node);
                   gridContainerRef.current = node;
                 }}
+                onSelectRange={handleSelectRange}
                 style={{
                   '--grid-scale': 1,
                   '--grid-z-index': 1,
@@ -1410,7 +1468,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                     handleItemRef(image, index, el);
                   }
                 }}
-                renderItem={(image, index, isPortrait, setRef) => {
+                renderItem={(image, index, isPortrait, setRef, extraProps) => {
                   // Skip rendering if it's a header (handled by renderHeader)
                   if (image.isHeader) return null;
                   
@@ -1430,6 +1488,7 @@ export default function Moments({ eventUrl, urlHelpers: injectedUrlHelpers }) {
                         selectionMode={selectionMode}
                         isSelected={selectedKeys.has(`${momentId}:${image.id}`)}
                         onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                        startDrag={extraProps?.startDrag}
                         onOpen={() => {
                           const correctIndex = sortedImages.findIndex(img => img.id === image.id);
                           if (correctIndex !== -1) {

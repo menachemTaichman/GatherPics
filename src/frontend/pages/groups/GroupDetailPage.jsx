@@ -870,6 +870,50 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   const selectAllImages = showCrops ? selectAllInFacesMode : selectAllInImagesMode;
   const deselectMany = showCrops ? deselectManyFacesMode : deselectManyImagesMode;
 
+  // Swipe selection support
+  const lastSwipedIdsRef = useRef(new Set());
+  
+  const handleSelectRange = useCallback((ids, isStart) => {
+    // ids הוא מערך של כל הפריטים שנבחרו בטווח (כמו Shift)
+    if (!ids || ids.length === 0) return;
+
+    // אם זו תחילת לחיצה ארוכה (checkbox)
+    if (isStart) {
+      setSelectionMode(true); // כניסה למצב בחירה
+      // בוחרים את כל הפריטים בטווח
+      ids.forEach(id => {
+        if (!selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      });
+      lastSwipedIdsRef.current = new Set(ids);
+      return;
+    }
+
+    // בזמן גרירה - עדכון הבחירה לכל הפריטים בטווח
+    const currentIds = new Set(ids);
+    
+    // הסרת פריטים שיצאו מהטווח
+    lastSwipedIdsRef.current.forEach(id => {
+      if (!currentIds.has(id)) {
+        if (selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      }
+    });
+    
+    // הוספת פריטים חדשים שנכנסו לטווח
+    currentIds.forEach(id => {
+      if (!lastSwipedIdsRef.current.has(id)) {
+        if (!selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      }
+    });
+    
+    lastSwipedIdsRef.current = currentIds;
+  }, [toggleSelectedImageKey, selectedImages, setSelectionMode]);
+
   useEffect(() => {
     if (!eventUrl || !decodedGroupName) return;
     
@@ -1939,6 +1983,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                 containerHeight="100%"
                 className="w-full"
                 onPinchRef={setGridContainerRef}
+                onSelectRange={handleSelectRange}
                 style={{
                   '--grid-scale': 1,
                   '--grid-z-index': 1,
@@ -1954,7 +1999,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                     }
                   }
                 }}
-                renderItem={(item, index, isPortrait, setRef) => {
+                renderItem={(item, index, isPortrait, setRef, extraProps) => {
                   // In faces mode, item is a face; in images mode, item is an image
                   const isFacesMode = showCrops;
                   const itemId = item.id;
@@ -2004,6 +2049,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
                         selectionMode={selectionMode}
                         isSelected={selectedImages.has(itemId)}
                         onToggleSelect={(e) => toggleImageSelection(itemId, e)}
+                        startDrag={extraProps?.startDrag} // Use startDrag from extraProps (new simpler approach)
                         onOpen={() => openImageViewer(itemId, actualIndex !== -1 ? actualIndex : 0)}
                         onImageLoad={showCrops ? undefined : ((e) => handleImageLoad(imageId, e))}
                         showCropBadge={false}

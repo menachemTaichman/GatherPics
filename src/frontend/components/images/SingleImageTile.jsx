@@ -1,4 +1,4 @@
-import React, { forwardRef, useState, useEffect, memo } from 'react';
+import React, { forwardRef, useState, useEffect, memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import useImageActions from './ImageActions';
 import { useImageComponent } from '../../hooks/useImage.jsx';
@@ -36,7 +36,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
   altText = null, // Optional alt text override (format: "Photo #{idx} in {context}{: description}")
   photoIndex = null, // Photo index for alt text generation
   contextType = null, // Context type for alt text (Person, Moment, Album, Upload, etc.)
-  contextLabel = null // Label for the context (e.g., group name, album name, etc.)
+  contextLabel = null, // Label for the context (e.g., group name, album name, etc.)
+  onLongPressSelect = null, // Deprecated: Callback for long press on checkbox to start swipe selection
+  startDrag = null // New: Direct start drag function from grid (simpler approach)
 }, ref) {
   // Use the centralized ImageActions hook
   const imageActions = useImageActions({
@@ -112,6 +114,49 @@ const SingleImageTile = forwardRef(function SingleImageTile({
       onOpen && onOpen();
     }
   };
+
+  // Long press handler for checkbox to start swipe selection
+  const longPressTimeoutRef = useRef(null);
+  const isDraggingRef = useRef(false);
+
+  const handleCheckboxTouchStart = (e) => {
+    // Use startDrag if available (new simpler approach), otherwise fallback to onLongPressSelect
+    const dragHandler = startDrag || (onLongPressSelect ? () => onLongPressSelect(image.id, true) : null);
+    
+    if (!dragHandler || e.touches.length > 1) return;
+    
+    // מונע התערבות של אירועי עכבר נוספים
+    e.stopPropagation();
+    
+    isDraggingRef.current = false;
+    longPressTimeoutRef.current = setTimeout(() => {
+      if (!isDraggingRef.current) {
+        // רטט קטן למשתמש כדי שיבין שנכנס למצב בחירה
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        // התחלת swipe selection - הגריד יקבל פיקוד מכאן
+        dragHandler();
+      }
+      longPressTimeoutRef.current = null;
+    }, 500); // 500ms לחיצה ארוכה
+  };
+
+  const handleCheckboxTouchMove = (e) => {
+    // אם האצבע זזה יותר מדי, זה לא long press
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+    isDraggingRef.current = true;
+  };
+
+  const handleCheckboxTouchEnd = () => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+    isDraggingRef.current = false;
+  };
   
   return (
     <div 
@@ -138,6 +183,9 @@ const SingleImageTile = forwardRef(function SingleImageTile({
             e.stopPropagation();
             onToggleSelect && onToggleSelect(e);
           }}
+          onTouchStart={handleCheckboxTouchStart}
+          onTouchMove={handleCheckboxTouchMove}
+          onTouchEnd={handleCheckboxTouchEnd}
           className={`absolute top-2 z-10 w-5 h-5 text-primary-600 bg-white rounded border-gray-300 focus:ring-primary-500 transition-opacity ${
             isRTL ? 'right-2' : 'left-2'
           } ${

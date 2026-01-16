@@ -399,6 +399,50 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
     toggleSelectedImageKey(imageId, event);
   };
 
+  // Swipe selection support
+  const lastSwipedIdsRef = useRef(new Set());
+  
+  const handleSelectRange = useCallback((ids, isStart) => {
+    // ids הוא מערך של כל הפריטים שנבחרו בטווח (כמו Shift)
+    if (!ids || ids.length === 0) return;
+
+    // אם זו תחילת לחיצה ארוכה (checkbox)
+    if (isStart) {
+      setSelectionMode(true); // כניסה למצב בחירה
+      // בוחרים את כל הפריטים בטווח
+      ids.forEach(id => {
+        if (!selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      });
+      lastSwipedIdsRef.current = new Set(ids);
+      return;
+    }
+
+    // בזמן גרירה - עדכון הבחירה לכל הפריטים בטווח
+    const currentIds = new Set(ids);
+    
+    // הסרת פריטים שיצאו מהטווח
+    lastSwipedIdsRef.current.forEach(id => {
+      if (!currentIds.has(id)) {
+        if (selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      }
+    });
+    
+    // הוספת פריטים חדשים שנכנסו לטווח
+    currentIds.forEach(id => {
+      if (!lastSwipedIdsRef.current.has(id)) {
+        if (!selectedImages.has(id)) {
+          toggleSelectedImageKey(id);
+        }
+      }
+    });
+    
+    lastSwipedIdsRef.current = currentIds;
+  }, [toggleSelectedImageKey, selectedImages, setSelectionMode]);
+
   // Handle keyboard shortcuts and arrow key navigation
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -871,6 +915,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
               containerHeight="100%"
               className="w-full"
               onPinchRef={setPinchRef}
+              onSelectRange={handleSelectRange}
               style={{
                 '--grid-scale': 1,
                 '--grid-z-index': 1,
@@ -885,7 +930,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                   }
                 }
               }}
-              renderItem={(image, index, isPortrait, setRef) => {
+              renderItem={(image, index, isPortrait, setRef, extraProps) => {
                 // Find actual index in sortedImages
                 const actualIndex = sortedImages.findIndex(img => img.id === image.id);
                 return (
@@ -902,6 +947,7 @@ export default function AlbumDetail({ urlHelpers: injectedUrlHelpers }) {
                       selectionMode={selectionMode}
                       isSelected={selectedImages.has(image.id)}
                       onToggleSelect={(e) => toggleImageSelection(image.id, e)}
+                      startDrag={extraProps?.startDrag}
                       onOpen={() => openImageViewer(image.id, actualIndex !== -1 ? actualIndex : 0)}
                       onImageLoad={(e) => handleImageLoad(image.id, e)}
                       showCropBadge={false}

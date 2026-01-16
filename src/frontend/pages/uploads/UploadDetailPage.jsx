@@ -607,6 +607,64 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   const toggleImageSelection = (imageId, event) => {
     toggleCurrentSelection(imageId, event);
   };
+
+  // Swipe selection support (for all modes)
+  const lastSwipedIdsRef = useRef(new Set());
+  
+  const handleSelectRange = useCallback((ids, isStart) => {
+    // ids הוא מערך של כל הפריטים שנבחרו בטווח (כמו Shift)
+    if (!ids || ids.length === 0) return;
+
+    // ב-groups mode, useSwipeSelection מחזיר face IDs, אבל הבחירה היא לפי image IDs
+    // צריך להמיר face IDs ל-image IDs
+    let idsToUse = ids;
+    if (mode === 'groups' && expandedGroup) {
+      const groupFaces = getGroupFacesInUpload(expandedGroup);
+      const faceIdToImageIdMap = new Map();
+      groupFaces.forEach(face => {
+        faceIdToImageIdMap.set(String(face.id), String(face.image_id));
+      });
+      
+      // המיר face IDs ל-image IDs
+      idsToUse = ids.map(id => faceIdToImageIdMap.get(String(id)) || id).filter(Boolean);
+    }
+
+    // אם זו תחילת לחיצה ארוכה (checkbox)
+    if (isStart) {
+      setSelectionMode(true); // כניסה למצב בחירה
+      // בוחרים את כל הפריטים בטווח
+      idsToUse.forEach(id => {
+        if (!currentSelection.has(id)) {
+          toggleCurrentSelection(id);
+        }
+      });
+      lastSwipedIdsRef.current = new Set(idsToUse);
+      return;
+    }
+
+    // בזמן גרירה - עדכון הבחירה לכל הפריטים בטווח
+    const currentIds = new Set(idsToUse);
+    
+    // הסרת פריטים שיצאו מהטווח
+    lastSwipedIdsRef.current.forEach(id => {
+      if (!currentIds.has(id)) {
+        if (currentSelection.has(id)) {
+          toggleCurrentSelection(id);
+        }
+      }
+    });
+    
+    // הוספת פריטים חדשים שנכנסו לטווח
+    currentIds.forEach(id => {
+      if (!lastSwipedIdsRef.current.has(id)) {
+        if (!currentSelection.has(id)) {
+          toggleCurrentSelection(id);
+        }
+      }
+    });
+    
+    lastSwipedIdsRef.current = currentIds;
+  }, [toggleCurrentSelection, currentSelection, setSelectionMode, mode, expandedGroup, getGroupFacesInUpload]);
   
   const handleImageLoad = (imageId, e) => {
     const img = e.target;
@@ -1403,6 +1461,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                     containerHeight="100%"
                     className="w-full"
                     onPinchRef={setGridContainerRef}
+                    onSelectRange={handleSelectRange}
                     style={{
                       '--grid-scale': 1,
                       '--grid-z-index': 1,
@@ -1417,7 +1476,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                         }
                       }
                     }}
-                    renderItem={(img, index, isPortrait, setRef) => {
+                    renderItem={(img, index, isPortrait, setRef, extraProps) => {
                       return (
                         <div
                           className={`photo-card ${imageClasses[img.id] || 'square'}`}
@@ -1432,6 +1491,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                             selectionMode={selectionMode}
                             isSelected={currentSelection.has(img.id)}
                             onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                            startDrag={extraProps?.startDrag}
                             onOpen={() => openImageViewerInUpload(img.id, index)}
                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                             eventUrl={eventUrl}
@@ -1595,6 +1655,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                     imageClasses={imageClasses}
                                     containerHeight="100%"
                                     className="w-full"
+                                    onPinchRef={setGridContainerRef}
+                                    onSelectRange={handleSelectRange}
                                     style={{
                                       '--grid-scale': 1,
                                       '--grid-z-index': 1,
@@ -1617,7 +1679,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         }
                                       }
                                     }}
-                                    renderItem={(face, faceIndex, isPortrait, setRef) => {
+                                    renderItem={(face, faceIndex, isPortrait, setRef, extraProps) => {
                                       const img = entities?.[eventId]?.images?.[face.image_id];
                                       if (!img) return null;
                                       const isRep = isRepresentative(face.id);
@@ -1633,8 +1695,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                             imageFit="cover"
                                             thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
                                             selectionMode={selectionMode}
-                                            isSelected={currentSelection.has(face.id)}
-                                            onToggleSelect={(e) => toggleImageSelection(face.id, e)}
+                                            isSelected={currentSelection.has(face.image_id)}
+                                            onToggleSelect={(e) => toggleImageSelection(face.image_id, e)}
+                                            startDrag={extraProps?.startDrag}
                                             onOpen={() => openImageViewerInGroup(group.id, face.id)}
                                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
@@ -1796,6 +1859,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                     imageClasses={imageClasses}
                                     containerHeight="100%"
                                     className="w-full"
+                                    onPinchRef={setGridContainerRef}
+                                    onSelectRange={handleSelectRange}
                                     style={{
                                       '--grid-scale': 1,
                                       '--grid-z-index': 1,
@@ -1818,7 +1883,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                         }
                                       }
                                     }}
-                                    renderItem={(img, imgIndex, isPortrait, setRef) => {
+                                    renderItem={(img, imgIndex, isPortrait, setRef, extraProps) => {
                                       const isRep = isRepresentative(img.id);
                                       return (
                                         <div
@@ -1834,6 +1899,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                             selectionMode={selectionMode}
                                             isSelected={currentSelection.has(img.id)}
                                             onToggleSelect={(e) => toggleImageSelection(img.id, e)}
+                                            startDrag={extraProps?.startDrag}
                                             onOpen={() => openImageViewerInMoment(moment.id, img.id)}
                                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
