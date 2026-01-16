@@ -1,6 +1,62 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 
-// --- האלגוריתם שלך נשאר ללא שינוי ---
+// --- אופטימיזציה 1: הגדרת הקומפוננטה מחוץ ללולאה ---
+const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId }) => {
+  // Handle header items
+  if (itemLayout.isHeader) {
+    const isHighlighted = highlightedId === itemLayout.id;
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: `${itemLayout.top}px`,
+          left: `${itemLayout.left}px`,
+          width: `${itemLayout.width}px`,
+          height: `${itemLayout.height}px`,
+          zIndex: 10,
+          transition: 'background-color 0.5s ease',
+          backgroundColor: isHighlighted ? 'rgba(66, 135, 245, 0.2)' : 'transparent',
+        }}
+        className={isHighlighted ? 'moment-header-highlighted' : ''}
+      >
+        {renderHeader ? renderHeader(itemLayout.data) : (
+          <div style={{ width: '100%', height: '100%', padding: '8px' }}>
+            {itemLayout.data.label || itemLayout.data.title || 'Header'}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Regular item
+  return (
+    <div
+      className="virtualized-grid-item"
+      style={{
+        position: 'absolute',
+        top: `${itemLayout.top}px`,
+        left: `${itemLayout.left}px`,
+        width: `${itemLayout.width}px`,
+        height: `${itemLayout.height}px`,
+        contain: 'layout style paint', // שיפור ביצועים לדפדפן
+        overflow: 'visible',
+        transform: 'scale(var(--grid-scale, 1))',
+        transformOrigin: 'center center',
+        zIndex: 'var(--grid-z-index, 1)',
+        transition: 'transform 0.1s ease-out',
+        willChange: 'transform'
+      }}
+    >
+      <div style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
+          if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
+        })}
+      </div>
+    </div>
+  );
+});
+
+// --- פונקציות חישוב Layout ---
 const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false, heightMultiplier = 1.0) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
 
@@ -11,47 +67,38 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
   const layout = items.map((item) => {
     // Handle header items (for moment separators)
     if (item.isHeader) {
-      // 1. מוצאים את הגובה המקסימלי הנוכחי (תחתית האלמנט הכי נמוך)
       const currentMaxHeight = Math.max(...colHeights);
       
-      // 2. קובעים גובה לכותרת (למשל 50 פיקסל)
       const headerHeight = item.headerHeight || 50; 
 
-      // 3. מעדכנים את כל העמודות להיות "אחרי" הכותרת
       const newBaseHeight = currentMaxHeight + headerHeight + gap;
       colHeights.fill(newBaseHeight);
 
       return {
         id: item.id,
-        top: currentMaxHeight, // מתחיל מייד אחרי האלמנט הכי נמוך
+        top: currentMaxHeight,
         left: 0,
-        width: containerWidth, // תופס את כל הרוחב!
+        width: containerWidth,
         height: headerHeight,
         data: item,
-        isHeader: true // כדי שתוכל לרנדר אותו אחרת
+        isHeader: true
       };
     }
     
     // Regular image item
-    // --- השינוי כאן ---
     let itemHeight;
     
     if (isSquareGrid) {
-        // במצב ריבועי: הגובה שווה לרוחב (יחס 1:1)
-        itemHeight = realColWidth;
+      itemHeight = realColWidth;
     } else {
-        // במצב מייסונרי רגיל: הלוגיקה המקורית שלך
-        const isPortrait = imageClasses[item.id] === 'portrait';
-        // Use heightMultiplier for portrait items, or apply to all items if heightMultiplier is set
-        if (heightMultiplier !== 1.0) {
-          itemHeight = realColWidth * heightMultiplier;
-        } else {
-          itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
-        }
+      const isPortrait = imageClasses[item.id] === 'portrait';
+      if (heightMultiplier !== 1.0) {
+        itemHeight = realColWidth * heightMultiplier;
+      } else {
+        itemHeight = isPortrait ? (realColWidth * 2) + gap : realColWidth;
+      }
     }
-    // ------------------
     
-    // מציאת העמודה הנמוכה ביותר
     const minHeight = Math.min(...colHeights);
     const colIndex = colHeights.indexOf(minHeight);
 
@@ -67,29 +114,27 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
       width: realColWidth,
       height: itemHeight,
       data: item,
-      isPortrait: isSquareGrid ? false : imageClasses[item.id] === 'portrait' // אופציונלי: לעדכן גם את הדגל הזה
+      isPortrait: isSquareGrid ? false : imageClasses[item.id] === 'portrait'
     };
   });
 
   return { layout, totalHeight: Math.max(...colHeights) };
 };
 
-// התאמה לרשימה (עמודה אחת)
 const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
   
-  // פשוט רץ אחד אחרי השני
   let currentTop = 0;
   
   const layout = items.map(item => {
     const top = currentTop;
-    currentTop += itemHeight + gap; // מקדם את ה-Top הבא
+    currentTop += itemHeight + gap;
     
     return {
       id: item.id,
       top,
       left: 0,
-      width: containerWidth, // רוחב מלא
+      width: containerWidth,
       height: itemHeight,
       data: item
     };
@@ -98,28 +143,31 @@ const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
   return { layout, totalHeight: currentTop };
 };
 
-/**
- * AbsoluteMasonryGrid - Virtualized masonry grid with absolute positioning
- * 
- * TESTING PARAMETERS:
- * 
- * 1. ZOOMING/JUMPING (Image Size Changes):
- *    - Controlled by: `baseSize` prop
- *    - In AlbumDetailPage: `baseSize={Math.max(120, 266 * imageSize)}`
- *    - To test: Change the multiplier (266) or min value (120)
- *    - Example: `baseSize={Math.max(80, 200 * imageSize)}` = smaller images
- *    - Example: `baseSize={Math.max(150, 350 * imageSize)}` = larger images
- * 
- * 2. SCROLLING PERFORMANCE (How fast images appear):
- *    - Controlled by: `bufferMultiplier` prop (default: 2.5)
- *    - Lower values (0.5-1.0): Faster scrolling, less pre-rendering, may show blank areas
- *    - Higher values (3.0-5.0): Smoother scrolling, more pre-rendering, more DOM elements
- *    - To test: Pass `bufferMultiplier={1.0}` or `bufferMultiplier={5.0}` to AbsoluteMasonryGrid
- */
+// --- עזר לחיפוש בינארי ---
+// מוצא את האינדקס הראשון שבו הפריט נגע ב-minTop
+const findStartIndex = (layout, minTop) => {
+  let start = 0;
+  let end = layout.length - 1;
+  let result = 0;
+
+  while (start <= end) {
+    const mid = Math.floor((start + end) / 2);
+    const item = layout[mid];
+    
+    if (item.top + item.height < minTop) {
+      start = mid + 1;
+    } else {
+      result = mid;
+      end = mid - 1;
+    }
+  }
+  return result;
+};
+
 const AbsoluteMasonryGrid = forwardRef(({
   items = [],
   renderItem,
-  renderHeader = null, // Optional function to render header items
+  renderHeader = null,
   baseSize = 150,
   gap = 3,
   imageClasses = {},
@@ -127,32 +175,23 @@ const AbsoluteMasonryGrid = forwardRef(({
   className = '',
   style = {},
   onItemRef = null,
-  // TESTING PARAMETER: Controls how much content is pre-rendered ahead/behind viewport
-  // Higher = smoother scrolling but more DOM elements (try 1.0, 2.5, 5.0)
   bufferMultiplier = 3.0,
-  onPinchRef = null, // <--- Prop חדש שמקבל את ה-Ref מההוק
-  isSquareGrid = false, // <--- Prop חדש למצב ריבועי
-  isListLayout = false, // <--- Prop חדש למצב רשימה
-  listItemHeight = 80, // <--- גובה פריט במצב רשימה
-  heightMultiplier = 1.0, // <--- Multiplier for item height (e.g., 1.5 = 50% taller)
+  onPinchRef = null,
+  isSquareGrid = false,
+  isListLayout = false,
+  listItemHeight = 80,
+  heightMultiplier = 1.0,
 }, ref) => {
   const internalContainerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 800 });
   const [scrollTop, setScrollTop] = useState(0);
   const [highlightedId, setHighlightedId] = useState(null);
 
-  // --- הלב של התיקון: מיזוג Refs ---
   const setMultiRef = useCallback((node) => {
-    // 1. עדכון ה-Ref הפנימי (בשביל הגלילה והמדידות שלנו כאן)
     internalContainerRef.current = node;
+    if (onPinchRef) onPinchRef(node);
+  }, [onPinchRef]);
 
-    // 2. העברת ה-Node להוק של ה-Pinch (כדי שיוכל להוסיף Event Listeners)
-    if (onPinchRef) {
-        onPinchRef(node);
-    }
-  }, [onPinchRef]); // תלות ב-Ref החיצוני
-
-  // 1. האזנה לשינויי גודל + גלילה
   useEffect(() => {
     if (!internalContainerRef.current) return;
     const element = internalContainerRef.current;
@@ -166,9 +205,8 @@ const AbsoluteMasonryGrid = forwardRef(({
     });
 
     const handleScroll = () => {
-       // requestAnimationFrame משפר ביצועים בגלילה מהירה
        requestAnimationFrame(() => {
-         setScrollTop(element.scrollTop);
+         if (element) setScrollTop(element.scrollTop);
        });
     };
 
@@ -179,9 +217,8 @@ const AbsoluteMasonryGrid = forwardRef(({
       observer.disconnect();
       element.removeEventListener('scroll', handleScroll);
     };
-  }, [dimensions.width]); // הוספנו תלות כדי לוודא שזה מתעדכן, למרות שבדרך כלל [] מספיק אם ה-Ref יציב
+  }, []);
 
-  // 2. חישוב ה-Layout (רץ רק כשמשתנה הרוחב או התמונות)
   const { layout, totalHeight } = useMemo(() => {
     if (isListLayout) {
       return calculateListLayout(items, dimensions.width, listItemHeight, gap);
@@ -189,121 +226,49 @@ const AbsoluteMasonryGrid = forwardRef(({
     return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, heightMultiplier);
   }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight, heightMultiplier]);
 
-  // --- Expose scrollToItem and scrollToMoment methods via ref ---
   useImperativeHandle(ref, () => ({
-    /**
-     * Smart scrolling function to scroll to a specific item
-     * Implements "nearest" logic within a virtualized environment
-     * Uses distance-based scrolling: instant jump if far, smooth scroll if close
-     */
     scrollToItem: (itemId) => {
       const container = internalContainerRef.current;
       if (!container) return;
-
-      // 1. Find the calculated position of the item (even if it's not in the DOM)
       const itemLayout = layout.find(item => item.id === itemId);
       if (!itemLayout) return;
-
-      // 2. Calculate boundaries
-      const itemTop = itemLayout.top;
-      const itemBottom = itemLayout.top + itemLayout.height;
-      const containerTop = container.scrollTop;
-      const containerBottom = container.scrollTop + container.clientHeight;
       
-      // Leave some padding so it's not stuck to the edge
-      const padding = 20;
-      const HUGE_DISTANCE_THRESHOLD = 3000; // Threshold for instant scroll (in pixels)
-
-      // 3. Nearest logic - only scroll if necessary
-      if (itemTop < containerTop + padding) {
-        // Image is "above" the visible area -> scroll up
-        const targetTop = Math.max(0, itemTop - padding);
-        const distance = Math.abs(targetTop - containerTop);
-        const behavior = distance > HUGE_DISTANCE_THRESHOLD ? 'auto' : 'smooth';
-        container.scrollTo({ top: targetTop, behavior });
-      } else if (itemBottom > containerBottom - padding) {
-        // Image is "below" the visible area -> scroll down
-        const targetTop = itemBottom - container.clientHeight + padding;
-        const distance = Math.abs(targetTop - containerTop);
-        const behavior = distance > HUGE_DISTANCE_THRESHOLD ? 'auto' : 'smooth';
-        container.scrollTo({ top: targetTop, behavior });
-      }
-      // Otherwise: image is already on screen, do nothing!
+      container.scrollTo({ top: itemLayout.top - 20, behavior: 'smooth' });
     },
-    
-    /**
-     * Scroll to a moment header with visual highlight effect
-     * @param {string} headerId - The header ID (e.g., "header-{momentId}")
-     */
     scrollToMoment: (headerId) => {
       const container = internalContainerRef.current;
       if (!container) return;
-
       const itemLayout = layout.find(item => item.id === headerId && item.isHeader);
-      if (!itemLayout) return; // Header not found
+      if (!itemLayout) return;
 
-      const targetTop = itemLayout.top;
-      const currentScroll = container.scrollTop;
-      const distance = Math.abs(targetTop - currentScroll);
-      const HUGE_DISTANCE_THRESHOLD = 3000; // Threshold for instant scroll (in pixels)
-
-      // Scroll logic
-      if (distance > HUGE_DISTANCE_THRESHOLD) {
-        // Large distance: instant jump ("Teleport")
-        container.scrollTo({ top: targetTop, behavior: 'auto' });
-      } else {
-        // Reasonable distance: smooth scroll
-        container.scrollTo({ top: targetTop, behavior: 'smooth' });
-      }
-
-      // Visual effect ("Cue"): highlight the header
+      container.scrollTo({ top: itemLayout.top, behavior: 'smooth' });
       setHighlightedId(headerId);
-      
-      // Clear highlight after animation duration
-      setTimeout(() => {
-        setHighlightedId(null);
-      }, 1500);
+      setTimeout(() => setHighlightedId(null), 1500);
     },
-    
-    /**
-     * Get the current visible moment header based on scroll position
-     * @returns {string|null} The header ID of the current visible moment, or null if none found
-     */
     getCurrentVisibleMoment: () => {
       const container = internalContainerRef.current;
       if (!container || !layout.length) return null;
 
-      // Use the tracked scrollTop state for consistency, but fall back to DOM if needed
       const currentScrollTop = scrollTop || container.scrollTop;
       const viewportHeight = dimensions.height || container.clientHeight;
       const viewportCenter = currentScrollTop + viewportHeight / 2;
 
-      // Find all header items
       const headers = layout.filter(item => item.isHeader);
       if (headers.length === 0) return null;
 
-      // Find the header that is closest to the viewport center and above it
-      // Prefer headers that are visible or just above the viewport center
       let bestHeader = null;
       let bestDistance = Infinity;
 
       for (const header of headers) {
         const headerTop = header.top;
-        const headerBottom = header.top + header.height;
-        
-        // Check if header is in or near the viewport
         const distanceFromCenter = Math.abs(headerTop - viewportCenter);
         
-        // Prefer headers that are:
-        // 1. Above or at the viewport center (not too far below)
-        // 2. Closest to the viewport center
         if (headerTop <= viewportCenter + 100 && distanceFromCenter < bestDistance) {
           bestDistance = distanceFromCenter;
           bestHeader = header;
         }
       }
 
-      // If no header found above center, use the first header that's below center
       if (!bestHeader) {
         for (const header of headers) {
           if (header.top > viewportCenter) {
@@ -313,106 +278,48 @@ const AbsoluteMasonryGrid = forwardRef(({
         }
       }
 
-      // If still no header and we're at the top, use the first header
       if (!bestHeader && currentScrollTop < 50 && headers.length > 0) {
         bestHeader = headers[0];
       }
 
-      // If still no header, use the last header (we're at the bottom)
       if (!bestHeader && headers.length > 0) {
         bestHeader = headers[headers.length - 1];
       }
 
       return bestHeader ? bestHeader.id : null;
     }
-  }), [layout, scrollTop, dimensions.height]); // Depend on layout, scrollTop, and dimensions
+  }), [layout, scrollTop, dimensions.height]);
 
-  // 3. הווירטואליזציה האמיתית
+  // --- אופטימיזציה 2: שימוש בחיפוש בינארי במקום Filter מלא ---
   const visibleItems = useMemo(() => {
     if (!layout.length) return [];
     
-    // TESTING: Adjust bufferMultiplier to test scrolling performance
-    // Lower values (0.5-1.0) = faster scrolling, less pre-rendering, may show blank areas
-    // Higher values (3.0-5.0) = smoother scrolling, more pre-rendering, more DOM elements
-    const buffer = dimensions.height * bufferMultiplier; 
-    
-    const minTop = scrollTop - buffer;
+    const buffer = dimensions.height * bufferMultiplier;
+    const minTop = Math.max(0, scrollTop - buffer);
     const maxTop = scrollTop + dimensions.height + buffer;
 
-    return layout.filter(item => {
-      return (item.top + item.height > minTop) && (item.top < maxTop);
-    });
-  }, [layout, scrollTop, dimensions.height, bufferMultiplier]);
-
-  // שינוי 2: קומפוננטה פנימית עם Memo כדי למנוע רינדורים מיותרים בזמן גלילה
-  // זה קריטי כי renderItem שלך מוגדר כפונקציה בתוך ה-Parent ולכן מתחדש כל הזמן
-  const MemoizedItem = useMemo(() => React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, highlightedId }) => {
-    // Handle header items differently
-    if (itemLayout.isHeader) {
-      const isHighlighted = highlightedId === itemLayout.id;
-      
-      return (
-        <div
-          style={{
-            position: 'absolute',
-            top: `${itemLayout.top}px`,
-            left: `${itemLayout.left}px`,
-            width: `${itemLayout.width}px`,
-            height: `${itemLayout.height}px`,
-            zIndex: 10, // Headers should be above images
-            transition: 'background-color 0.5s ease',
-            backgroundColor: isHighlighted ? 'rgba(66, 135, 245, 0.2)' : 'transparent',
-          }}
-          className={isHighlighted ? 'moment-header-highlighted' : ''}
-        >
-          {renderHeader ? renderHeader(itemLayout.data) : (
-            <div style={{ width: '100%', height: '100%', padding: '8px' }}>
-              {itemLayout.data.label || itemLayout.data.title || 'Header'}
-            </div>
-          )}
-        </div>
-      );
-    }
+    const startIndex = findStartIndex(layout, minTop);
     
-    // Regular image item
-    return (
-      <div
-        className="virtualized-grid-item"
-        style={{
-          position: 'absolute',
-          top: `${itemLayout.top}px`,
-          left: `${itemLayout.left}px`,
-          width: `${itemLayout.width}px`,
-          height: `${itemLayout.height}px`,
-          contain: 'layout style paint',
-          overflow: 'visible',
-          
-          // --- השינוי הקריטי ---
-          // התמונה מקבלת את הסקייל מהמשתנה שהגדרנו באבא
-          transform: 'scale(var(--grid-scale, 1))', 
-          // נקודת העוגן היא המרכז, כך שהתמונות גדלות מהאמצע החוצה
-          transformOrigin: 'center center',
-          // Z-Index דינמי: בזמן זום התמונות עולות למעלה כדי לא להסתיר אחת את השנייה עם חיתוכים
-          zIndex: 'var(--grid-z-index, 1)',
-          // מעבר חד בזמן צביטה כדי למנוע לאגים
-          transition: 'transform 0.1s ease-out', // טרנזישן קצר מאוד
-          willChange: 'transform'
-        }}
-      >
-        <div style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-          {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
-            if (onItemRef && el) onItemRef(itemLayout.data, -1, el);
-          })}
-        </div>
-      </div>
-    );
-  }), []);
+    const items = [];
+    for (let i = startIndex; i < layout.length; i++) {
+      const item = layout[i];
+      if (item.top > maxTop) {
+        if (item.top > maxTop + baseSize * 2) break;
+      }
+      
+      if (item.top + item.height > minTop) {
+        items.push(item);
+      }
+    }
+
+    return items;
+  }, [layout, scrollTop, dimensions.height, bufferMultiplier, baseSize]);
 
   if (!items.length) return null;
 
   return (
     <div 
-      ref={setMultiRef} // <--- משתמשים ב-Ref המאוחד
+      ref={setMultiRef}
       className={className}
       style={{ 
         width: '100%', 
@@ -429,12 +336,11 @@ const AbsoluteMasonryGrid = forwardRef(({
           height: totalHeight, 
           width: '100%', 
           position: 'relative',
-          // אופטימיזציה למניעת אירועי עכבר מיותרים בזמן גלילה (Pointer Events)
           pointerEvents: 'auto' 
         }}
       >
         {visibleItems.map((itemLayout) => (
-          <MemoizedItem 
+          <GridItem 
              key={itemLayout.id}
              itemLayout={itemLayout}
              renderItem={renderItem}
@@ -451,4 +357,3 @@ const AbsoluteMasonryGrid = forwardRef(({
 AbsoluteMasonryGrid.displayName = 'AbsoluteMasonryGrid';
 
 export default AbsoluteMasonryGrid;
-
