@@ -253,6 +253,7 @@ export function useImage(src, options = {}) {
         width={width}
         height={height}
         loading={loading === 'eager' ? 'eager' : 'lazy'}
+        decoding="async"
         onLoad={handleLoad}
         onError={handleError}
         {...restImgProps}
@@ -486,6 +487,7 @@ function ImageWithErrorFallback({ src, options = {} }) {
       width={width}
       height={height}
       loading={loading === 'eager' ? 'eager' : 'lazy'}
+      decoding="async"
       onError={handleError}
       {...restImgProps}
     />
