@@ -7,18 +7,25 @@ const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, 
   // Handle header items
   if (itemLayout.isHeader) {
     const isHighlighted = highlightedId === itemLayout.id;
+    const positionStyle = {
+      position: 'absolute',
+      top: `${itemLayout.top}px`,
+      width: `${itemLayout.width}px`,
+      height: `${itemLayout.height}px`,
+      zIndex: 10,
+      transition: 'background-color 0.5s ease',
+      backgroundColor: isHighlighted ? 'rgba(66, 135, 245, 0.2)' : 'transparent',
+    };
+    if (itemLayout.left !== undefined) {
+      positionStyle.left = `${itemLayout.left}px`;
+    }
+    if (itemLayout.right !== undefined) {
+      positionStyle.right = `${itemLayout.right}px`;
+    }
+    
     return (
       <div
-        style={{
-          position: 'absolute',
-          top: `${itemLayout.top}px`,
-          left: `${itemLayout.left}px`,
-          width: `${itemLayout.width}px`,
-          height: `${itemLayout.height}px`,
-          zIndex: 10,
-          transition: 'background-color 0.5s ease',
-          backgroundColor: isHighlighted ? 'rgba(66, 135, 245, 0.2)' : 'transparent',
-        }}
+        style={positionStyle}
         className={isHighlighted ? 'moment-header-highlighted' : ''}
       >
         {renderHeader ? renderHeader(itemLayout.data) : (
@@ -31,23 +38,30 @@ const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, 
   }
 
   // Regular item
+  const positionStyle = {
+    position: 'absolute',
+    top: `${itemLayout.top}px`,
+    width: `${itemLayout.width}px`,
+    height: `${itemLayout.height}px`,
+    contain: 'layout style paint', // שיפור ביצועים לדפדפן
+    overflow: 'visible',
+    transform: 'scale(var(--grid-scale, 1))',
+    transformOrigin: 'center center',
+    zIndex: 'var(--grid-z-index, 1)',
+    transition: 'transform 0.1s ease-out',
+    willChange: 'transform'
+  };
+  if (itemLayout.left !== undefined) {
+    positionStyle.left = `${itemLayout.left}px`;
+  }
+  if (itemLayout.right !== undefined) {
+    positionStyle.right = `${itemLayout.right}px`;
+  }
+  
   return (
     <div
       className="virtualized-grid-item"
-      style={{
-        position: 'absolute',
-        top: `${itemLayout.top}px`,
-        left: `${itemLayout.left}px`,
-        width: `${itemLayout.width}px`,
-        height: `${itemLayout.height}px`,
-        contain: 'layout style paint', // שיפור ביצועים לדפדפן
-        overflow: 'visible',
-        transform: 'scale(var(--grid-scale, 1))',
-        transformOrigin: 'center center',
-        zIndex: 'var(--grid-z-index, 1)',
-        transition: 'transform 0.1s ease-out',
-        willChange: 'transform'
-      }}
+      style={positionStyle}
     >
       <div style={{ width: '100%', height: '100%', overflow: 'visible' }}>
         {renderItem(itemLayout.data, -1, itemLayout.isPortrait, (el) => {
@@ -59,7 +73,7 @@ const GridItem = React.memo(({ itemLayout, renderItem, renderHeader, onItemRef, 
 });
 
 // --- פונקציות חישוב Layout ---
-const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false, heightMultiplier = 1.0) => {
+const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isSquareGrid = false, heightMultiplier = 1.0, isRTL = false) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
 
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (baseSize + gap)));
@@ -79,7 +93,8 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
       return {
         id: item.id,
         top: currentMaxHeight,
-        left: 0,
+        left: isRTL ? undefined : 0,
+        right: isRTL ? 0 : undefined,
         width: containerWidth,
         height: headerHeight,
         data: item,
@@ -105,7 +120,18 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
     const colIndex = colHeights.indexOf(minHeight);
 
     const top = colHeights[colIndex];
-    const left = colIndex * (realColWidth + gap);
+    
+    // Calculate position based on RTL
+    let left, right;
+    if (isRTL) {
+      // In RTL, use right positioning: colIndex 0 starts at right: 0
+      right = colIndex * (realColWidth + gap);
+      left = undefined;
+    } else {
+      // In LTR, use left positioning: colIndex 0 starts at left: 0
+      left = colIndex * (realColWidth + gap);
+      right = undefined;
+    }
 
     colHeights[colIndex] += itemHeight + gap;
 
@@ -113,6 +139,7 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
       id: item.id,
       top,
       left,
+      right,
       width: realColWidth,
       height: itemHeight,
       data: item,
@@ -123,7 +150,7 @@ const calculateLayout = (items, containerWidth, baseSize, gap, imageClasses, isS
   return { layout, totalHeight: Math.max(...colHeights) };
 };
 
-const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
+const calculateListLayout = (items, containerWidth, itemHeight, gap, isRTL = false) => {
   if (!containerWidth) return { layout: [], totalHeight: 0 };
   
   let currentTop = 0;
@@ -135,7 +162,8 @@ const calculateListLayout = (items, containerWidth, itemHeight, gap) => {
     return {
       id: item.id,
       top,
-      left: 0,
+      left: isRTL ? undefined : 0,
+      right: isRTL ? 0 : undefined,
       width: containerWidth,
       height: itemHeight,
       data: item
@@ -290,10 +318,10 @@ const AbsoluteMasonryGrid = forwardRef(({
 
   const { layout, totalHeight } = useMemo(() => {
     if (isListLayout) {
-      return calculateListLayout(items, dimensions.width, listItemHeight, gap);
+      return calculateListLayout(items, dimensions.width, listItemHeight, gap, isRTL);
     }
-    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, heightMultiplier);
-  }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight, heightMultiplier]);
+    return calculateLayout(items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, heightMultiplier, isRTL);
+  }, [items, dimensions.width, baseSize, gap, imageClasses, isSquareGrid, isListLayout, listItemHeight, heightMultiplier, isRTL]);
 
   useImperativeHandle(ref, () => ({
     scrollToItem: (itemId) => {
