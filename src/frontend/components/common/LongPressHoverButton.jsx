@@ -85,6 +85,12 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   const fixedSizeRegex = /\b([wh]-\[\d+\w+\]|[wh]-0|[wh]-px|[wh]-0\.5|[wh]-1|[wh]-1\.5|[wh]-2|[wh]-2\.5|[wh]-3|[wh]-3\.5|[wh]-4|[wh]-5|[wh]-6|[wh]-7|[wh]-8|[wh]-9|[wh]-10|[wh]-11|[wh]-12|[wh]-14|[wh]-16|[wh]-20|[wh]-24|[wh]-28|[wh]-32|[wh]-36|[wh]-40|[wh]-44|[wh]-48|[wh]-52|[wh]-56|[wh]-60|[wh]-64|[wh]-72|[wh]-80|[wh]-96)\b/g;
   const hasFixedSize = !isFullWidth && fixedSizeRegex.test(className);
   
+  // חילוץ width ו-height classes כדי לשמור עליהם ב-wrapper אם נדרש
+  const widthMatch = className.match(/\bw-(\d+|\[\d+\w+\]|0|px|0\.5|1\.5|2\.5|3\.5|full)\b/);
+  const heightMatch = className.match(/\bh-(\d+|\[\d+\w+\]|0|px|0\.5|1\.5|2\.5|3\.5|full)\b/);
+  const extractedWidth = widthMatch ? widthMatch[0] : null;
+  const extractedHeight = heightMatch ? heightMatch[0] : null;
+  
   // הסרת ה-flex classes מה-button className (כי הם יעברו ל-wrapper)
   // והוספת w-full לכפתור כדי שימלא את ה-wrapper
   let buttonClassName = hasFlexClasses
@@ -94,6 +100,16 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   // אם יש flex classes, נוסיף w-full לכפתור כדי שימלא את ה-wrapper
   if (hasFlexClasses && !buttonClassName.includes('w-full')) {
     buttonClassName = `${buttonClassName} w-full`.trim();
+  }
+  
+  // אם הכפתור הוא בגודל קבוע ושווה (w-X h-X עם אותו X), נוסיף aspect-square כדי להבטיח שהוא מרובע
+  if (hasFixedSize && extractedWidth && extractedHeight) {
+    // בדיקה אם הרוחב והגובה זהים (למשל w-8 h-8)
+    const widthValue = extractedWidth.replace('w-', '');
+    const heightValue = extractedHeight.replace('h-', '');
+    if (widthValue === heightValue && !buttonClassName.includes('aspect-square')) {
+      buttonClassName = `${buttonClassName} aspect-square`.trim();
+    }
   }
 
   // אם הכפתור הוא absolute, לא עוטפים ב-div נוסף
@@ -137,14 +153,17 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   // עבור כפתורים רגילים - עוטפים ב-div, אבל tooltip דרך portal
   // אם הכפתור הוא w-full, גם ה-wrapper צריך להיות w-full
   // אם הכפתור משתמש ב-flex classes, ה-wrapper צריך להיות block ולהכיל את ה-flex classes
-  // אם הכפתור הוא fixed-size, ה-wrapper צריך להיות inline-flex כדי לשמור על הגדלים
+  // אם הכפתור הוא fixed-size, ה-wrapper צריך להיות inline-block כדי לשמור על הגדלים
+  // ואנחנו נוסיף min-w-0 ו-min-h-0 כדי למנוע התרחבות מעבר לגדלים המוגדרים
   let wrapperClassName;
   if (isFullWidth) {
     wrapperClassName = `relative block w-full touch-none ${flexClass}`.trim();
   } else if (hasFlexClasses) {
     wrapperClassName = `relative block touch-none ${flexClass}`.trim();
   } else if (hasFixedSize) {
-    wrapperClassName = "relative inline-flex touch-none";
+    // עבור כפתורים בגודל קבוע, נשתמש ב-inline-block כדי לשמור על הגדלים
+    // ונוודא שהכפתור ישמור על יחס גובה-רוחב של 1:1 (מרובע)
+    wrapperClassName = "relative inline-block touch-none";
   } else {
     wrapperClassName = "relative inline-block touch-none";
   }
