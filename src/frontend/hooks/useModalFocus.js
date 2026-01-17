@@ -52,14 +52,17 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       lastActiveElement.current = document.activeElement;
       
       // Add overscroll-contain to all scrollable elements within the modal to prevent scroll chaining
+      // UNLESS allowOutsideScroll is true, in which case we want to allow scroll chaining
       if (modalRef.current) {
+        const overscrollValue = allowOutsideScroll ? 'auto' : 'contain';
+        
         // Apply to modal itself
-        modalRef.current.style.overscrollBehavior = 'contain';
+        modalRef.current.style.overscrollBehavior = overscrollValue;
         
         // Apply to all scrollable children
         const scrollableElements = modalRef.current.querySelectorAll('[class*="overflow"]');
         scrollableElements.forEach(el => {
-          el.style.overscrollBehavior = 'contain';
+          el.style.overscrollBehavior = overscrollValue;
         });
       }
       
@@ -95,7 +98,7 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         }
       }
     };
-  }, [isOpen, enableFocusTrapping, modalId]);
+  }, [isOpen, enableFocusTrapping, modalId, allowOutsideScroll]);
 
   // Prevent background scroll (local implementation; covers popup and panel when desired)
   useEffect(() => {
@@ -103,11 +106,16 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     // For popups, only lock if allowOutsideScroll is false
     // For panels, lock if preventBackgroundScroll is true and allowOutsideScroll is false
     const lockBackground = (isPopup && !allowOutsideScroll) || (!isPopup && !allowOutsideScroll && preventBackgroundScroll);
-    if (!lockBackground) return;
+    
+    if (!lockBackground) {
+      return;
+    }
+    
     const originalOverflow = document.documentElement.style.overflow || '';
     const originalBodyOverflow = document.body.style.overflow || '';
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
+    
     return () => {
       document.documentElement.style.overflow = originalOverflow;
       document.body.style.overflow = originalBodyOverflow;
@@ -227,39 +235,31 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     })();
     
     if (isEventInsideModal) {
+      // If allowOutsideScroll is true, don't interfere - let events flow naturally
+      if (allowOutsideScroll) {
+        return; // Let browser and bubble handler manage scrolling
+      }
+      
+      // Otherwise, check if any scrollable container can scroll
       let node = e.target instanceof Element ? e.target : null;
       const deltaY = e.deltaY || 0;
-      const deltaX = e.deltaX || 0;
-      const canScrollInAxis = (el) => {
-        const style = window.getComputedStyle(el);
-        const yScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
-        const xScrollable = style.overflowX === 'auto' || style.overflowX === 'scroll';
-        if (yScrollable) {
-          const maxY = el.scrollHeight - el.clientHeight;
-          if (maxY > 0) {
-            if (deltaY < 0 && el.scrollTop > 0) return true;
-            if (deltaY > 0 && el.scrollTop < maxY) return true;
-          }
-        }
-        if (xScrollable) {
-          const maxX = el.scrollWidth - el.clientWidth;
-          if (maxX > 0) {
-            if (deltaX < 0 && el.scrollLeft > 0) return true;
-            if (deltaX > 0 && el.scrollLeft < maxX) return true;
-          }
-        }
-        return false;
-      };
       
-      // Check if the target element or any parent can scroll
       while (node && node !== modalRef.current) {
-        if (node instanceof Element && canScrollInAxis(node)) {
-          return; // Allow the element to handle scrolling naturally
+        if (node instanceof Element) {
+          const style = window.getComputedStyle(node);
+          const yScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+          if (yScrollable) {
+            const maxY = node.scrollHeight - node.clientHeight;
+            if (maxY > 0) {
+              if (deltaY < 0 && node.scrollTop > 0) return; // Can scroll up
+              if (deltaY > 0 && node.scrollTop < maxY) return; // Can scroll down
+            }
+          }
         }
         node = node.parentElement;
       }
       
-      // If no scrollable element found, prevent the event
+      // No scrollable container can scroll - prevent the event
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -267,7 +267,13 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     
     // Handle events outside the modal
     if (allowOutsideScroll && isOutsideByPointer) {
+      if (typeof window !== 'undefined' && window.__DEBUG_MODAL_SCROLL) {
+        console.log('[useModalFocus] Event outside modal, allowing background scroll');
+      }
       return; // Allow background scrolling
+    }
+    if (typeof window !== 'undefined' && window.__DEBUG_MODAL_SCROLL) {
+      console.log('[useModalFocus] Event outside modal but preventOutsideScroll, preventing');
     }
     e.preventDefault();
     e.stopPropagation();
@@ -358,7 +364,38 @@ export function useModalFocus(isOpen, onClose, options = {}) {
     if (!isOpen) return;
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('mousemove', updateMousePosition);
-    document.addEventListener('wheel', handleWheel, { passive: false, capture: false });
+    // Only use capture phase if we need to prevent scroll (when allowOutsideScroll is false)
+    let handleBubbleWheel = null;
+    if (!allowOutsideScroll) {
+      document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    } else {
+      // When allowOutsideScroll is true, just add a bubble handler to scroll background
+      handleBubbleWheel = (e) => {
+        if (!isOpen || !isTopmostModal()) return;
+        if (modalRef.current?.contains(e.target)) return;
+        
+        // Find the largest scrollable container outside the modal (likely the grid)
+        let bestContainer = null;
+        let maxScrollHeight = 0;
+        
+        document.querySelectorAll('*').forEach(el => {
+          if (modalRef.current?.contains(el)) return;
+          const style = window.getComputedStyle(el);
+          if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && 
+              el.scrollHeight > el.clientHeight &&
+              el.scrollHeight > maxScrollHeight) {
+            maxScrollHeight = el.scrollHeight;
+            bestContainer = el;
+          }
+        });
+        
+        if (bestContainer) {
+          bestContainer.scrollBy(0, e.deltaY);
+        }
+      };
+      document.addEventListener('wheel', handleBubbleWheel, { passive: true, capture: false });
+    }
+    
     document.addEventListener('pointerdown', handlePointerDown, true);
     const handleFocusIn = (e) => {
       if (!isTopmostModal()) return;
@@ -404,12 +441,17 @@ export function useModalFocus(isOpen, onClose, options = {}) {
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('click', handleClick, true);
       document.removeEventListener('mousemove', updateMousePosition);
-      document.removeEventListener('wheel', handleWheel, false);
+      if (!allowOutsideScroll) {
+        document.removeEventListener('wheel', handleWheel, true);
+      }
+      if (handleBubbleWheel) {
+        document.removeEventListener('wheel', handleBubbleWheel, false);
+      }
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('focusin', handleFocusIn, true);
       document.removeEventListener('focusout', handleFocusOut, true);
     };
-  }, [isOpen, handleKeyDown, handleWheel, handleClick, updateMousePosition, handlePointerDown]);
+  }, [isOpen, handleKeyDown, handleWheel, handleClick, updateMousePosition, handlePointerDown, allowOutsideScroll]);
 
   // Handle browser back button to close modal on mobile
   // Only handle for topmost modal to prevent conflicts

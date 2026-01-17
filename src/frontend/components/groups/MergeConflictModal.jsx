@@ -53,15 +53,18 @@ export default function MergeConflictModal({
   
   // Use modal focus hook
   const { modalRef } = useModalFocus(isOpen, onClose, {
-    customKeyHandler: handleMergeModalKeys
+    customKeyHandler: handleMergeModalKeys,
+    allowOutsideScroll: true,
+    modalType: 'popup',
+    modalId: MODAL_ID
   });
   // Apply scope for all groups
   useApplyScopes(isOpen ? [{ entity: 'all', id: 'groups', eventId }] : []);
-  
+
   // Register as popup modal
   useEffect(() => {
     if (isOpen) {
-      try { registerModal({ id: MODAL_ID, type: 'popup' }); } catch {}
+      try { registerModal({ id: MODAL_ID, type: 'popup', allowOutsideScroll: true }); } catch {}
       
       // Listen for logout to auto-close modal
       const handleAuthLogout = () => {

@@ -645,41 +645,8 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
     setEditingTitle({ moment_id: normalizedId, title: currentTitle || '' });
   };
 
-  // Ref for scroll container
+  // Ref for scroll container (used for programmatic scrolling)
   const scrollContainerRef = useRef(null);
-
-  // Prevent scroll propagation to background when scrolling within modal
-  const handleWheel = useCallback((e) => {
-    const target = scrollContainerRef.current;
-    if (!target) return;
-    
-    const scrollTop = target.scrollTop;
-    const scrollHeight = target.scrollHeight;
-    const height = target.clientHeight;
-    const delta = e.deltaY;
-    
-    const isAtTop = scrollTop === 0;
-    const isAtBottom = scrollTop + height >= scrollHeight - 1;
-    
-    if ((isAtTop && delta < 0) || (isAtBottom && delta > 0)) {
-      // At boundary, prevent propagation to background
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, []);
-
-  // Attach wheel event listener with passive: false
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-    }
-    return () => {
-      if (container) {
-        container.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [handleWheel]);
 
   // Refs to store latest state values for keyboard handler
   const editingMomentsRef = useRef(editingMoments);
