@@ -144,10 +144,6 @@ BEGIN
         RAISE EXCEPTION 'Permission denied: cannot update rekognition calls limit';
     END IF;
     
-    IF NEW.rekognition_requests_count <> OLD.rekognition_requests_count THEN
-        RAISE EXCEPTION 'Policy error: cannot update rekognition calls used';
-    END IF;
-    
     UPDATE events SET
         name = NEW.name,
         date = NEW.date,
