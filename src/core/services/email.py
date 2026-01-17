@@ -168,12 +168,8 @@ class ProdEmailService(EmailService):
             region_name=aws_region
         )
         
+        # EMAIL_FROM is optional - only needed if from_email is not provided in messages
         self.default_from = os.getenv('EMAIL_FROM')
-        if not self.default_from:
-            raise ValueError(
-                "EMAIL_FROM environment variable must be set "
-                "for production email service"
-            )
     
     def send_email(self, message: EmailMessage) -> dict:
         """
@@ -189,6 +185,11 @@ class ProdEmailService(EmailService):
             Exception: If email sending fails
         """
         from_email = message.from_email or self.default_from
+        if not from_email:
+            raise ValueError(
+                "from_email must be provided in EmailMessage or EMAIL_FROM "
+                "environment variable must be set for production email service"
+            )
         
         # Prepare destination
         to_addresses = message.to if isinstance(message.to, list) else [message.to]
@@ -258,11 +259,12 @@ def send_email(
     reply_to: Optional[str] = None,
     cc: Optional[List[str]] = None,
     bcc: Optional[List[str]] = None
-) -> dict:
+):
     """
-    Convenience function to send an email.
+    Convenience function to send an email asynchronously via Celery task.
     
-    Errors are automatically logged to the database and do not raise exceptions.
+    Emails are sent asynchronously via Celery, allowing API requests to return
+    immediately without waiting for email delivery.
     
     Args:
         to: Recipient email address(es)
@@ -275,7 +277,7 @@ def send_email(
         bcc: BCC recipients
         
     Returns:
-        dict: Response containing status and message_id, or None if sending failed
+        AsyncResult: Celery task AsyncResult object
         
     Example:
         >>> send_email(
@@ -285,32 +287,12 @@ def send_email(
         ...     body_html='<h1>Welcome to our service</h1>'
         ... )
     """
-    message = EmailMessage(
-        to=to,
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
-        from_email=from_email,
-        reply_to=reply_to,
-        cc=cc,
-        bcc=bcc
-    )
+    from src.backend.celery_worker import celery
     
-    try:
-        service = get_email_service()
-        return service.send_email(message)
-    except Exception as e:
-        # Log error to database but don't raise exception
-        try:
-            from src.core.errors import log_error
-            log_error(
-                error_message=f"Failed to send email: {str(e)}",
-                error_type="EmailError",
-                traceback_str=traceback.format_exc()
-            )
-        except Exception as log_error_exception:
-            # If logging itself fails, just print
-            print(f"Failed to send email and log error: {str(e)} (logging error: {str(log_error_exception)})")
-        
-        return None
+    # Queue the email task
+    task = celery.send_task(
+        'send_email_task',
+        args=[to, subject, body_text, body_html, from_email, reply_to, cc, bcc]
+    )
+    return task
 

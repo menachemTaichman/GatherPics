@@ -1,5 +1,5 @@
 """
-Celery tasks for background image processing.
+Celery tasks for background image processing and email sending.
 Uses Redis-backed atomic counter/set mechanism to track upload progress.
 """
 
@@ -533,3 +533,70 @@ def delete_events_task(event_id: str, profile_id: str, event_data: dict, restric
     except Exception as e:
         error_msg = f"Error deleting event {event_id}: {str(e)}"
         log_error(error_msg, "EventDeletionError", traceback.format_exc())
+
+@celery.task(name='send_email_task')
+def send_email_task(
+    to: str | list[str],
+    subject: str,
+    body_text: str | None = None,
+    body_html: str | None = None,
+    from_email: str | None = None,
+    reply_to: str | None = None,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None
+):
+    """
+    Celery task to send an email asynchronously.
+    
+    This task handles email sending in the background, allowing API requests
+    to return immediately without waiting for email delivery.
+    
+    Args:
+        to: Recipient email address(es)
+        subject: Email subject
+        body_text: Plain text body (optional if body_html is provided)
+        body_html: HTML body (optional if body_text is provided)
+        from_email: Sender email (uses EMAIL_FROM env var if not provided)
+        reply_to: Reply-to email address
+        cc: CC recipients
+        bcc: BCC recipients
+        
+    Returns:
+        dict: Response containing status and message_id, or None if sending failed
+        
+    Note:
+        Errors are automatically logged to the database and do not raise exceptions.
+    """
+    try:
+        # Import here to avoid circular imports
+        from src.core.services.email import get_email_service, EmailMessage
+        
+        # Create EmailMessage
+        message = EmailMessage(
+            to=to,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            from_email=from_email,
+            reply_to=reply_to,
+            cc=cc,
+            bcc=bcc
+        )
+        
+        # Get email service and send
+        service = get_email_service()
+        result = service.send_email(message)
+        
+        if result:
+            logger.info(f"Email sent successfully to {message.to if isinstance(message.to, str) else ', '.join(message.to)}: {result.get('message_id')}")
+        else:
+            logger.warning(f"Email service returned None for email to {message.to if isinstance(message.to, str) else ', '.join(message.to)}")
+        
+        return result
+        
+    except Exception as e:
+        # Log error to database but don't raise exception
+        error_msg = f"Failed to send email in Celery task: {str(e)}"
+        log_error(error_msg, "EmailTaskError", traceback.format_exc())
+        logger.error(error_msg, exc_info=True)
+        return None

@@ -5,6 +5,7 @@ from src.core.utils.face_utils import FaceUtils
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.general_models import GeneralModels
 from src.core.storage.file_helper import get_file_helper
+from src.core.services.email import send_email
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -442,3 +443,57 @@ def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
 # # result = test_faces_in_aws_and_db('8d06da7d-d6a4-490c-badc-91e23b75989c', test_prod=True)
 # # print(result)
 # # print('--------------------------------')
+
+def test_email(to: str = 'privacy@gatherpics.com', subject: str = 'Test Email from Gather Pics'):
+    """
+    Test sending an email using the send_email function (via Celery).
+    
+    Args:
+        to: Recipient email address (default: 'privacy@gatherpics.com')
+        subject: Email subject (default: 'Test Email from Gather Pics')
+    
+    Returns:
+        dict: Response from email service if successful, None otherwise
+        
+    Example:
+        >>> test_email()
+        >>> test_email(to='user@example.com', subject='My Test')
+    """
+    print(f"\n{'='*80}")
+    print(f"Sending test email to: {to}")
+    print(f"Subject: {subject}")
+    print(f"{'='*80}\n")
+    
+    try:
+        task = send_email(
+            to=to,
+            subject=subject,
+            from_email='notifications@gatherpics.com',
+            reply_to='support@gatherpics.com',
+            body_text='This is a test email from Gather Pics.',
+            body_html='<p>This is a test email from Gather Pics.</p>'
+        )
+        
+        print(f"Task queued: {task.id} (state: {task.state})")
+        print("Waiting for completion...")
+        
+        result = task.get(timeout=30)
+        
+        if result:
+            print(f"\n✓ Email sent successfully!")
+            print(f"  Message ID: {result.get('message_id')}")
+            print(f"  From: {result.get('from')}")
+            print(f"  To: {result.get('to')}\n")
+        else:
+            print(f"\n✗ Email task returned None\n")
+        
+        return result
+                
+    except Exception as e:
+        import traceback
+        print(f"\n✗ Error: {type(e).__name__}: {str(e)}")
+        print(traceback.format_exc())
+        return None
+
+# Uncomment to test:
+test_email()
