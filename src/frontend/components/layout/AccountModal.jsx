@@ -512,7 +512,7 @@ export default function AccountModal({ hideButton = false }) {
                                 <p className="text-sm text-gray-500">{t('account.showArchivedImages')}</p>
                               </div>
                             </div>
-                            <LongPressHoverButton
+                            <button
                               onClick={() => handleIncludeArchivedChange(!includeArchived)}
                               className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${includeArchived ? 'bg-primary-600' : 'bg-gray-300'}`}
                               aria-pressed={includeArchived}
@@ -520,7 +520,7 @@ export default function AccountModal({ hideButton = false }) {
                               aria-label={t('account.includeArchived')}
                             >
                               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${includeArchived ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
-                            </LongPressHoverButton>
+                            </button>
                           </div>
                         </PermissionGate>
                         

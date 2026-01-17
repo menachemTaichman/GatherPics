@@ -257,7 +257,7 @@ export default function BucketDrawer() {
               <span className="text-sm text-gray-700">
                 {mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               </span>
-              <LongPressHoverButton
+              <button
                 onClick={() => setExcludeAlready(!excludeAlready)}
                 className={`w-10 h-6 rounded-full relative transition-colors ${excludeAlready ? 'bg-primary-600' : 'bg-gray-300'}`}
                 aria-pressed={excludeAlready}
@@ -265,7 +265,7 @@ export default function BucketDrawer() {
                 aria-label={mode === 'download' ? t('bucketDrawer.excludeAlreadyDownloaded') : t('bucketDrawer.excludeAlreadyUploaded')}
               >
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${isRTL ? 'right-0.5' : 'left-0.5'} ${excludeAlready ? (isRTL ? '-translate-x-4' : 'translate-x-4') : ''}`} />
-              </LongPressHoverButton>
+              </button>
             </div>
           </div>
 

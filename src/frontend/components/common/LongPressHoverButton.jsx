@@ -44,7 +44,7 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
     // זה קורה כשהלחיצה הארוכה הסתיימה בהצלחה
     if (tooltipText) {
       setShowTooltip(true);
-      // נעלים את ה-Tooltip אחרי 1.5 שניות אוטומטית
+      // נעילים את ה-Tooltip אחרי 1.5 שניות אוטומטית
       setTimeout(() => setShowTooltip(false), 1500);
     }
   }, {
@@ -79,6 +79,11 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   const flexClasses = className.match(flexClassRegex) || [];
   const hasFlexClasses = flexClasses.length > 0;
   const flexClass = flexClasses.join(' ');
+  
+  // בדיקה אם הכפתור הוא fixed-size (יש לו width ו-height classes ספציפיים)
+  // נחפש classes כמו w-*, h-* אבל לא w-full
+  const fixedSizeRegex = /\b([wh]-\[\d+\w+\]|[wh]-0|[wh]-px|[wh]-0\.5|[wh]-1|[wh]-1\.5|[wh]-2|[wh]-2\.5|[wh]-3|[wh]-3\.5|[wh]-4|[wh]-5|[wh]-6|[wh]-7|[wh]-8|[wh]-9|[wh]-10|[wh]-11|[wh]-12|[wh]-14|[wh]-16|[wh]-20|[wh]-24|[wh]-28|[wh]-32|[wh]-36|[wh]-40|[wh]-44|[wh]-48|[wh]-52|[wh]-56|[wh]-60|[wh]-64|[wh]-72|[wh]-80|[wh]-96)\b/g;
+  const hasFixedSize = !isFullWidth && fixedSizeRegex.test(className);
   
   // הסרת ה-flex classes מה-button className (כי הם יעברו ל-wrapper)
   // והוספת w-full לכפתור כדי שימלא את ה-wrapper
@@ -132,11 +137,14 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   // עבור כפתורים רגילים - עוטפים ב-div, אבל tooltip דרך portal
   // אם הכפתור הוא w-full, גם ה-wrapper צריך להיות w-full
   // אם הכפתור משתמש ב-flex classes, ה-wrapper צריך להיות block ולהכיל את ה-flex classes
+  // אם הכפתור הוא fixed-size, ה-wrapper צריך להיות inline-flex כדי לשמור על הגדלים
   let wrapperClassName;
   if (isFullWidth) {
     wrapperClassName = `relative block w-full touch-none ${flexClass}`.trim();
   } else if (hasFlexClasses) {
     wrapperClassName = `relative block touch-none ${flexClass}`.trim();
+  } else if (hasFixedSize) {
+    wrapperClassName = "relative inline-flex touch-none";
   } else {
     wrapperClassName = "relative inline-block touch-none";
   }
