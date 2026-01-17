@@ -374,6 +374,34 @@ export function useModalFocus(isOpen, onClose, options = {}) {
         if (!isOpen || !isTopmostModal()) return;
         if (modalRef.current?.contains(e.target)) return;
         
+        // Check if event target is inside any scrollable container
+        // If inside a scrollable container that can still scroll, don't scroll background
+        const deltaY = e.deltaY || 0;
+        let node = e.target instanceof Element ? e.target : null;
+        
+        while (node && node !== document.body) {
+          const style = window.getComputedStyle(node);
+          const isScrollable = (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+                               node.scrollHeight > node.clientHeight;
+          if (isScrollable) {
+            // Check if this scrollable container can scroll in the current direction
+            const maxY = node.scrollHeight - node.clientHeight;
+            const canScroll = maxY > 0 && (
+              (deltaY < 0 && node.scrollTop > 0) ||
+              (deltaY > 0 && node.scrollTop < maxY)
+            );
+            
+            // If it can scroll, don't scroll background (let container handle it)
+            // If it can't scroll (at boundary), allow background scrolling below
+            if (canScroll) {
+              return;
+            }
+            // If at boundary, break to continue and scroll background
+            break;
+          }
+          node = node.parentElement;
+        }
+        
         // Find the largest scrollable container outside the modal (likely the grid)
         let bestContainer = null;
         let maxScrollHeight = 0;
