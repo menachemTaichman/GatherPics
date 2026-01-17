@@ -61,15 +61,26 @@ export default function AlbumQuickAddButton({
     modalId: MODAL_ID,
     customKeyHandler: (e) => {
       if (!open) return false;
+      
+      // First check if target is an input/textarea/select element (regardless of modalRef check)
+      // This ensures input works even if modalRef isn't ready yet or check fails
+      const targetTagName = e.target.tagName?.toLowerCase();
+      const isInputElement = targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select';
+      
+      // Check if inside modal (but don't fail if modalRef isn't ready yet)
       const node = modalRef?.current;
-      const isInside = node && node.contains(e.target);
-      if (isInside) {
+      const isInside = node ? node.contains(e.target) : false;
+      
+      // If it's an input element, allow normal behavior (especially important when modalRef might not be ready)
+      if (isInputElement) {
+        // For Enter key in input, trigger create if conditions are met
         if (e.key === 'Enter' && isEditingName && newAlbumName.trim()) {
           e.preventDefault();
           e.stopPropagation();
           handleCreateAlbum();
           return true;
         }
+        // For ESC key, cancel editing or close dropdown
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
@@ -81,7 +92,35 @@ export default function AlbumQuickAddButton({
           }
           return true;
         }
-        // Let Tab be handled by focus trap, swallow other keys from bubbling to parent modals
+        // Return true to signal that we're handling this, allowing normal input behavior
+        // This is critical - it allows typing even if isInside check fails
+        return true;
+      }
+      
+      // Only process other handlers if we're inside the modal
+      if (isInside) {
+        // Handle Enter key for buttons
+        if (targetTagName === 'button' && e.key === 'Enter' && isEditingName && newAlbumName.trim()) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleCreateAlbum();
+          return true;
+        }
+        
+        // Handle Escape key
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isEditingName) {
+            setIsEditingName(false);
+            setNewAlbumName('');
+          } else {
+            setOpen(false);
+          }
+          return true;
+        }
+        
+        // For other keys, stop propagation to prevent parent modals from handling them
         if (!['Tab', 'Enter', 'Escape'].includes(e.key)) {
           e.stopPropagation();
           return true;
@@ -415,7 +454,10 @@ export default function AlbumQuickAddButton({
 
   // Render dropdown content
   const renderDropdownContent = () => (
-        <div className="w-full max-w-64 sm:w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg" dir={isRTL ? 'rtl' : 'ltr'}>
+        <div 
+          className="w-full max-w-64 sm:w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg" 
+          dir={isRTL ? 'rtl' : 'ltr'}
+        >
       {loading || !defaultAlbumsReady ? (
         <div className="p-3 text-sm text-gray-500">{t('albumQuickAdd.loadingAlbums')}</div>
       ) : (

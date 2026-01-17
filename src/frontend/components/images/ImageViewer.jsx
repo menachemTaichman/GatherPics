@@ -2338,7 +2338,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                       imageActions={imageActions}
                       isUnassociatedGroup={isUnassociatedGroup}
                       isMobile={isMobile}
-                      portalContainer={isMobile ? drawerContentElement : null}
+                      portalContainer={drawerContentElement}
                       onOpenManageAccess={() => setShowManageAccessModal(true)}
                     />
                   </div>
@@ -2397,6 +2397,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                               />
                               <div className="flex items-center justify-end gap-2 mt-2">
                                 <button
+                                  onMouseDown={(e) => {
+                                    e.preventDefault(); // Prevent blur from firing
+                                  }}
                                   onClick={handleDescriptionCancel}
                                   className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
                                   disabled={isSavingDescription}
