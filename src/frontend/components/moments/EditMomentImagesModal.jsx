@@ -833,33 +833,30 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
 
         </div>
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-x-hidden p-3 sm:p-4 md:p-6">
           {filteredImages.length === 0 ? (
-            <div className="flex items-center justify-center flex-1 text-gray-500 p-3 sm:p-4 md:p-6">
+            <div className="flex items-center justify-center h-full text-gray-500">
               {t('moments.noImages')}
             </div>
           ) : (
-            <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-x-hidden" style={{ display: 'flex', flexDirection: 'column' }}>
-              <AbsoluteMasonryGrid
-                items={filteredImages}
-                baseSize={120}
-                containerHeight="100%"
-                className="w-full h-full overflow-x-hidden"
-                gap={12}
-                imageClasses={{}}
-                bufferMultiplier={3.0}
-                style={{ flex: '1 1 0', minHeight: 0 }}
-                onPinchRef={(node) => {
-                  scrollContainerRef.current = node;
-                }}
-                onItemRef={(image, index, el) => {
-                  if (el) {
-                    imageRefs.current[index] = el;
-                  }
-                }}
-                renderItem={renderImageItem}
-              />
-            </div>
+            <AbsoluteMasonryGrid
+              items={filteredImages}
+              baseSize={120}
+              containerHeight="100%"
+              className="w-full h-full"
+              gap={12}
+              imageClasses={{}}
+              bufferMultiplier={3.0}
+              onPinchRef={(node) => {
+                scrollContainerRef.current = node;
+              }}
+              onItemRef={(image, index, el) => {
+                if (el) {
+                  imageRefs.current[index] = el;
+                }
+              }}
+              renderItem={renderImageItem}
+            />
           )}
         </div>
       </motion.div>
