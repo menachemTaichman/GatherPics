@@ -977,9 +977,11 @@ CREATE OR REPLACE VIEW groups_to_access_requests_ctx AS
 SELECT
     gab.group_id
 FROM groups_def gab
+INNER JOIN events e ON e.event_id = gab.event_id
 WHERE NOT gab.is_accessible
 AND gab.event_id = cur_event_profile_uuid('event_id')
 AND gab.profile_id = cur_profile_uuid('profile_id')
+AND gab.group_id <> e.unassociated_group_id
 AND EXISTS (
     SELECT 1
     FROM groups_images gi
