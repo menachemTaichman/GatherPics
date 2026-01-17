@@ -17,7 +17,6 @@ import sys
 import json
 import psycopg2
 from psycopg2.extras import execute_values, Json
-from psycopg2 import sql
 from psycopg2 import errors as psycopg2_errors
 from dotenv import load_dotenv
 
@@ -207,6 +206,30 @@ def copy_table_data(backup_conn, target_conn, table_name, common_columns):
                     except (psycopg2_errors.IntegrityError, psycopg2_errors.UniqueViolation):
                         # Skip duplicates/conflicts
                         continue
+    
+    # Update sequences for identity columns after inserting data
+    if rows_inserted > 0 and identity_cols:
+        with target_conn.cursor() as target_cursor:
+            for identity_col in identity_cols:
+                if identity_col in column_names:
+                    # Get the max value of the identity column
+                    target_cursor.execute(
+                        f'SELECT COALESCE(MAX("{identity_col}"), 0) FROM {table_str}'
+                    )
+                    max_id = target_cursor.fetchone()[0]
+                    
+                    # Find the actual sequence name for this identity column
+                    target_cursor.execute("""
+                        SELECT pg_get_serial_sequence(%s, %s)
+                    """, (table_name, identity_col))
+                    sequence_result = target_cursor.fetchone()
+                    
+                    if sequence_result and sequence_result[0]:
+                        sequence_name = sequence_result[0]  # Use full qualified name (schema.sequence)
+                        # Reset the sequence to the max value (true means it's been used, so next value will be max_id + 1)
+                        # Only set the sequence if max_id > 0 (PostgreSQL sequences must be >= 1)
+                        if max_id > 0:
+                            target_cursor.execute(f"SELECT setval('{sequence_name}', {max_id}, true)")
     
     return rows_inserted
 
