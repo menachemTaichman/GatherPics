@@ -562,6 +562,43 @@ export default function ProfilesGalleryPage() {
     }
   };
 
+  // Helper function to safely copy text to clipboard with fallback
+  const copyToClipboard = async (text) => {
+    // Try modern Clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (error) {
+        console.warn('Clipboard API failed, trying fallback:', error);
+        // Fall through to fallback method
+      }
+    }
+    
+    // Fallback to execCommand for older browsers or non-HTTPS contexts
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (!successful) {
+        throw new Error('execCommand copy failed');
+      }
+      return true;
+    } catch (error) {
+      console.error('Fallback copy method failed:', error);
+      return false;
+    }
+  };
+
   const handleCopyPublicLink = async (profile) => {
     try {
       let publicCode = Object.prototype.hasOwnProperty.call(publicAccessCodes, profile.id)
@@ -595,8 +632,12 @@ export default function ProfilesGalleryPage() {
       }
       
       const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${publicCode}`;
-      await navigator.clipboard.writeText(publicUrl);
-      showToast(t('profilesGallery.publicLinkCopiedToClipboard'), 'success');
+      const success = await copyToClipboard(publicUrl);
+      if (success) {
+        showToast(t('profilesGallery.publicLinkCopiedToClipboard'), 'success');
+      } else {
+        showToast(t('profilesGallery.failedToCopyLink'), 'error');
+      }
     } catch (error) {
       console.error('Failed to copy link:', error);
       showToast(t('profilesGallery.failedToCopyLink'), 'error');
@@ -625,11 +666,11 @@ export default function ProfilesGalleryPage() {
         
         if (targetEventUrl) {
           const publicUrl = `${window.location.origin}/${targetEventUrl}/public-access/${result.public_code}`;
-          try {
-            await navigator.clipboard.writeText(publicUrl);
+          const success = await copyToClipboard(publicUrl);
+          if (success) {
             showToast(t('profilesGallery.publicLinkCopiedToClipboard'), 'success');
-          } catch (copyError) {
-            console.error('Failed to copy link:', copyError);
+          } else {
+            console.error('Failed to copy link: clipboard API not available');
             showToast(t('profilesGallery.linkCreatedButFailedToCopy'), 'warning');
           }
         } else {
