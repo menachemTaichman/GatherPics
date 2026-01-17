@@ -26,6 +26,8 @@ class AuditAction(str, Enum):
     PROFILE_CHANGED_PASSWORD = 'profile_changed_password'
     PROFILE_RESET_PASSWORD_COMPLETED = 'profile_reset_password_completed'
     PROFILE_REQUESTED_PASSWORD_RESET = 'profile_requested_password_reset'
+    PROFILE_REQUESTED_EMAIL_VERIFICATION = 'profile_requested_email_verification'
+    PROFILE_EMAIL_CHANGED = 'profile_email_changed'
     PROFILE_DELETED = 'profile_deleted'
     
     # Warning actions - Important changes
@@ -44,6 +46,8 @@ ACTION_SEVERITY_MAP = {
     AuditAction.PROFILE_CHANGED_PASSWORD: AuditSeverity.CRITICAL,
     AuditAction.PROFILE_RESET_PASSWORD_COMPLETED: AuditSeverity.CRITICAL,
     AuditAction.PROFILE_REQUESTED_PASSWORD_RESET: AuditSeverity.CRITICAL,
+    AuditAction.PROFILE_REQUESTED_EMAIL_VERIFICATION: AuditSeverity.CRITICAL,
+    AuditAction.PROFILE_EMAIL_CHANGED: AuditSeverity.CRITICAL,
     AuditAction.PROFILE_DELETED: AuditSeverity.CRITICAL,
     
     # Warning

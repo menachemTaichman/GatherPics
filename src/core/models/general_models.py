@@ -1,12 +1,13 @@
 from typing import Dict, Any
 import secrets
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from src.core.database.db import DB, ReturnFormat
 from src.core.models.base_models import BaseModels, ChildOperation
 from src.core.services.event import Event
 from src.core.errors import PolicyError, Forbidden, DatabaseError
 from src.core.utils.password_utils import hash_password, verify_password
 from src.core.audit_log import AuditAction, log_audit
+from src.core.services.email import send_email
 
 class GeneralModels(BaseModels):
     """Models manager for general database operations."""
@@ -537,6 +538,7 @@ class GeneralModels(BaseModels):
     # Password reset helpers
     def request_password_reset(self, email: str, reset_url_base: str) -> tuple[str, str, str, str] | None:
         """Request a password reset link. Creates token and returns reset URL.
+        Revokes all open password reset links for the profile before creating a new one.
         
         Args:
             email: Email address of the profile
@@ -550,8 +552,19 @@ class GeneralModels(BaseModels):
         
         if result:
             profile_id, profile_label = result
+            # Revoke all open password reset links for this profile
+            revoke_query = """
+                UPDATE password_reset_links
+                SET revoked_at = NOW()
+                WHERE profile_id = %s
+                AND NOT used
+                AND revoked_at IS NULL
+                AND expires_at > NOW()
+            """
+            self.db.execute_query(revoke_query, (profile_id,))
+            
             reset_token = secrets.token_urlsafe(32)
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+            expires_at = datetime.now() + timedelta(minutes=10)
             query = """
                 INSERT INTO password_reset_links (profile_id, token, expires_at)
                 VALUES (%s, %s, %s)
@@ -589,6 +602,7 @@ class GeneralModels(BaseModels):
             INNER JOIN profiles p ON password_reset_links.profile_id = p.profile_id
             WHERE token = %s
             AND NOT used
+            AND revoked_at IS NULL
             AND expires_at > NOW()
         '''
         result = self.db.execute_query(query, (token,), return_format=ReturnFormat.TUPLE)
@@ -627,6 +641,138 @@ class GeneralModels(BaseModels):
         )
         
         return profile_id, label
+
+    # Email verification helpers
+    def request_email_verification(self, new_email: str):
+        """Request email verification. Generates code and stores it in email_verification_links table.
+        Revokes all open email verification links for the profile before creating a new one.
+        
+        Args:
+            new_email: New email address to verify
+        """
+        profile_id = self.db.profile_context.get('profile_id')
+        current_profile = self.get_entities('current_profile', profile_id)
+        old_email = current_profile.get('email')
+        
+        # If email is the same, no change needed
+        if new_email == old_email:
+            raise PolicyError('Email is already set to this address')
+    
+        # Revoke all open email verification links for this profile
+        revoke_query = """
+            UPDATE email_verification_links
+            SET revoked_at = NOW()
+            WHERE profile_id = cur_profile_uuid('profile_id')
+            AND NOT used
+            AND revoked_at IS NULL
+            AND expires_at > NOW()
+        """
+        self.db.execute_query(revoke_query, ())
+    
+        # Generate a simple 6-digit numeric code
+        verification_code = f"{secrets.randbelow(1000000):06d}"
+        expires_at = datetime.now() + timedelta(minutes=10)
+        
+        # Insert into email_verification_links table
+        query = """
+            INSERT INTO email_verification_links (profile_id, new_email, verification_code, expires_at)
+            VALUES (cur_profile_uuid('profile_id'), %s, %s, %s)
+            RETURNING verification_id
+        """
+        self.db.execute_query(query, (new_email, verification_code, expires_at), return_format=ReturnFormat.VALUE)
+
+        # Get profile label for email
+        profile_label = current_profile.get('label', 'User')
+        
+        # Send verification email
+        send_email(
+            to=new_email,
+            subject='Verify Your New Email Address',
+            from_email='security@gatherpics.com',
+            reply_to='support@gatherpics.com',
+            body_text=f'Hello {profile_label},\n\nYou requested to change your email address. Please use the following verification code to complete the change:\n\n{verification_code}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this change, please ignore this email.',
+            body_html=f'''
+                <html>
+                <body>
+                    <p>Hello {profile_label},</p>
+                    <p>You requested to change your email address. Please use the following verification code to complete the change:</p>
+                    <p style="font-size: 32px; font-weight: bold; letter-spacing: 4px; text-align: center; padding: 20px; background-color: #f0f0f0; border-radius: 5px; margin: 20px 0; font-family: monospace;">{verification_code}</p>
+                    <p>This code will expire in 10 minutes.</p>
+                    <p>If you did not request this change, please ignore this email.</p>
+                </body>
+                </html>
+            '''
+        )
+        # Log audit event
+        log_audit(
+            action=AuditAction.PROFILE_REQUESTED_EMAIL_VERIFICATION,
+            actor_profile_id=profile_id,
+            details={
+                'profile_id': profile_id,
+                'new_email': new_email,
+            }
+        )
+    
+    def complete_email_verification(self, verification_code: str):
+        """Complete email verification and update email.
+        
+        Args:
+            verification_code: The verification code (6 digits)
+        """
+        profile_id = self.db.profile_context.get('profile_id')
+        
+        # Normalize code: remove any spaces
+        normalized_code = verification_code.replace(' ', '').replace('-', '').strip()
+        
+        # Get verification link from email_verification_links table
+        query = '''
+            SELECT evl.new_email, p.label
+            FROM email_verification_links evl
+            INNER JOIN profiles p ON evl.profile_id = p.profile_id
+            WHERE evl.profile_id = cur_profile_uuid('profile_id')
+            AND evl.verification_code = %s
+            AND evl.expires_at > NOW()
+            AND NOT evl.used
+            AND evl.revoked_at IS NULL
+        '''
+        result = self.db.execute_query(query, (normalized_code,), return_format=ReturnFormat.TUPLE)
+        
+        if not result:
+            raise Forbidden('Invalid or expired verification code')
+        
+        new_email, profile_label = result
+        
+        # Get current profile for audit log
+        profile = self.get_entities('current_profile', profile_id)
+        old_email = profile.get('email')
+        
+        # Update email using edit method
+        self.edit('current_profile', profile_id, {
+            'email': new_email
+        })
+        
+        # Mark verification link as used
+        query = """
+            UPDATE email_verification_links
+            SET used = TRUE, used_at = NOW()
+            WHERE profile_id = cur_profile_uuid('profile_id')
+            AND verification_code = %s
+        """
+        self.db.execute_query(query, (normalized_code,))
+        
+        # Log audit event
+        log_audit(
+            action=AuditAction.PROFILE_EMAIL_CHANGED,
+            actor_profile_id=profile_id,
+            details={
+                'profile_id': profile_id,
+                'profile_label': profile_label,
+                'old_email': old_email,
+                'new_email': new_email,
+            }
+        )
+        
+        return profile_label
 
     # Notifications helpers
     def mark_all_my_notifications_read(self, read_at: str) -> list[str]:

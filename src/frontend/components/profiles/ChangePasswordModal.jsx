@@ -8,10 +8,9 @@ import { useModalManager } from '../../utils/modalManager';
 import { profilesAPI } from '../../utils/apiService';
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrentProfile } from '../../utils/profileService';
-import RequestPasswordResetModal from '../auth/RequestPasswordResetModal';
 import { LongPressHoverButton } from '../common';
 
-export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
+export default function ChangePasswordModal({ isOpen, onClose, eventUrl, onOpenResetModal }) {
   const { t } = useTranslation();
   const { isRTL, endClass, pe } = useRTL();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -22,7 +21,6 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showResetModal, setShowResetModal] = useState(false);
   const { showToast } = useToast();
   const { registerModal, unregisterModal } = useModalManager();
   const MODAL_ID = 'change-password-modal';
@@ -140,15 +138,14 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <div 
-        key="change-password-modal"
-        className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
-        onClick={handleClose}
-      >
+      {isOpen && (
+        <div 
+          key="change-password-modal"
+          className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+          onClick={handleClose}
+        >
         <motion.div
           ref={modalRef}
           initial={{ opacity: 0, scale: 0.95 }}
@@ -220,9 +217,12 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowResetModal(true);
-                      handleClose();
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (onOpenResetModal) {
+                        onOpenResetModal();
+                      }
                     }}
                     className={`mt-2 text-sm text-blue-600 hover:text-blue-700 ${isRTL ? 'text-right' : 'text-left'}`}
                   >
@@ -336,13 +336,6 @@ export default function ChangePasswordModal({ isOpen, onClose, eventUrl }) {
           </div>
         </motion.div>
       </div>
-      
-      {showResetModal && (
-        <RequestPasswordResetModal
-          key="request-password-reset-modal"
-          isOpen={showResetModal}
-          onClose={() => setShowResetModal(false)}
-        />
       )}
     </AnimatePresence>
   );

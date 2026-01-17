@@ -15,10 +15,11 @@ import { useApplyScopes, usePendingRequestsCount, useEventId } from '../../utils
 import { useEventUrls } from '../../hooks/useEventUrls';
 import { formatErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../contexts/authContext';
-import { ChangePasswordModal } from '../profiles';
+import { ChangePasswordModal, EmailVerificationModal } from '../profiles';
 import { ConfirmDelete } from '../modals';
 import { RequestFormModal } from '../requests';
 import { FeedbackFormModal } from '../feedbacks';
+import RequestPasswordResetModal from '../auth/RequestPasswordResetModal';
 import { PermissionGate, LongPressHoverButton } from '../common';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatDate } from '../../utils/dateUtils';
@@ -51,6 +52,9 @@ export default function AccountModal({ hideButton = false }) {
   const [editingEmail, setEditingEmail] = useState(false);
   const [currentEmail, setCurrentEmail] = useState('');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState(null);
+  const [showRequestPasswordResetModal, setShowRequestPasswordResetModal] = useState(false);
   
   // Requests state
   const [showRequestFormModal, setShowRequestFormModal] = useState(false);
@@ -177,12 +181,24 @@ export default function AccountModal({ hideButton = false }) {
 
   const handleEmailSave = useCallback(async () => {
     try {
-      await profilesAPI.updateCurrentProfile({ email: currentEmail.trim() || null }, eventUrl);
-      setCurrentProfile({ ...currentProfile, email: currentEmail.trim() || null });
-      showToast(t('account.emailUpdated'), 'success');
+      const newEmail = currentEmail.trim() || null;
+      
+      // If email is the same, no change needed
+      if (newEmail === currentProfile?.email) {
+        setEditingEmail(false);
+        return;
+      }
+      
+      // Request email change (sends verification code)
+      await profilesAPI.requestEmailChange(newEmail, eventUrl);
+      
+      // Show verification modal
+      setPendingEmail(newEmail);
+      setShowEmailVerificationModal(true);
       setEditingEmail(false);
+      showToast(t('emailVerification.verificationCodeSent'), 'info');
     } catch (error) {
-      console.error('Failed to update email:', error);
+      console.error('Failed to request email change:', error);
       showToast(formatErrorMessage(t('account.updateEmail'), error), 'error');
     }
   }, [currentProfile, currentEmail, eventUrl, showToast, t]);
@@ -779,7 +795,33 @@ export default function AccountModal({ hideButton = false }) {
         <ChangePasswordModal
           isOpen={showChangePasswordModal}
           onClose={() => setShowChangePasswordModal(false)}
+          onOpenResetModal={() => {
+            setShowChangePasswordModal(false);
+            setShowRequestPasswordResetModal(true);
+          }}
           eventUrl={eventUrl}
+        />
+      )}
+
+      {showRequestPasswordResetModal && (
+        <RequestPasswordResetModal
+          isOpen={showRequestPasswordResetModal}
+          onClose={() => setShowRequestPasswordResetModal(false)}
+        />
+      )}
+
+      {showEmailVerificationModal && (
+        <EmailVerificationModal
+          isOpen={showEmailVerificationModal}
+          onClose={async () => {
+            setShowEmailVerificationModal(false);
+            setPendingEmail(null);
+            // Refresh profile after verification
+            if (isAuthenticated && eventUrl && currentProfile?.profile_id) {
+              await fetchCurrentProfile();
+            }
+          }}
+          newEmail={pendingEmail}
         />
       )}
 

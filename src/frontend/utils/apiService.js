@@ -1324,7 +1324,7 @@ export const profilesAPI = {
     });
   },
 
-  // Update current profile
+  // Update current profile (label only)
   updateCurrentProfile: async (updates, eventUrl = null) => {
     const params = {};
     if (eventUrl) {
@@ -1332,6 +1332,19 @@ export const profilesAPI = {
       params.event_id = eventId;
     }
     const response = await api.put('/api/profiles/current', updates, { params });
+    return response.data;
+  },
+  
+  // Request email change (sends verification code)
+  requestEmailChange: async (newEmail, eventUrl = null) => {
+    const params = {};
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      params.event_id = eventId;
+    }
+    const response = await api.post('/api/profiles/current/request-email-change', {
+      email: newEmail
+    }, { params });
     return response.data;
   },
   
@@ -1345,6 +1358,19 @@ export const profilesAPI = {
     const response = await api.put('/api/profiles/current/password', {
       current_password: currentPassword,
       new_password: newPassword
+    }, { params });
+    return response.data;
+  },
+  
+  // Verify email with verification code
+  verifyEmail: async (verificationCode, eventUrl = null) => {
+    const params = {};
+    if (eventUrl) {
+      const eventId = await getEventIdForApi(eventUrl);
+      params.event_id = eventId;
+    }
+    const response = await api.post('/api/profiles/current/verify-email', {
+      verification_code: verificationCode
     }, { params });
     return response.data;
   },

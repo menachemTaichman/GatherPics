@@ -4,7 +4,7 @@ from flask_jwt_extended import (
     set_access_cookies,
     unset_jwt_cookies,
 )
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 import secrets
 import os
 
@@ -20,7 +20,7 @@ def create_refresh_token_for_profile(profile_id: str, expires_days: int = 30):
     refresh_token_db = secrets.token_urlsafe(32)
     
     # Set refresh token expiry
-    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
+    expires_at = datetime.now() + timedelta(days=expires_days)
     
     # Get request metadata
     user_agent = request.headers.get('User-Agent', '')
@@ -178,7 +178,10 @@ def request_password_reset():
                 <body>
                     <p>Hello {profile_label},</p>
                     <p>You requested a password reset. Click the link below to reset your password:</p>
-                    <p><a href="{reset_url}">{reset_url}</a></p>
+                    <div style="text-align: center; margin: 20px 0;">
+                        <a href="{reset_url}" style="display: inline-block; padding: 15px 30px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">Reset Password</a>
+                    </div>
+                    <p style="text-align: center; color: #666666; font-size: 12px; margin-top: 10px;">Or copy and paste this link: <span style="font-family: monospace; word-break: break-all;">{reset_url}</span></p>
                     <p>This link will expire in 10 minutes.</p>
                     <p>If you did not request this, please ignore this email.</p>
                 </body>

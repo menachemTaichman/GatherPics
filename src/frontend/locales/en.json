@@ -285,6 +285,22 @@
     "resetTokenIsMissing": "Reset token is missing",
     "passwordResetSuccessfully": "Password reset successfully"
   },
+  "emailVerification": {
+    "verifyEmail": "Verify Email",
+    "enterVerificationCode": "Enter the verification code sent to your email",
+    "verificationCode": "Verification Code",
+    "enterVerificationCodePlaceholder": "Enter code",
+    "verificationCodeIsRequired": "Verification code is required",
+    "verificationCodeSentTo": "Verification code sent to",
+    "verificationCodeSent": "A verification code has been sent to your new email address",
+    "codeExpiresIn10Minutes": "This code will expire in 10 minutes",
+    "verifyEmailButton": "Verify Email",
+    "verifying": "Verifying...",
+    "cancel": "Cancel",
+    "emailVerifiedSuccessfully": "Email Verified Successfully",
+    "yourEmailHasBeenUpdated": "Your email address has been updated successfully.",
+    "failedToVerifyEmail": "Failed to verify email"
+  },
   "errorDetail": {
     "error": "Error",
     "previousError": "Previous error (Left arrow)",

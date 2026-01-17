@@ -29,6 +29,7 @@ Usage:
 
 Environment Variables:
     - ENVIRONMENT: Set to 'PRODUCTION' for AWS SES, defaults to 'DEVELOPMENT'
+    - USE_PROD_EMAIL: Set to 'true' to force using production email service (AWS SES) even in development
     - EMAIL_FROM: Default sender email address (required in production)
     - AWS_ACCESS_KEY_ID: AWS access key (required in production)
     - AWS_SECRET_ACCESS_KEY: AWS secret key (required in production)
@@ -242,8 +243,9 @@ def get_email_service() -> EmailService:
         EmailService: DevEmailService in development, ProdEmailService in production
     """
     environment = os.getenv('ENVIRONMENT', 'DEVELOPMENT')
+    use_prod_email = os.getenv('USE_PROD_EMAIL', 'false').lower() == 'true'
     
-    if environment == 'PRODUCTION':
+    if environment == 'PRODUCTION' or use_prod_email:
         return ProdEmailService()
     else:
         return DevEmailService()

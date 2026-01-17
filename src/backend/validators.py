@@ -140,6 +140,7 @@ FIELD_VALIDATORS = {
     'min_rank_to_create_event': TypeAdapter(Annotated[int, Field(ge=0)]),
     'rekognition_requests_limit': TypeAdapter(Annotated[int, Field(ge=0)]),
     'rekognition_requests_count': TypeAdapter(Annotated[int, Field(ge=0)]),
+    'verification_code': TypeAdapter(Annotated[str, Field(min_length=6, max_length=6)]),
     
     # Boolean fields
     'is_public': TypeAdapter(bool),

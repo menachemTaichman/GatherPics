@@ -6,7 +6,7 @@ Uses Redis-backed atomic counter/set mechanism to track upload progress.
 import traceback
 
 from celery.utils.log import get_task_logger
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from src.backend.celery_worker import celery
 from src.backend.redis_client import get_redis_client
 from src.core.services.event import Event
@@ -308,7 +308,7 @@ def expire_pending_uploads_task():
         db = DB()
         
         # Calculate expiration threshold: now minus 3 hours (plus 5 minutes buffer for safety)
-        expiration_threshold = datetime.now(timezone.utc) - timedelta(seconds=UPLOAD_URL_EXPIRATION_SECONDS + 300)
+        expiration_threshold = datetime.now() - timedelta(seconds=UPLOAD_URL_EXPIRATION_SECONDS + 300)
         
         query = """
             UPDATE images i

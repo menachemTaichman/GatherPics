@@ -286,6 +286,22 @@
     "resetTokenIsMissing": "אסימון איפוס חסר",
     "passwordResetSuccessfully": "סיסמה אופסה בהצלחה"
   },
+  "emailVerification": {
+    "verifyEmail": "אימות אימייל",
+    "enterVerificationCode": "הכנס את קוד האימות שנשלח לאימייל שלך",
+    "verificationCode": "קוד אימות",
+    "enterVerificationCodePlaceholder": "הכנס קוד",
+    "verificationCodeIsRequired": "קוד אימות נדרש",
+    "verificationCodeSentTo": "קוד אימות נשלח ל",
+    "verificationCodeSent": "קוד אימות נשלח לכתובת האימייל החדשה שלך",
+    "codeExpiresIn10Minutes": "קוד זה יפוג בעוד 10 דקות",
+    "verifyEmailButton": "אמת אימייל",
+    "verifying": "מאמת...",
+    "cancel": "ביטול",
+    "emailVerifiedSuccessfully": "אימייל אומת בהצלחה",
+    "yourEmailHasBeenUpdated": "כתובת האימייל שלך עודכנה בהצלחה.",
+    "failedToVerifyEmail": "אימות האימייל נכשל"
+  },
   "errorDetail": {
     "error": "שגיאה",
     "previousError": "שגיאה קודמת (חץ שמאלה)",

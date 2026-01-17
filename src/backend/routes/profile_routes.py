@@ -388,11 +388,12 @@ def update_my_preferences():
 @profile_bp.route("/api/profiles/current", methods=["PUT"])
 @require_auth
 def update_current_profile():
-    """Update the current profile data."""
-    event_id = request.args.get('event_id', None)
+    """Update the current profile data (label only)."""
+
     profile_id = get_current_profile_id()
     general_models = get_general_models()
-    data = get_multiple_inputs(['label', 'email'])
+    data = get_multiple_inputs(['label'])
+    
     if data:
         general_models.edit('current_profile', profile_id, data)
 
@@ -400,10 +401,49 @@ def update_current_profile():
         'type': 'UPSERT',
         'entity': 'localStorage',
         'items': {
-            'currentProfile': general_models.get_current_profile(event_id)
+            'currentProfile': general_models.get_current_profile()
         }
     }]
     return jsonify({"success": True, "changes": changes})
+
+@profile_bp.route("/api/profiles/current/request-email-change", methods=["POST"])
+@require_auth
+def request_email_change():
+    """Request email change - sends verification code to new email."""
+
+    new_email = get_input('email', required=True)
+    
+    general_models = get_general_models()    
+    general_models.request_email_verification(new_email)
+    
+    return jsonify({
+        "success": True,
+        "message": f"A verification code has been sent to {new_email}."
+    })
+
+@profile_bp.route("/api/profiles/current/verify-email", methods=["POST"])
+@require_auth
+def verify_email():
+    """Verify email verification code and update email."""
+    
+    verification_code = get_input('verification_code', required=True)
+    
+    general_models = get_general_models()
+    general_models.complete_email_verification(verification_code)
+    
+    changes = [{
+        'type': 'UPSERT',
+        'entity': 'localStorage',
+        'items': {
+            'currentProfile': general_models.get_current_profile()
+        }
+    }]
+    
+    return jsonify({
+        "success": True,
+        "message": "Email verified and updated successfully.",
+        "changes": changes
+    })
 
 @profile_bp.route("/api/profiles/current/password", methods=["PUT"])
 @require_auth
