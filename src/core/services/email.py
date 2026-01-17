@@ -84,7 +84,7 @@ class DevEmailService(EmailService):
     """Development email service that prints emails instead of sending them."""
     
     def __init__(self):
-        self.default_from = os.getenv('EMAIL_FROM', 'noreply@example.com')
+        self.default_from = os.getenv('EMAIL_FROM', 'notifications@gatherpics.com')
     
     def send_email(self, message: EmailMessage) -> dict:
         """

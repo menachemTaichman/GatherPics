@@ -50,6 +50,6 @@ We believe professional tools must be secure, accessible, and reliable.
 Ready to upgrade your gallery experience?
 Gather Pics is currently available for professional photographers.
 
-**📧 Contact us:** [meTaichman@gmail.com](mailto:meTaichman@gmail.com)
+**📧 Contact us:** [support@gatherpics.com](mailto:support@gatherpics.com)
 
 We’ll help you set up your account, migrate your first event, and streamline your workflow.

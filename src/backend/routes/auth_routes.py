@@ -170,6 +170,8 @@ def request_password_reset():
         send_email(
             to=email,
             subject='Password Reset Request',
+            from_email='security@gatherpics.com',
+            reply_to='support@gatherpics.com',
             body_text=f'Hello {profile_label},\n\nYou requested a password reset. Click the link below to reset your password:\n\n{reset_url}\n\nThis link will expire in 10 minutes.\n\nIf you did not request this, please ignore this email.',
             body_html=f'''
                 <html>

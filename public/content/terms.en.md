@@ -216,7 +216,7 @@ The Site Operator reserves the right to modify these Terms at any time. Material
 
 For any questions regarding these Terms of Service, please contact us at:
 
-**Email**: meTaichman@gmail.com
+**Email**: support@gatherpics.com
 
 We will respond to your inquiry within a reasonable timeframe.
 

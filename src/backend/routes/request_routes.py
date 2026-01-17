@@ -368,6 +368,8 @@ def toggle_request(event_id, request_id):
         send_email(
             to=applicant_email,
             subject=subject,
+            from_email='notifications@gatherpics.com',
+            reply_to='support@gatherpics.com',
             body_text=body_text,
             body_html=body_html
         )

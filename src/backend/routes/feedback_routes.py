@@ -120,6 +120,8 @@ def update_feedback(feedback_id):
             send_email(
                 to=sender_email,
                 subject=subject,
+                from_email='support@gatherpics.com',
+                reply_to='support@gatherpics.com',
                 body_text=body_text,
                 body_html=body_html
             )

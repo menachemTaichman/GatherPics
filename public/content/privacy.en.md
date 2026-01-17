@@ -204,7 +204,7 @@ Depending on your location and the nature of your relationship with the Service,
 
 ### F. Complaints
 If you believe we have violated your privacy rights, you may:
-- Contact us at meTaichman@gmail.com
+- Contact us at privacy@gatherpics.com
 - File a complaint with the relevant data protection authority in your jurisdiction
 
 ---
@@ -285,7 +285,7 @@ Your continued use of the Service after changes become effective constitutes acc
 
 For questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us:
 
-**Email**: meTaichman@gmail.com
+**Email**: privacy@gatherpics.com
 
 We will respond to your inquiry within a reasonable timeframe, typically within 30 days.
 
@@ -309,7 +309,7 @@ If you are located in the European Union or European Economic Area, you have add
 - **Right to Object**: You can object to certain types of data processing
 - **Right to Withdraw Consent**: You can withdraw consent at any time
 
-To exercise these rights, please contact us at meTaichman@gmail.com.
+To exercise these rights, please contact us at privacy@gatherpics.com.
 
 **Legal Basis for Processing:**
 - **Contract Performance**: Processing necessary to provide the Service
@@ -328,7 +328,7 @@ If you are a California resident, you have additional rights under the Californi
 - **Right to Opt-Out**: You can opt out of the sale of personal information (we do not sell personal information)
 - **Right to Non-Discrimination**: We will not discriminate against you for exercising your privacy rights
 
-To exercise these rights, please contact us at meTaichman@gmail.com.
+To exercise these rights, please contact us at privacy@gatherpics.com.
 
 ---
 

@@ -436,7 +436,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📧 Contact
 
-For questions or support, contact: [meTaichman@gmail.com](mailto:meTaichman@gmail.com)
+For questions or support, contact: [support@gatherpics.com](mailto:support@gatherpics.com)
 
 ---
 

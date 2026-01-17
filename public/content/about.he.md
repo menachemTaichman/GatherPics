@@ -51,6 +51,6 @@ Gather Pics משלבת טכנולוגיית זיהוי פנים מתקדמת ע�
 מוכן לשדרג את חוויית הגלריות שלך?  
 Gather Pics זמינה כיום לצלמים מקצועיים.
 
-**📧 צרו קשר:** [meTaichman@gmail.com](mailto:meTaichman@gmail.com)
+**📧 צרו קשר:** [support@gatherpics.com](mailto:support@gatherpics.com)
 
 נלווה אותך בהקמת החשבון, בהעברת האירוע הראשון, ובייעול כל תהליך העבודה שלך.

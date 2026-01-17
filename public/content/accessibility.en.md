@@ -45,7 +45,7 @@ We actively encourage our community of photographers to make their galleries acc
 
 If you encounter any accessibility barriers or have suggestions for improvement, please contact our accessibility coordinator. We are committed to addressing issues promptly.
 
-* **Email**: [meTaichman@gmail.com](mailto:meTaichman@gmail.com)
+* **Email**: [support@gatherpics.com](mailto:support@gatherpics.com)
 * **Response Time**: We aim to respond to accessibility reports within 5 business days.
 
 Please include a description of the issue and a link to the specific page where it occurred.
