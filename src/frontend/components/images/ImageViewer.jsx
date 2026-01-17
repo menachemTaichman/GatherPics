@@ -824,6 +824,9 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
   const facesList = isAuthenticated ? storeFacesList : placeholderFaces;
   const albumsList = isAuthenticated ? storeAlbumsList : placeholderAlbums;
   
+  // Check if albums section should be visible
+  const hasAlbumsSection = (permissions.has_albums || permissions.canEdit) && albumsList && albumsList.length > 0;
+  
   // Sync refs with state for PhotoSwipe event handlers
   useEffect(() => {
     showRectanglesRef.current = showRectangles;
@@ -2322,7 +2325,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   {t('imageViewer.photoDetails')}
                 </Drawer.Description>
                 {isMobile && <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 my-3" />}
-                <div className={`flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? 'px-4 pb-8' : 'p-4'}`}>
+                <div className={`flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? 'px-4 pb-2' : 'p-4'}`}>
                   {/* Controls */}
                   <div className="border-b border-gray-200 pb-3">
                     <ImageViewerActions
@@ -2344,7 +2347,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                   </div>
                   
                   {/* Animated Content for Navigation */}
-                  <div className="flex-1 min-h-0 relative overflow-hidden">
+                  <div className={isMobile ? "flex-1 min-h-0 relative overflow-hidden" : "relative"}>
                     <AnimatePresence initial={false} mode="popLayout" custom={drawerDirection}>
                       <motion.div
                         key={imageId || 'no-image'}
@@ -2363,7 +2366,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                           opacity: 0 
                         }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="h-full overflow-y-auto overflow-x-hidden"
+                        className={isMobile ? "h-full overflow-y-auto overflow-x-hidden" : `overflow-x-hidden ${hasAlbumsSection ? 'flex flex-col min-h-0' : ''}`}
                       >
                   {/* Details Section */}
                   <div className="mt-3 pt-3 border-t border-gray-200">
@@ -2549,7 +2552,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
 
                   {/* Faces Section */}
                   {permissions.has_groups && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className={`mt-4 pt-4 border-t border-gray-200 ${isMobile ? '' : hasAlbumsSection ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
                       <div
                         className="flex items-center justify-between mb-2 cursor-pointer select-none"
                         onClick={handleToggleFacesOpen}
@@ -2592,7 +2595,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
                         </button>
                       </div>
                       {facesOpen && (
-                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1 -mr-1 min-h-0">
+                        <div className={`space-y-2 overflow-y-auto pr-1 -mr-1 min-h-0 ${isMobile ? 'max-h-72' : hasAlbumsSection ? 'flex-1 min-h-0' : ''}`}>
                           {facesList.length === 0 ? (
                             <p className="text-gray-500 text-sm">{t('imageViewer.noFacesDetected')}</p>
                           ) : (
