@@ -70,6 +70,9 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
     if (onClick) onClick(e);
   };
 
+  // בדיקה אם הכפתור צריך להיות full width
+  const isFullWidth = className.includes('w-full');
+
   // אם הכפתור הוא absolute, לא עוטפים ב-div נוסף
   if (isAbsolute) {
     return (
@@ -109,8 +112,13 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
   }
 
   // עבור כפתורים רגילים - עוטפים ב-div, אבל tooltip דרך portal
+  // אם הכפתור הוא w-full, גם ה-wrapper צריך להיות w-full
+  const wrapperClassName = isFullWidth 
+    ? "relative block w-full touch-none" 
+    : "relative inline-block touch-none";
+  
   return (
-    <div className="relative inline-block touch-none"> {/* wrapper div */}
+    <div className={wrapperClassName}> {/* wrapper div */}
       
       {/* הכפתור עצמו */}
       <button
