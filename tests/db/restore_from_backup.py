@@ -316,6 +316,19 @@ def main():
             cursor.execute("SET session_replication_role = origin")
         target_conn.commit()
         
+        # Run VACUUM ANALYZE on all tables to update statistics and reclaim space
+        print("\nRunning VACUUM ANALYZE on all tables...")
+        print("(This updates query planner statistics and reclaims space after bulk inserts)")
+        with target_conn.cursor() as cursor:
+            for table_name in common_tables:
+                print(f"  Analyzing {table_name}...", end=' ', flush=True)
+                try:
+                    cursor.execute(f'VACUUM ANALYZE "{table_name}"')
+                    print("✓")
+                except Exception as e:
+                    print(f"✗ Error: {e}")
+        target_conn.commit()
+        
         print()
         print("=" * 60)
         print(f"Data restoration complete! Total rows inserted: {total_rows}")
