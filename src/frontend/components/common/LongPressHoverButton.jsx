@@ -72,6 +72,24 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
 
   // בדיקה אם הכפתור צריך להיות full width
   const isFullWidth = className.includes('w-full');
+  
+  // בדיקה אם הכפתור משתמש ב-flex classes (כמו flex-1, flex-grow, וכו')
+  // וחילוץ כל ה-flex classes מה-className
+  const flexClassRegex = /\b(flex-(?:1|auto|none|grow|shrink|basis-[\w-]+))\b/g;
+  const flexClasses = className.match(flexClassRegex) || [];
+  const hasFlexClasses = flexClasses.length > 0;
+  const flexClass = flexClasses.join(' ');
+  
+  // הסרת ה-flex classes מה-button className (כי הם יעברו ל-wrapper)
+  // והוספת w-full לכפתור כדי שימלא את ה-wrapper
+  let buttonClassName = hasFlexClasses
+    ? className.replace(flexClassRegex, '').replace(/\s+/g, ' ').trim()
+    : className;
+  
+  // אם יש flex classes, נוסיף w-full לכפתור כדי שימלא את ה-wrapper
+  if (hasFlexClasses && !buttonClassName.includes('w-full')) {
+    buttonClassName = `${buttonClassName} w-full`.trim();
+  }
 
   // אם הכפתור הוא absolute, לא עוטפים ב-div נוסף
   if (isAbsolute) {
@@ -113,9 +131,15 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
 
   // עבור כפתורים רגילים - עוטפים ב-div, אבל tooltip דרך portal
   // אם הכפתור הוא w-full, גם ה-wrapper צריך להיות w-full
-  const wrapperClassName = isFullWidth 
-    ? "relative block w-full touch-none" 
-    : "relative inline-block touch-none";
+  // אם הכפתור משתמש ב-flex classes, ה-wrapper צריך להיות block ולהכיל את ה-flex classes
+  let wrapperClassName;
+  if (isFullWidth) {
+    wrapperClassName = `relative block w-full touch-none ${flexClass}`.trim();
+  } else if (hasFlexClasses) {
+    wrapperClassName = `relative block touch-none ${flexClass}`.trim();
+  } else {
+    wrapperClassName = "relative inline-block touch-none";
+  }
   
   return (
     <div className={wrapperClassName}> {/* wrapper div */}
@@ -125,7 +149,7 @@ export const LongPressHoverButton = forwardRef(function LongPressHoverButton({ c
         ref={combinedRef}
         {...bind()} // מחבר את אירועי הלחיצה הארוכה
         onClick={handleClick}
-        className={className}
+        className={buttonClassName}
         onContextMenu={(e) => e.preventDefault()} // חובה! מונע תפריט מערכת בלחיצה ארוכה
         aria-label={tooltipText}
         {...props}
