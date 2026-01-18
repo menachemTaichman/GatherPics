@@ -460,10 +460,6 @@ BEGIN
         RAISE EXCEPTION 'Permission denied: cannot create feedback for another profile';
     END IF;
     
-    IF cur_profile_bool('is_public') THEN
-        RAISE EXCEPTION 'Permission denied: public profiles cannot create feedback';
-    END IF;
-
     -- Extract error_ids from diagnostics before insert
     error_ids_array := ARRAY[]::INTEGER[];
     BEGIN
