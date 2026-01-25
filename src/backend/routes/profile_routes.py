@@ -670,8 +670,10 @@ def _update_profile(profile_id: str, event_id: str | None = None):
             general_data.pop('password', None)
             if general_data.get('is_public', True):
                 general_data['email'] = None
-        print(f'general_data: {general_data}')
-        general_models.edit('profiles', profile_id, general_data)
+        if 'password' in general_data:
+            general_data['password'] = hash_password(general_data['password'])
+        if general_data:
+            general_models.edit('profiles', profile_id, data=general_data)
 
     if event_id:
         event_data = get_multiple_inputs([
@@ -684,7 +686,8 @@ def _update_profile(profile_id: str, event_id: str | None = None):
             'all_groups',
         ])
         event = get_event(event_id)
-        event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
+        if event_data:
+            event.models.edit_childs('events', event_id, 'profiles', [profile_id], operation=ChildOperation.UPDATE, data=event_data)
         profiles, event_profiles = general_models.get_childs('events', event_id, 'profiles', [profile_id])
         changes = [{
             'type': 'UPSERT',
