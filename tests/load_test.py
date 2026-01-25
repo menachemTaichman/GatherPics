@@ -25,6 +25,20 @@ if os.path.exists('.env'):
     from dotenv import load_dotenv
     load_dotenv()
 
+# Task frequency configuration
+# Set to 0 to disable a task
+TASK_FREQUENCIES = {
+    'browse_moments_page': 3,  # High frequency - simulates MomentsPage
+    'get_all_images': 3,       # High frequency - loads all images
+    'get_image': 2,            # Medium frequency - view specific image
+    'get_groups': 2,           # Medium frequency - list groups
+    'get_group': 2,            # Medium frequency - view specific group
+    'get_events': 1,           # Lower frequency - list events
+    'get_event': 1,            # Lower frequency - get event details
+    'get_albums': 1,           # Lower frequency - list albums
+    'get_moments': 1,          # Lower frequency - list moments
+}
+
 
 class WebsiteUser(HttpUser):
     """
@@ -135,7 +149,7 @@ class WebsiteUser(HttpUser):
         # self.client.post("/api/auth/logout", name="Logout")
         pass
     
-    @task(3)
+    @task(TASK_FREQUENCIES.get('browse_moments_page', 0))
     def browse_moments_page(self):
         """
         Browse moments page - typical user flow.
@@ -173,7 +187,7 @@ class WebsiteUser(HttpUser):
                 name="Get All Images (MomentsPage)"
             )
     
-    @task(3)
+    @task(TASK_FREQUENCIES.get('get_all_images', 0))
     def get_all_images(self):
         """
         Get all images for an event - high frequency task.
@@ -205,7 +219,7 @@ class WebsiteUser(HttpUser):
             except Exception:
                 pass
     
-    @task(2)
+    @task(TASK_FREQUENCIES.get('get_image', 0))
     def get_image(self):
         """
         Get a specific image - medium frequency task.
@@ -242,7 +256,7 @@ class WebsiteUser(HttpUser):
                 name="Get Image"
             )
     
-    @task(2)
+    @task(TASK_FREQUENCIES.get('get_groups', 0))
     def get_groups(self):
         """
         Get all groups for an event - medium frequency task.
@@ -273,7 +287,7 @@ class WebsiteUser(HttpUser):
             except Exception:
                 pass
     
-    @task(2)
+    @task(TASK_FREQUENCIES.get('get_group', 0))
     def get_group(self):
         """
         Get a specific group with its images and faces - medium frequency task.
@@ -310,12 +324,12 @@ class WebsiteUser(HttpUser):
                 name="Get Group"
             )
     
-    @task(1)
+    @task(TASK_FREQUENCIES.get('get_events', 0))
     def get_events(self):
         """Get list of events - lower frequency task"""
         self.client.get("/api/events", name="Get Events")
     
-    @task(1)
+    @task(TASK_FREQUENCIES.get('get_event', 0))
     def get_event(self):
         """Get specific event details - lower frequency task"""
         event_id = self._get_or_discover_event_id()
@@ -324,7 +338,7 @@ class WebsiteUser(HttpUser):
             # Get current profile with event context (called on almost every page)
             self.client.get(f"/api/profiles/current?event_id={event_id}", name="Get Current Profile")
     
-    @task(1)
+    @task(TASK_FREQUENCIES.get('get_albums', 0))
     def get_albums(self):
         """Get albums - lower frequency task"""
         event_id = self._get_or_discover_event_id()
@@ -334,7 +348,7 @@ class WebsiteUser(HttpUser):
                 name="Get Albums"
             )
     
-    @task(1)
+    @task(TASK_FREQUENCIES.get('get_moments', 0))
     def get_moments(self):
         """Get moments - lower frequency task"""
         event_id = self._get_or_discover_event_id()
