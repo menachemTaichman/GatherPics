@@ -88,7 +88,10 @@ if IS_PRODUCTION and DIST_DIR and os.path.exists(DIST_DIR) and os.path.exists(os
     @app.route('/assets/<path:filename>')
     def serve_assets(filename):
         """Serve static assets from dist/assets/ folder"""
-        return send_file(os.path.join(DIST_DIR, 'assets', filename))
+        file_path = os.path.join(DIST_DIR, 'assets', filename)
+        if not os.path.exists(file_path) or not os.path.isfile(file_path):
+            abort(404)
+        return send_file(file_path)
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')

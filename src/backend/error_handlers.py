@@ -1,10 +1,8 @@
-from flask import jsonify, request, current_app
-from flask_jwt_extended import get_jwt_identity
+from flask import jsonify
 from flask_jwt_extended.exceptions import JWTDecodeError, InvalidHeaderError, NoAuthorizationError
 from pydantic import ValidationError
 import traceback
 import logging
-import re
 
 from src.core.errors import Forbidden, DatabaseError, PolicyError, sanitize_sensitive_data, log_error
 
@@ -52,12 +50,7 @@ def register_error_handlers(app):
         try:
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
-            traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error(str(error), "Forbidden", traceback_str)
-            response = {"error": error_msg}
-            if error_id:
-                response["error_id"] = error_id
-            return jsonify(response), 403
+            return jsonify({"error": error_msg}), 403
         except Exception as e:
             # If error handler itself fails, return a safe generic response
             logging.error(f"Error handler failed: {e}", exc_info=True)
@@ -68,7 +61,7 @@ def register_error_handlers(app):
         try:
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
-            traceback_str = traceback.format_exc() if app.debug else None
+            traceback_str = traceback.format_exc()
             error_id = log_error(str(error), "DatabaseError", traceback_str)
             # Show generic message in production, detailed error in debug mode
             if not app.debug:
@@ -87,12 +80,7 @@ def register_error_handlers(app):
         try:
             error_msg = clean_postgres_error(str(error))
             error_msg = sanitize_sensitive_data(error_msg)  # Sanitize before sending to frontend
-            traceback_str = traceback.format_exc() if app.debug else None
-            error_id = log_error(str(error), "PolicyError", traceback_str)
-            response = {"error": error_msg}
-            if error_id:
-                response["error_id"] = error_id
-            return jsonify(response), 400
+            return jsonify({"error": error_msg}), 400
         except Exception as e:
             # If error handler itself fails, return a safe generic response
             logging.error(f"Error handler failed: {e}", exc_info=True)
@@ -139,29 +127,17 @@ def register_error_handlers(app):
     @app.errorhandler(JWTDecodeError)
     def handle_jwt_decode_error(error):
         error_msg = "Invalid token"
-        error_id = log_error(error_msg, "JWTDecodeError", None)
-        response = {"error": error_msg}
-        if error_id:
-            response["error_id"] = error_id
-        return jsonify(response), 401
+        return jsonify({"error": error_msg}), 401
 
     @app.errorhandler(InvalidHeaderError)
     def handle_invalid_header_error(error):
         error_msg = "Invalid authorization header"
-        error_id = log_error(error_msg, "InvalidHeaderError", None)
-        response = {"error": error_msg}
-        if error_id:
-            response["error_id"] = error_id
-        return jsonify(response), 401
+        return jsonify({"error": error_msg}), 401
 
     @app.errorhandler(NoAuthorizationError)
     def handle_no_authorization_error(error):
         error_msg = "Missing authorization token"
-        error_id = log_error(error_msg, "NoAuthorizationError", None)
-        response = {"error": error_msg}
-        if error_id:
-            response["error_id"] = error_id
-        return jsonify(response), 401
+        return jsonify({"error": error_msg}), 401
 
     # General Exception Handler - catches all unhandled exceptions
     @app.errorhandler(Exception)
