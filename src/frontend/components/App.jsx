@@ -296,6 +296,8 @@ function AppContent({ eventUrl }) {
       }
     } else if (pathAfterEvent.startsWith('/requests')) {
       nextTitle = `${eventName} - Requests`;
+    } else if (pathAfterEvent.startsWith('/profiles')) {
+      nextTitle = `${eventName} - Profiles`;
     }
 
     // Append app name to the title
