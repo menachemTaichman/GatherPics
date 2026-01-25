@@ -673,7 +673,7 @@ def _update_profile(profile_id: str, event_id: str | None = None):
         if 'password' in general_data:
             general_data['password'] = hash_password(general_data['password'])
         if general_data:
-            general_models.edit('profiles', profile_id, data=general_data)
+            general_models.edit('profiles', profile_id, general_data)
 
     if event_id:
         event_data = get_multiple_inputs([
