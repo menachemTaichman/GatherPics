@@ -421,7 +421,7 @@ def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
 # # print(result)
 # print('--------------------------------')
 
-# event_id = '73f1cf50-95ee-4832-97ef-83c0f50a82c0'
+# event_id = 'b5c2cb37-f7bf-4223-92eb-eee4060eb553'
 # event = Event(event_id, profile_id=dev_profile_id)
 
 # result1 = event.models.get_entities('images')
