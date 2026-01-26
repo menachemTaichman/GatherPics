@@ -26,9 +26,9 @@ if os.path.exists('.env'):
     load_dotenv()
 
 # Task frequency configuration
-high_frequency = 0# 3
-medium_frequency = 0# 2
-lower_frequency = 0# 1
+high_frequency = 3
+medium_frequency = 2
+lower_frequency = 1
 
 TASK_FREQUENCIES = {
     'browse_moments_page': high_frequency,  # High frequency - simulates MomentsPage
@@ -37,7 +37,7 @@ TASK_FREQUENCIES = {
     'get_groups': medium_frequency,           # Medium frequency - list groups
     'get_group': medium_frequency,            # Medium frequency - view specific group
     'get_events': lower_frequency,           # Lower frequency - list events
-    'get_event': 1,            # Lower frequency - get event details
+    'get_event': lower_frequency,            # Lower frequency - get event details
     'get_albums': lower_frequency,           # Lower frequency - list albums
     'get_moments': lower_frequency,          # Lower frequency - list moments
 }
@@ -48,7 +48,7 @@ class WebsiteUser(HttpUser):
     Simulates a user browsing the website.
     Typical flow: Login → Get Event → Get Profile → Browse Moments → Browse Groups → Browse Images
     """
-    wait_time = between(1, 5)  # Wait 1-5 seconds between tasks
+    wait_time = between(1, 5)  # No wait - run tasks immediately for performance testing
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
