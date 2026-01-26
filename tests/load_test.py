@@ -26,17 +26,20 @@ if os.path.exists('.env'):
     load_dotenv()
 
 # Task frequency configuration
-# Set to 0 to disable a task
+high_frequency = 0# 3
+medium_frequency = 0# 2
+lower_frequency = 0# 1
+
 TASK_FREQUENCIES = {
-    'browse_moments_page': 3,  # High frequency - simulates MomentsPage
-    'get_all_images': 3,       # High frequency - loads all images
-    'get_image': 2,            # Medium frequency - view specific image
-    'get_groups': 2,           # Medium frequency - list groups
-    'get_group': 2,            # Medium frequency - view specific group
-    'get_events': 1,           # Lower frequency - list events
+    'browse_moments_page': high_frequency,  # High frequency - simulates MomentsPage
+    'get_all_images': high_frequency,       # High frequency - loads all images
+    'get_image': medium_frequency,            # Medium frequency - view specific image
+    'get_groups': medium_frequency,           # Medium frequency - list groups
+    'get_group': medium_frequency,            # Medium frequency - view specific group
+    'get_events': lower_frequency,           # Lower frequency - list events
     'get_event': 1,            # Lower frequency - get event details
-    'get_albums': 1,           # Lower frequency - list albums
-    'get_moments': 1,          # Lower frequency - list moments
+    'get_albums': lower_frequency,           # Lower frequency - list albums
+    'get_moments': lower_frequency,          # Lower frequency - list moments
 }
 
 
