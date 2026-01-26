@@ -316,7 +316,8 @@ WHERE NOT ep.all_albums;
 
 -- effective permissions
 
-CREATE OR REPLACE VIEW images_eff AS
+DROP MATERIALIZED VIEW IF EXISTS images_eff CASCADE;
+CREATE MATERIALIZED VIEW images_eff AS
 SELECT
     id.event_id,
     id.profile_id,
@@ -332,7 +333,12 @@ INNER JOIN albums_def ad ON
     e.archive_album_id = ad.album_id
     AND ad.profile_id = id.profile_id;
 
-CREATE OR REPLACE VIEW faces_eff AS
+CREATE UNIQUE INDEX idx_images_eff_unique ON images_eff(profile_id, image_id);
+CREATE INDEX idx_images_eff_event_profile ON images_eff(event_id, profile_id);
+CREATE INDEX idx_images_eff_accessible ON images_eff(profile_id, image_id) WHERE is_accessible = TRUE;
+
+DROP MATERIALIZED VIEW IF EXISTS faces_eff CASCADE;
+CREATE MATERIALIZED VIEW faces_eff AS
 SELECT
     ie.event_id,
     ie.profile_id,
@@ -345,7 +351,11 @@ INNER JOIN groups_def gd ON
     f.group_id = gd.group_id
     AND gd.profile_id = ie.profile_id;
 
-CREATE OR REPLACE VIEW groups_eff AS
+CREATE UNIQUE INDEX idx_faces_eff_unique ON faces_eff(profile_id, face_id);
+CREATE INDEX idx_faces_eff_accessible ON faces_eff(profile_id, face_id) WHERE is_accessible = TRUE;
+
+DROP MATERIALIZED VIEW IF EXISTS groups_eff CASCADE;
+CREATE MATERIALIZED VIEW groups_eff AS
 SELECT
     gd.event_id,
     gd.profile_id,
@@ -369,7 +379,11 @@ INNER JOIN events_profiles ep ON
     gd.event_id = ep.event_id
     AND gd.profile_id = ep.profile_id;
 
-CREATE OR REPLACE VIEW moments_eff AS
+CREATE UNIQUE INDEX idx_groups_eff_unique ON groups_eff(profile_id, group_id);
+CREATE INDEX idx_groups_eff_accessible ON groups_eff(profile_id, group_id) WHERE is_accessible = TRUE;
+
+DROP MATERIALIZED VIEW IF EXISTS moments_eff CASCADE;
+CREATE MATERIALIZED VIEW moments_eff AS
 SELECT
     ep.event_id,
     ep.profile_id,
@@ -389,7 +403,11 @@ FROM moments m
 JOIN events_profiles ep ON
     m.event_id = ep.event_id;
 
-CREATE OR REPLACE VIEW albums_eff AS
+CREATE UNIQUE INDEX idx_moments_eff_unique ON moments_eff(profile_id, moment_id);
+CREATE INDEX idx_moments_eff_accessible ON moments_eff(profile_id, moment_id) WHERE is_accessible = TRUE;
+
+DROP MATERIALIZED VIEW IF EXISTS albums_eff CASCADE;
+CREATE MATERIALIZED VIEW albums_eff AS
 SELECT
     ad.event_id,
     ad.profile_id,
@@ -412,6 +430,9 @@ FROM albums_def ad
 INNER JOIN events_profiles ep ON
     ad.event_id = ep.event_id
     AND ad.profile_id = ep.profile_id;
+
+CREATE UNIQUE INDEX idx_albums_eff_unique ON albums_eff(profile_id, album_id);
+CREATE INDEX idx_albums_eff_accessible ON albums_eff(profile_id, album_id) WHERE is_accessible = TRUE;
 
 -- context views by current profile
 
