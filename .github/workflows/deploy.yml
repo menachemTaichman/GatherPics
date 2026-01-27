@@ -76,7 +76,7 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }} 
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT || 22 }}
-          source: "docker-compose.yml,Caddyfile,Dockerfile.backup,scripts/upload_script.sh"
+          source: "docker-compose.yml,Caddyfile,Dockerfile.backup,Dockerfile.permissions-worker,scripts/upload_script.sh,src/worker/permissions_refresh_worker.py"
           target: "/home/ubuntu/"
       
       - name: Deploy on Lightsail
