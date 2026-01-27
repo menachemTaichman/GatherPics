@@ -101,6 +101,26 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  permissions-refresh-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.permissions-worker
+    image: photo-app-permissions-worker:latest
+    restart: always
+    env_file: .env
+    environment:
+      TZ: Asia/Jerusalem
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db-backup:
     build:
       context: .

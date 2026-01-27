@@ -55,6 +55,25 @@ services:
   #     db:
   #       condition: service_healthy
 
+  # Optional: Uncomment to run permissions-refresh worker in Docker (or run locally: python -m src.worker.permissions_refresh_worker)
+  # permissions-refresh-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   restart: unless-stopped
+  #   command: python -m src.worker.permissions_refresh_worker
+  #   env_file: .env
+  #   environment:
+  #     TZ: Asia/Jerusalem
+  #     DB_HOST: db
+  #     DB_PORT: 5432
+  #   volumes:
+  #     - ./src:/app/src:ro
+  #     - ./migrations:/app/migrations:ro
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
   db-backup:
     image: prodrigestivill/postgres-backup-local
     restart: always

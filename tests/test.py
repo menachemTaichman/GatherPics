@@ -414,6 +414,9 @@ def test_cluster_faces_task(event_id: str, profile_id: str, upload_id: int):
 
 # # prod
 
+sql = "SELECT refresh_all_eff();"
+db.execute_query(sql)
+
 # event = Event(event_id='b5c2cb37-f7bf-4223-92eb-eee4060eb553', profile_id=dev_profile_id)
 # base_image_ids = event.models.get_childs('groups', '798b71cd-e53c-400d-8122-d3984cf043ed', 'images', return_ids=True)
 # with Timeit('get_related_groups'):

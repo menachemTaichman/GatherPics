@@ -1,0 +1,10 @@
+# Minimal image for permissions-refresh worker: Postgres LISTEN + refresh_all_eff.
+# Only Python + psycopg2; no Flask, Celery, Redis, or frontend.
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir psycopg2-binary
+
+WORKDIR /app
+COPY src/worker/permissions_refresh_worker.py worker.py
+
+CMD ["python", "worker.py"]

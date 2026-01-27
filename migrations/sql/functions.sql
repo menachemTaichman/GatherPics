@@ -133,8 +133,8 @@ END;
 $$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
 
 -- Effective-permissions cache: full refresh (manual/periodic) and worker-driven sync via processing_queue.
--- refresh_*_eff(p_event_id): NULL = full refresh (TRUNCATE + insert all); non-NULL = only that event (DELETE + INSERT).
--- refresh_all_eff(event_id): NULL = full refresh; non-NULL = that event only. Worker calls refresh_all_eff(event_id).
+-- refresh_*_eff(p_event_id): NULL = full refresh (TRUNCATE + insert all). Non-NULL = only that event (DELETE + INSERT).
+-- refresh_all_eff(event_id): NULL = full refresh. Non-NULL = that event only. Worker calls refresh_all_eff(event_id).
 
 CREATE OR REPLACE FUNCTION refresh_images_eff(p_event_id UUID DEFAULT NULL) RETURNS void AS $$
 BEGIN

@@ -2788,3 +2788,87 @@ DROP TRIGGER IF EXISTS trg_delete_profiles_groups_ensure_access_requests_groups_
 CREATE TRIGGER trg_delete_profiles_groups_ensure_access_requests_groups_validity
     AFTER DELETE ON profiles_groups
     FOR EACH ROW EXECUTE FUNCTION trg_delete_profiles_groups_ensure_access_requests_groups_validity();
+
+-- Effective-permissions cache: queue event_id for worker. worker runs refresh_all_eff(event_id).
+CREATE OR REPLACE FUNCTION queue_event_refresh() RETURNS TRIGGER AS $$
+DECLARE
+    target_event_id UUID;
+BEGIN
+    IF TG_TABLE_NAME = 'images' THEN
+        target_event_id := COALESCE(NEW.event_id, OLD.event_id);
+    ELSIF TG_TABLE_NAME = 'faces' THEN
+        SELECT event_id INTO target_event_id FROM images WHERE image_id = COALESCE(NEW.image_id, OLD.image_id);
+    ELSIF TG_TABLE_NAME = 'groups' THEN
+        SELECT event_id INTO target_event_id FROM groups WHERE group_id = COALESCE(NEW.group_id, OLD.group_id);
+    ELSIF TG_TABLE_NAME = 'moments' THEN
+        target_event_id := COALESCE(NEW.event_id, OLD.event_id);
+    ELSIF TG_TABLE_NAME = 'albums' THEN
+        target_event_id := COALESCE(NEW.event_id, OLD.event_id);
+    ELSIF TG_TABLE_NAME = 'albums_images' THEN
+        SELECT event_id INTO target_event_id FROM albums WHERE album_id = COALESCE(NEW.album_id, OLD.album_id);
+    ELSIF TG_TABLE_NAME = 'events_profiles' THEN
+        target_event_id := COALESCE(NEW.event_id, OLD.event_id);
+    ELSIF TG_TABLE_NAME = 'profiles_images' THEN
+        SELECT event_id INTO target_event_id FROM images WHERE image_id = COALESCE(NEW.image_id, OLD.image_id);
+    ELSIF TG_TABLE_NAME = 'profiles_groups' THEN
+        SELECT event_id INTO target_event_id FROM groups WHERE group_id = COALESCE(NEW.group_id, OLD.group_id);
+    ELSIF TG_TABLE_NAME = 'profiles_albums' THEN
+        SELECT event_id INTO target_event_id FROM albums WHERE album_id = COALESCE(NEW.album_id, OLD.album_id);
+    ELSIF TG_TABLE_NAME = 'events' THEN
+        target_event_id := COALESCE(NEW.event_id, OLD.event_id);
+    ELSE
+        target_event_id := NULL;
+    END IF;
+
+    IF target_event_id IS NOT NULL THEN
+        INSERT INTO processing_queue (event_id) VALUES (target_event_id)
+        ON CONFLICT (event_id) DO NOTHING;
+        PERFORM pg_notify('permissions_channel', '');
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON images;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON images
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON faces;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON faces
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON groups;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON groups
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON moments;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON moments
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON albums;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON albums
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON albums_images;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON albums_images
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON events_profiles;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON events_profiles
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON profiles_images;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON profiles_images
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON profiles_groups;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON profiles_groups
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON profiles_albums;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON profiles_albums
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+DROP TRIGGER IF EXISTS trg_queue_event_refresh ON events;
+CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON events
+    FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
