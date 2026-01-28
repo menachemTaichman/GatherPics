@@ -4,11 +4,13 @@ from processing_queue, and runs refresh_all_eff(event_id) for each.
 
 Run from project root: python -m src.worker.permissions_refresh_worker
 Uses DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT from env (and .env if present).
+Application name: DB_APPLICATION_NAME override, or {APP_INSTANCE_NAME}_{ENVIRONMENT}_{HOSTNAME}_permissions_refresh_worker (same format as main app).
 """
 
 import logging
 import os
 import select
+import socket
 import sys
 
 import psycopg2
@@ -32,14 +34,29 @@ logger = logging.getLogger(__name__)
 CHANNEL = "permissions_channel"
 POLL_TIMEOUT_SEC = 60
 
+def _application_name():
+    """Same format as main app (db.py): instance_env_hostname, then _permissions_refresh_worker."""
+    override = os.getenv("DB_APPLICATION_NAME")
+    if override is not None and override != "":
+        return override
+    app_instance = os.getenv("APP_INSTANCE_NAME") or "GatherPics"
+    environment = os.getenv("ENVIRONMENT", "DEVELOPMENT")
+    hostname = os.getenv("HOSTNAME") or socket.gethostname()
+    return f"{app_instance}_{environment}_{hostname}_permissions_refresh_worker"
+
+
 def get_connection():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        database=os.getenv("DB_NAME", "photo_app_db"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
-        port=os.getenv("DB_PORT", "5432"),
-    )
+    app_name = _application_name()
+    kwargs = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "database": os.getenv("DB_NAME", "photo_app_db"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "port": os.getenv("DB_PORT", "5432"),
+    }
+    if app_name:
+        kwargs["options"] = f"-c application_name={app_name}"
+    return psycopg2.connect(**kwargs)
 
 def process_pending_tasks(conn):
     """Dequeue up to BATCH_SIZE event_ids and run refresh_all_eff(event_id) for each."""
