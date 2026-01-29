@@ -99,6 +99,7 @@ jobs:
             
             echo "Updating containers..."
             
+            docker compose build permissions-refresh-worker
             docker compose up -d --remove-orphans --build db-backup
             docker compose up -d --remove-orphans
 
