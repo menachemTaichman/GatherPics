@@ -973,19 +973,38 @@ SELECT
     ep.all_images,
     ep.all_groups,
     ep.all_albums,
-    EXISTS (SELECT 1 FROM albums_ctx aa WHERE aa.album_id = e.archive_album_id) AS has_archive_album,
-    EXISTS (SELECT 1 FROM albums_ctx aa WHERE aa.album_id = e.favorites_album_id) AS has_favorites_album,
-    (ep.can_edit OR EXISTS (SELECT 1 FROM images_ctx)) AS has_images,
-    (ep.can_edit OR EXISTS (SELECT 1 FROM groups_ctx)) AS has_groups,
-    (ep.can_edit OR EXISTS (
-        SELECT 1 FROM albums_ctx
-        WHERE album_id IS DISTINCT FROM e.archive_album_id
-        AND album_id IS DISTINCT FROM e.favorites_album_id
-    )) AS has_albums,
-    EXISTS (SELECT 1 FROM groups_to_access_requests_ctx) AS enable_new_requests,
-    (SELECT COUNT(*) FROM access_requests_ctx WHERE NOT is_closed) AS pending_access_requests_count
+    COALESCE(ast.has_archive_album, false) AS has_archive_album,
+    COALESCE(ast.has_favorites_album, false) AS has_favorites_album,
+    (ep.can_edit OR COALESCE(ast.has_other_albums, false)) AS has_albums,
+    (ep.can_edit OR COALESCE(cst.has_images, false)) AS has_images,
+    (ep.can_edit OR COALESCE(cst.has_groups, false)) AS has_groups,
+    COALESCE(ars.enable_new_requests, false) AS enable_new_requests,
+    COALESCE(ars.pending_access_requests_count, 0) AS pending_access_requests_count
 FROM events_profiles ep
 JOIN events e ON e.event_id = ep.event_id
+LEFT JOIN LATERAL (
+    SELECT
+        bool_or(album_id = e.archive_album_id) AS has_archive_album,
+        bool_or(album_id = e.favorites_album_id) AS has_favorites_album,
+        bool_or(
+            album_id IS DISTINCT FROM e.archive_album_id
+            AND album_id IS DISTINCT FROM e.favorites_album_id
+        ) AS has_other_albums
+    FROM albums_ctx
+    WHERE event_id = e.event_id
+) ast ON TRUE
+LEFT JOIN LATERAL (
+    SELECT
+        EXISTS (SELECT 1 FROM images_ctx WHERE event_id = ep.event_id) AS has_images,
+        EXISTS (SELECT 1 FROM groups_ctx WHERE event_id = ep.event_id) AS has_groups
+) cst ON TRUE
+LEFT JOIN LATERAL (
+    SELECT
+        EXISTS (SELECT 1 FROM groups_to_access_requests_ctx) AS enable_new_requests,
+        COUNT(*) FILTER (WHERE NOT is_closed) AS pending_access_requests_count
+    FROM access_requests_ctx
+    WHERE event_id = ep.event_id
+) ars ON TRUE
 WHERE ep.event_id = cur_event_profile_uuid('event_id')
 AND ep.profile_id = cur_profile_uuid('profile_id');
 
