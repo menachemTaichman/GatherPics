@@ -58,16 +58,31 @@ class WebsiteUser(HttpUser):
         self.group_ids = []
         self.moment_ids = []
     
+    def _ids_from_change(self, change):
+        """
+        Extract entity IDs from a change entry.
+        API returns items as a dict (id -> entity), not a list.
+        """
+        ids = []
+        items = change.get("items")
+        if not items:
+            return ids
+        if isinstance(items, dict):
+            ids.extend(k for k in items.keys() if k)
+        else:
+            for item in items:
+                eid = item.get("id") or item.get("event_id") or item.get("image_id") or item.get("group_id") or item.get("moment_id")
+                if eid:
+                    ids.append(eid)
+        return ids
+
     def _extract_event_ids(self, events_data):
         """Extract event IDs from events API response."""
         event_ids = []
         if "changes" in events_data:
             for change in events_data["changes"]:
                 if change.get("entity") == "event" and "items" in change:
-                    for item in change["items"]:
-                        event_id = item.get("id") or item.get("event_id")
-                        if event_id:
-                            event_ids.append(event_id)
+                    event_ids.extend(self._ids_from_change(change))
         return event_ids
     
     def _get_or_discover_event_id(self):
@@ -173,13 +188,12 @@ class WebsiteUser(HttpUser):
         if moments_response.status_code == 200:
             try:
                 moments_data = moments_response.json()
-                # Cache moment IDs
+                # Cache moment IDs (API returns items as dict: id -> entity)
                 if "changes" in moments_data:
                     for change in moments_data["changes"]:
-                        if change.get("entity") == "moment" and "items" in change:
-                            for item in change["items"]:
-                                moment_id = item.get("id") or item.get("moment_id")
-                                if moment_id and moment_id not in self.moment_ids:
+                        if change.get("entity") == "moment":
+                            for moment_id in self._ids_from_change(change):
+                                if moment_id not in self.moment_ids:
                                     self.moment_ids.append(moment_id)
             except Exception:
                 pass
@@ -211,13 +225,12 @@ class WebsiteUser(HttpUser):
         if images_response.status_code == 200:
             try:
                 images_data = images_response.json()
-                # Cache image IDs for later use
+                # Cache image IDs for later use (API returns items as dict: id -> entity)
                 if "changes" in images_data:
                     for change in images_data["changes"]:
-                        if change.get("entity") == "image" and "items" in change:
-                            for item in change["items"]:
-                                image_id = item.get("id") or item.get("image_id")
-                                if image_id and image_id not in self.image_ids:
+                        if change.get("entity") == "image":
+                            for image_id in self._ids_from_change(change):
+                                if image_id not in self.image_ids:
                                     self.image_ids.append(image_id)
             except Exception:
                 pass
@@ -243,10 +256,9 @@ class WebsiteUser(HttpUser):
                     images_data = images_response.json()
                     if "changes" in images_data:
                         for change in images_data["changes"]:
-                            if change.get("entity") == "image" and "items" in change:
-                                for item in change["items"]:
-                                    image_id = item.get("id") or item.get("image_id")
-                                    if image_id and image_id not in self.image_ids:
+                            if change.get("entity") == "image":
+                                for image_id in self._ids_from_change(change):
+                                    if image_id not in self.image_ids:
                                         self.image_ids.append(image_id)
                 except Exception:
                     pass
@@ -279,13 +291,12 @@ class WebsiteUser(HttpUser):
         if groups_response.status_code == 200:
             try:
                 groups_data = groups_response.json()
-                # Cache group IDs for later use
+                # Cache group IDs for later use (API returns items as dict: id -> entity)
                 if "changes" in groups_data:
                     for change in groups_data["changes"]:
-                        if change.get("entity") == "group" and "items" in change:
-                            for item in change["items"]:
-                                group_id = item.get("id") or item.get("group_id")
-                                if group_id and group_id not in self.group_ids:
+                        if change.get("entity") == "group":
+                            for group_id in self._ids_from_change(change):
+                                if group_id not in self.group_ids:
                                     self.group_ids.append(group_id)
             except Exception:
                 pass
@@ -311,10 +322,9 @@ class WebsiteUser(HttpUser):
                     groups_data = groups_response.json()
                     if "changes" in groups_data:
                         for change in groups_data["changes"]:
-                            if change.get("entity") == "group" and "items" in change:
-                                for item in change["items"]:
-                                    group_id = item.get("id") or item.get("group_id")
-                                    if group_id and group_id not in self.group_ids:
+                            if change.get("entity") == "group":
+                                for group_id in self._ids_from_change(change):
+                                    if group_id not in self.group_ids:
                                         self.group_ids.append(group_id)
                 except Exception:
                     pass
