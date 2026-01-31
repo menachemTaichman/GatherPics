@@ -2872,3 +2872,105 @@ CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON profi
 DROP TRIGGER IF EXISTS trg_queue_event_refresh ON events;
 CREATE TRIGGER trg_queue_event_refresh AFTER INSERT OR UPDATE OR DELETE ON events
     FOR EACH ROW EXECUTE FUNCTION queue_event_refresh();
+
+-- Immediate permission for actor: when current profile creates an entity, add to *_eff so same-request queries see it.
+-- Skips when cur_profile is not set (e.g. background workers). Async worker handles those.
+CREATE OR REPLACE FUNCTION trg_eff_immediate_images_insert() RETURNS TRIGGER AS $$
+DECLARE
+    v_profile_id UUID;
+BEGIN
+    v_profile_id := cur_profile_uuid('profile_id');
+    IF v_profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO images_eff (event_id, profile_id, image_id, is_accessible)
+    VALUES (NEW.event_id, v_profile_id, NEW.image_id, TRUE)
+    ON CONFLICT (profile_id, image_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trg_eff_immediate_faces_insert() RETURNS TRIGGER AS $$
+DECLARE
+    v_profile_id UUID;
+    v_event_id UUID;
+BEGIN
+    v_profile_id := cur_profile_uuid('profile_id');
+    IF v_profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    SELECT event_id INTO v_event_id FROM images WHERE image_id = NEW.image_id;
+    IF v_event_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO faces_eff (event_id, profile_id, face_id, is_accessible)
+    VALUES (v_event_id, v_profile_id, NEW.face_id, TRUE)
+    ON CONFLICT (profile_id, face_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trg_eff_immediate_groups_insert() RETURNS TRIGGER AS $$
+DECLARE
+    v_profile_id UUID;
+BEGIN
+    v_profile_id := cur_profile_uuid('profile_id');
+    IF v_profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO groups_eff (event_id, profile_id, group_id, is_accessible)
+    VALUES (NEW.event_id, v_profile_id, NEW.group_id, TRUE)
+    ON CONFLICT (profile_id, group_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trg_eff_immediate_moments_insert() RETURNS TRIGGER AS $$
+DECLARE
+    v_profile_id UUID;
+BEGIN
+    v_profile_id := cur_profile_uuid('profile_id');
+    IF v_profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO moments_eff (event_id, profile_id, moment_id, is_accessible)
+    VALUES (NEW.event_id, v_profile_id, NEW.moment_id, TRUE)
+    ON CONFLICT (profile_id, moment_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trg_eff_immediate_albums_insert() RETURNS TRIGGER AS $$
+DECLARE
+    v_profile_id UUID;
+BEGIN
+    v_profile_id := cur_profile_uuid('profile_id');
+    IF v_profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO albums_eff (event_id, profile_id, album_id, is_accessible)
+    VALUES (NEW.event_id, v_profile_id, NEW.album_id, TRUE)
+    ON CONFLICT (profile_id, album_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_eff_immediate_images_insert ON images;
+CREATE TRIGGER trg_eff_immediate_images_insert AFTER INSERT ON images
+    FOR EACH ROW EXECUTE FUNCTION trg_eff_immediate_images_insert();
+
+DROP TRIGGER IF EXISTS trg_eff_immediate_faces_insert ON faces;
+CREATE TRIGGER trg_eff_immediate_faces_insert AFTER INSERT ON faces
+    FOR EACH ROW EXECUTE FUNCTION trg_eff_immediate_faces_insert();
+
+DROP TRIGGER IF EXISTS trg_eff_immediate_groups_insert ON groups;
+CREATE TRIGGER trg_eff_immediate_groups_insert AFTER INSERT ON groups
+    FOR EACH ROW EXECUTE FUNCTION trg_eff_immediate_groups_insert();
+
+DROP TRIGGER IF EXISTS trg_eff_immediate_moments_insert ON moments;
+CREATE TRIGGER trg_eff_immediate_moments_insert AFTER INSERT ON moments
+    FOR EACH ROW EXECUTE FUNCTION trg_eff_immediate_moments_insert();
+
+DROP TRIGGER IF EXISTS trg_eff_immediate_albums_insert ON albums;
+CREATE TRIGGER trg_eff_immediate_albums_insert AFTER INSERT ON albums
+    FOR EACH ROW EXECUTE FUNCTION trg_eff_immediate_albums_insert();
