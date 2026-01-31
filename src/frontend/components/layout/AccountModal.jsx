@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, User, UserCircle, Edit2, Plus, LogOut, Lock, Trash2, FileText, Eye, Check, MessageSquare, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -382,7 +383,28 @@ export default function AccountModal({ hideButton = false }) {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 pt-6 pb-0" dir={isRTL ? 'rtl' : 'ltr'}>
+            <OverlayScrollbarsComponent
+              element="div"
+              className="flex-1 px-6 pt-6 pb-0 min-h-0"
+              options={{
+                scrollbars: {
+                  theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                  autoHide: 'never',
+                  autoHideDelay: 0,
+                  clickScroll: true,
+                  dragScroll: true,
+                  pointers: ['mouse', 'touch', 'pen'],
+                  visibility: 'visible',
+                  size: '10px',
+                },
+                overflow: {
+                  x: 'hidden',
+                  y: 'scroll',
+                },
+              }}
+              style={{ touchAction: 'pan-y' }}
+            >
+              <div dir={isRTL ? 'rtl' : 'ltr'}>
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ 
@@ -768,7 +790,8 @@ export default function AccountModal({ hideButton = false }) {
                   </>
                 )}
               </motion.div>
-            </div>
+              </div>
+            </OverlayScrollbarsComponent>
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">

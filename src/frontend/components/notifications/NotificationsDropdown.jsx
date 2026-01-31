@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { Bell, RefreshCw, Trash2, ChevronDown, Check, CheckCheck } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -183,7 +184,27 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   };
 
   const renderDropdownContent = () => (
-    <div className="w-80 max-h-96 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg">
+    <OverlayScrollbarsComponent
+      element="div"
+      className="w-80 max-h-96 bg-white border border-gray-200 rounded-md shadow-lg"
+      options={{
+        scrollbars: {
+          theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+          autoHide: 'never',
+          autoHideDelay: 0,
+          clickScroll: true,
+          dragScroll: true,
+          pointers: ['mouse', 'touch', 'pen'],
+          visibility: 'visible',
+          size: '10px',
+        },
+        overflow: {
+          x: 'hidden',
+          y: 'scroll',
+        },
+      }}
+      style={{ touchAction: 'pan-y' }}
+    >
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
         <div className={`flex items-center gap-2 text-sm text-gray-700 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <Bell className="w-4 h-4" />
@@ -264,7 +285,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
           })}
         </ul>
       )}
-    </div>
+    </OverlayScrollbarsComponent>
   );
 
   return isOpen && buttonRef ? createPortal(

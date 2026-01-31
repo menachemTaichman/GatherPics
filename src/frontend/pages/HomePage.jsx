@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, LogIn } from 'lucide-react';
 import { TopNavigationBar } from '../components/layout';
@@ -192,12 +193,34 @@ export default function HomePage() {
   return (
     <>
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
-      <div
-        className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden pt-[4rem]"
-        style={{ minHeight: 'calc(100vh - 4rem)' }}
-      >
-        {/* Subtle animated background accent */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+        <OverlayScrollbarsComponent
+          element="div"
+          className="flex-1 min-h-0"
+          options={{
+            scrollbars: {
+              theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+              autoHide: 'never',
+              autoHideDelay: 0,
+              clickScroll: true,
+              dragScroll: true,
+              pointers: ['mouse', 'touch', 'pen'],
+              visibility: 'visible',
+              size: '10px',
+            },
+            overflow: {
+              x: 'hidden',
+              y: 'scroll',
+            },
+          }}
+          style={{ touchAction: 'pan-y' }}
+        >
+          <div
+            className="bg-gradient-to-b from-gray-50 to-white relative overflow-hidden pt-[4rem] min-h-full"
+            style={{ minHeight: 'max(calc(100vh - 4rem - 10rem), 0px)' }}
+          >
+            {/* Subtle animated background accent */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
             className="absolute top-0 right-0 w-96 h-96 bg-primary-100/30 rounded-full blur-3xl"
             animate={{
@@ -388,6 +411,8 @@ export default function HomePage() {
             {APP_CONFIG.name}
           </p>
         </motion.div>
+          </div>
+        </OverlayScrollbarsComponent>
       </div>
 
       {/* Login Modal */}

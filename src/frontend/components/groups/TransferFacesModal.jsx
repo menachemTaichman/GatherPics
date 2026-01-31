@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { X, AlertTriangle, User, Plus, Users, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { groupsAPI, handleAPIError } from '../../utils/apiService';
 import { usePreference } from '../../hooks/useSettings';
@@ -441,7 +442,28 @@ export default function TransferFacesModal({
           {/* Groups Grid */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('transferFaces.selectExistingPerson')}</h3>
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto overflow-x-hidden">
+            <OverlayScrollbarsComponent
+              element="div"
+              className="max-h-64"
+              options={{
+                scrollbars: {
+                  theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                  autoHide: 'never',
+                  autoHideDelay: 0,
+                  clickScroll: true,
+                  dragScroll: true,
+                  pointers: ['mouse', 'touch', 'pen'],
+                  visibility: 'visible',
+                  size: '10px',
+                },
+                overflow: {
+                  x: 'hidden',
+                  y: 'scroll',
+                },
+              }}
+              style={{ touchAction: 'pan-y' }}
+            >
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               {filteredAndSortedGroups.map((group) => (
                 <div
                   key={group.id}
@@ -485,7 +507,8 @@ export default function TransferFacesModal({
                   {searchTerm ? t('transferFaces.noPeopleFound') : t('transferFaces.noPeopleAvailable')}
                 </div>
               )}
-            </div>
+              </div>
+            </OverlayScrollbarsComponent>
           </div>
 
           {/* New Group Creation */}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Trash2, X, Image, List, Save, RotateCcw, Plus, Clock, AlertTriangle, Minus } from 'lucide-react';
 import { sortMoments } from '../../utils/sorting';
@@ -647,6 +648,15 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
 
   // Ref for scroll container (used for programmatic scrolling)
   const scrollContainerRef = useRef(null);
+  const overlayScrollbarsRef = useRef(null);
+
+  const handleOverlayScrollbarsInit = useCallback((instance) => {
+    if (!instance) return;
+    try {
+      const viewport = instance.elements()?.viewport;
+      if (viewport) scrollContainerRef.current = viewport;
+    } catch (_) {}
+  }, []);
 
   // Refs to store latest state values for keyboard handler
   const editingMomentsRef = useRef(editingMoments);
@@ -851,7 +861,32 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
           </div>
         </div>
         
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+        <OverlayScrollbarsComponent
+          ref={overlayScrollbarsRef}
+          element="div"
+          className="flex-1 p-3 sm:p-4 md:p-6"
+          options={{
+            scrollbars: {
+              theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+              autoHide: 'never',
+              autoHideDelay: 0,
+              clickScroll: true,
+              dragScroll: true,
+              pointers: ['mouse', 'touch', 'pen'],
+              visibility: 'visible',
+              size: '10px',
+            },
+            overflow: {
+              x: 'hidden',
+              y: 'scroll',
+            },
+          }}
+          events={{
+            initialized: handleOverlayScrollbarsInit,
+            updated: handleOverlayScrollbarsInit,
+          }}
+          style={{ touchAction: 'pan-y' }}
+        >
           <div className="space-y-3">
       {editingMoments.filter(m => m && (m.id || m.moment_id)).map((moment, index) => (
               <div key={moment.id || moment.moment_id} data-moment-moment_id={moment.id || moment.moment_id} className="border rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow">
@@ -1111,7 +1146,7 @@ function EditMomentsModal({ eventUrl, onSave, onDelete, momentImagesMap, onRefre
               </div>
             ))}
           </div>
-        </div>
+        </OverlayScrollbarsComponent>
       </motion.div>
 
       {/* Edit Images Modal - Render as child modal */}

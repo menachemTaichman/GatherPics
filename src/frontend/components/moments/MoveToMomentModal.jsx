@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { X, AlertTriangle, Calendar, Plus, Clock, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { momentsAPI, handleAPIError } from '../../utils/apiService';
 import { usePreference } from '../../hooks/useSettings';
@@ -541,7 +542,28 @@ export default function MoveToMomentModal({
           {/* Moments Grid */}
           <div className="mb-4">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('moveToMoment.selectExistingMoment')}</h3>
-            <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-56 overflow-y-auto ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}>
+            <OverlayScrollbarsComponent
+              element="div"
+              className={`max-h-56 ${removeFromCurrent ? 'opacity-50 pointer-events-none' : ''}`}
+              options={{
+                scrollbars: {
+                  theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                  autoHide: 'never',
+                  autoHideDelay: 0,
+                  clickScroll: true,
+                  dragScroll: true,
+                  pointers: ['mouse', 'touch', 'pen'],
+                  visibility: 'visible',
+                  size: '10px',
+                },
+                overflow: {
+                  x: 'hidden',
+                  y: 'scroll',
+                },
+              }}
+              style={{ touchAction: 'pan-y' }}
+            >
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {filteredAndSortedMoments.map((moment) => (
                 <div
                   key={moment.id}
@@ -587,7 +609,8 @@ export default function MoveToMomentModal({
                   {searchTerm ? t('moveToMoment.noMomentsFound') : t('moveToMoment.noMomentsAvailable')}
                 </div>
               )}
-            </div>
+              </div>
+            </OverlayScrollbarsComponent>
           </div>
 
           {/* New Moment Creation */}

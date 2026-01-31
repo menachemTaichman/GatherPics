@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { motion } from 'framer-motion';
 import { FileText, Shield, Accessibility, Info, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -10,11 +11,14 @@ import { LongPressHoverButton } from '../components/common';
 import { APP_CONFIG } from '../config/appConfig';
 import { useRTL } from '../hooks/useRTL';
 
-function MarkdownSection({ content, title, navigate, onStickyH2Change, t, isRTL }) {
+function MarkdownSection({ content, title, navigate, onStickyH2Change, t, isRTL, scrollElement }) {
   const h2Refs = useRef({});
   const [stickyH2, setStickyH2] = useState(null);
 
   useEffect(() => {
+    const target = scrollElement || (typeof window !== 'undefined' ? window : null);
+    if (!target) return;
+
     const handleScroll = () => {
       // Find the current h2 that should be sticky
       const h2Elements = Object.values(h2Refs.current).filter(Boolean);
@@ -71,14 +75,14 @@ function MarkdownSection({ content, title, navigate, onStickyH2Change, t, isRTL 
       handleScroll();
     }, 100);
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    target.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll(); // Check initial state
     
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('scroll', handleScroll);
+      target.removeEventListener('scroll', handleScroll);
     };
-  }, [content]);
+  }, [content, scrollElement]);
 
   if (!content || content.trim() === '') {
     return (
@@ -446,6 +450,7 @@ export default function AboutPage() {
   const prevLanguageRef = useRef(i18n.language);
   const [stickyH2Info, setStickyH2Info] = useState(null);
   const [sidebarStyle, setSidebarStyle] = useState({});
+  const [scrollElement, setScrollElement] = useState(null);
   const [markdownContent, setMarkdownContent] = useState({
     about: '',
     terms: '',
@@ -463,12 +468,14 @@ export default function AboutPage() {
         setActiveSection(hash);
         // Prevent default scroll
         window.history.scrollRestoration = 'manual';
-        if (window.scrollY === 0) {
+        if (scrollElement) {
+          scrollElement.scrollTop = 0;
+        } else if (typeof window !== 'undefined' && window.scrollY === 0) {
           window.scrollTo(0, 0);
         }
       }
     }
-  }, [location.hash]);
+  }, [location.hash, scrollElement]);
 
   // Update URL hash when section changes
   useEffect(() => {
@@ -480,9 +487,13 @@ export default function AboutPage() {
   // Prevent scroll on mount if hash is present
   useEffect(() => {
     if (location.hash) {
-      window.scrollTo(0, 0);
+      if (scrollElement) {
+        scrollElement.scrollTop = 0;
+      } else if (typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+      }
     }
-  }, []);
+  }, [scrollElement]);
 
   useEffect(() => {
     document.title = `${t('about.about')} | ${APP_CONFIG.name}`;
@@ -519,8 +530,9 @@ export default function AboutPage() {
   useEffect(() => {
     const sidebar = sidebarRef.current;
     const container = sidebarContainerRef.current;
+    const target = scrollElement || (typeof window !== 'undefined' ? window : null);
     
-    if (!sidebar || !container) return;
+    if (!sidebar || !container || !target) return;
     
     // Check if we're on mobile (below lg breakpoint)
     const isMobile = () => window.innerWidth < 1024;
@@ -640,14 +652,14 @@ export default function AboutPage() {
       }, 100);
     }
     
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    target.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('resize', handleScroll, { passive: true });
     
     return () => {
-      window.removeEventListener('scroll', handleScroll);
+      target.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleScroll);
     };
-  }, [activeSection, i18n.language, isRTL]);
+  }, [activeSection, i18n.language, isRTL, scrollElement]);
 
   // Reset sticky header when section changes
   useEffect(() => {
@@ -657,6 +669,9 @@ export default function AboutPage() {
 
   // Handle sticky header visibility on scroll
   useEffect(() => {
+    const target = scrollElement || (typeof window !== 'undefined' ? window : null);
+    if (!target) return;
+
     const handleScroll = () => {
       if (!contentHeaderRef.current) return;
       
@@ -665,10 +680,10 @@ export default function AboutPage() {
       setShowStickyHeader(headerRect.top < 64);
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    target.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll(); // Check initial state
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [activeSection]);
+    return () => target.removeEventListener('scroll', handleScroll);
+  }, [activeSection, scrollElement]);
 
   const sections = [
     {
@@ -715,10 +730,44 @@ export default function AboutPage() {
 
   const activeSectionData = sections.find(s => s.id === activeSection) || sections[0];
 
+  const handleOverlayScrollbarsInit = (instance) => {
+    if (!instance) return;
+    try {
+      const viewport = instance.elements()?.viewport;
+      if (viewport) setScrollElement(viewport);
+    } catch (_) {}
+  };
+
   return (
     <>
       <TopNavigationBar variant="light" showBackground={true} mode="full" />
-      <div className="bg-gradient-to-b from-gray-50 to-white pt-[4rem]" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+        <OverlayScrollbarsComponent
+          element="div"
+          className="flex-1 min-h-0"
+          options={{
+            scrollbars: {
+              theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+              autoHide: 'never',
+              autoHideDelay: 0,
+              clickScroll: true,
+              dragScroll: true,
+              pointers: ['mouse', 'touch', 'pen'],
+              visibility: 'visible',
+              size: '10px',
+            },
+            overflow: {
+              x: 'hidden',
+              y: 'scroll',
+            },
+          }}
+          events={{
+            initialized: handleOverlayScrollbarsInit,
+            updated: handleOverlayScrollbarsInit,
+          }}
+          style={{ touchAction: 'pan-y' }}
+        >
+          <div className="bg-gradient-to-b from-gray-50 to-white pt-[4rem] min-h-full" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="container mx-auto px-4 pt-6 pb-4 max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start" style={{ overflow: 'visible' }}>
             {/* Sidebar Navigation */}
@@ -818,11 +867,14 @@ export default function AboutPage() {
                   onStickyH2Change={setStickyH2Info}
                   t={t}
                   isRTL={isRTL}
+                  scrollElement={scrollElement}
                 />
               </div>
             </motion.div>
           </div>
         </div>
+          </div>
+        </OverlayScrollbarsComponent>
       </div>
 
       {/* Feedback Modal */}

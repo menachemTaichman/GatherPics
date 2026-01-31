@@ -1,4 +1,5 @@
 import React from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { useRTL } from '../../hooks/useRTL';
 
@@ -80,7 +81,27 @@ export default function ScrollableTable({
 
   return (
     <div dir={isRTL ? 'rtl' : 'ltr'} className={`bg-white rounded-lg shadow-sm border border-gray-200 w-full mb-1 flex flex-col ${className}`} style={{ maxHeight: 'calc(100%)', ...style }}>
-      <div className="overflow-y-auto overflow-x-auto flex-1 min-h-0">
+      <OverlayScrollbarsComponent
+        element="div"
+        className="flex-1 min-h-0"
+        options={{
+          scrollbars: {
+            theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+            autoHide: 'never',
+            autoHideDelay: 0,
+            clickScroll: true,
+            dragScroll: true,
+            pointers: ['mouse', 'touch', 'pen'],
+            visibility: 'visible',
+            size: '10px',
+          },
+          overflow: {
+            x: 'scroll',
+            y: 'scroll',
+          },
+        }}
+        style={{ touchAction: 'pan-y pan-x' }}
+      >
         <table dir={isRTL ? 'rtl' : 'ltr'} className="w-full border-collapse min-w-full">
           <thead className="bg-white sticky top-0 z-20 shadow-sm">
             <tr className="border-b border-gray-200">
@@ -176,7 +197,7 @@ export default function ScrollableTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </OverlayScrollbarsComponent>
     </div>
   );
 }

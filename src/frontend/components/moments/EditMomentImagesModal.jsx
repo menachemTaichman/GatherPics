@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp, ArrowDown, Filter, X, CheckCheck, RotateCcw } from 'lucide-react';
 import { sortImagesWithDatePriority, toggleSortOrder } from '../../utils/sorting';
@@ -802,32 +803,55 @@ function EditMomentImagesModal({ eventUrl, moment, momentImagesMap, onRefreshIma
           </div>
 
         </div>
-        <div className="flex-1 min-h-0 overflow-x-hidden p-3 sm:p-4 md:p-6">
+        <OverlayScrollbarsComponent
+          element="div"
+          className="flex-1 min-h-0 p-3 sm:p-4 md:p-6"
+          options={{
+            scrollbars: {
+              theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+              autoHide: 'never',
+              autoHideDelay: 0,
+              clickScroll: true,
+              dragScroll: true,
+              pointers: ['mouse', 'touch', 'pen'],
+              visibility: 'visible',
+              size: '10px',
+            },
+            overflow: {
+              x: 'hidden',
+              y: 'scroll',
+            },
+          }}
+          style={{ touchAction: 'pan-y' }}
+        >
           {filteredImages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="flex items-center justify-center h-full min-h-[200px] text-gray-500">
               {t('moments.noImages')}
             </div>
           ) : (
-            <AbsoluteMasonryGrid
-              items={filteredImages}
-              baseSize={120}
-              containerHeight="100%"
-              className="w-full h-full"
-              gap={12}
-              imageClasses={{}}
-              bufferMultiplier={3.0}
-              onPinchRef={(node) => {
-                scrollContainerRef.current = node;
-              }}
-              onItemRef={(image, index, el) => {
-                if (el) {
-                  imageRefs.current[index] = el;
-                }
-              }}
-              renderItem={renderImageItem}
-            />
+            <div className="h-full min-h-[240px]">
+              <AbsoluteMasonryGrid
+                items={filteredImages}
+                baseSize={120}
+                containerHeight="100%"
+                className="w-full h-full"
+                gap={12}
+                imageClasses={{}}
+                bufferMultiplier={3.0}
+                useCustomScrollbar={true}
+                onPinchRef={(node) => {
+                  scrollContainerRef.current = node;
+                }}
+                onItemRef={(image, index, el) => {
+                  if (el) {
+                    imageRefs.current[index] = el;
+                  }
+                }}
+                renderItem={renderImageItem}
+              />
+            </div>
           )}
-        </div>
+        </OverlayScrollbarsComponent>
       </motion.div>
     </div>
     </AnimatePresence>

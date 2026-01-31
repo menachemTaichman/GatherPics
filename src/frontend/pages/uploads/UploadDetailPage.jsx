@@ -13,6 +13,7 @@ import { sortImages, sortGroups } from '../../utils/sorting';
 import { getPreference, setPreference } from '../../utils/settings';
 import { usePreference } from '../../hooks/useSettings';
 import { formatErrorMessage } from '../../utils/errorHandler';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { SingleImageTile, ImageViewer } from '../../components/images';
 import AbsoluteMasonryGrid from '../../components/images/AbsoluteMasonryGrid';
 import { FloatingSelectionControls } from '../../components/layout';
@@ -1534,7 +1535,25 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   <p className="text-gray-500">{t('uploadDetail.noGroupsInThisUpload')}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <OverlayScrollbarsComponent
+                  element="div"
+                  className="mt-2"
+                  options={{
+                    scrollbars: {
+                      theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                      autoHide: 'never',
+                      autoHideDelay: 0,
+                      clickScroll: true,
+                      dragScroll: true,
+                      pointers: ['mouse', 'touch', 'pen'],
+                      visibility: 'visible',
+                      size: '10px',
+                    },
+                    overflow: { x: 'hidden', y: 'scroll' },
+                  }}
+                  style={{ maxHeight: isMobile ? 'calc(100vh - 15rem)' : 'calc(100vh - 16rem)', touchAction: 'pan-y' }}
+                >
+                  <div className="space-y-4 pr-2">
                   {uploadGroups.map((group) => {
                     const isExpanded = expandedGroup === group.id;
                     const groupFaces = isExpanded ? getGroupFacesInUpload(group.id) : [];
@@ -1656,48 +1675,43 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {groupFaces.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noFacesFromThisUpload')}</p>
                               ) : (
-                                <div style={{ height: '430px', marginTop: '0.5rem' }}>
-                                  <AbsoluteMasonryGrid
-                                    items={groupFaces}
-                                    baseSize={Math.max(60, 266 * imageSize)}
-                                    imageClasses={imageClasses}
-                                    containerHeight="100%"
-                                    className="w-full"
-                                    onPinchRef={setGridContainerRef}
-                                    onSelectRange={handleSelectRange}
-                                    style={{
-                                      '--grid-scale': 1,
-                                      '--grid-z-index': 1,
-                                    }}
-                                    onItemRef={(face, faceIndex, el) => {
-                                      if (!groupFaceTileRefs.current[group.id]) {
-                                        groupFaceTileRefs.current[group.id] = [];
-                                      }
-                                      if (el) {
-                                        // Store ref for arrow key navigation - find actual index in groupFaces array
-                                        const actualIndex = groupFaces.findIndex(f => f.id === face.id);
-                                        if (actualIndex !== -1) {
-                                          // Ensure array is large enough
-                                          if (groupFaceTileRefs.current[group.id].length < actualIndex + 1) {
-                                            groupFaceTileRefs.current[group.id].length = actualIndex + 1;
-                                          }
-                                          if (groupFaceTileRefs.current[group.id][actualIndex] !== el) {
-                                            groupFaceTileRefs.current[group.id][actualIndex] = el;
-                                          }
-                                        }
-                                      }
-                                    }}
-                                    renderItem={(face, faceIndex, isPortrait, setRef, extraProps) => {
+                                <OverlayScrollbarsComponent
+                                  element="div"
+                                  className="mt-2"
+                                  options={{
+                                    scrollbars: {
+                                      theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                                      autoHide: 'never',
+                                      autoHideDelay: 0,
+                                      clickScroll: true,
+                                      dragScroll: true,
+                                      pointers: ['mouse', 'touch', 'pen'],
+                                      visibility: 'visible',
+                                      size: '10px',
+                                    },
+                                    overflow: { x: 'hidden', y: 'scroll' },
+                                  }}
+                                  style={{ height: '430px', touchAction: 'pan-y' }}
+                                >
+                                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 p-1">
+                                    {groupFaces.map((face, faceIndex) => {
                                       const img = entities?.[eventId]?.images?.[face.image_id];
                                       if (!img) return null;
                                       const isRep = isRepresentative(face.id);
                                       return (
                                         <div
-                                          className={`photo-card ${imageClasses[face.image_id] || 'square'}`}
-                                          style={{ width: '100%', height: '100%' }}
+                                          key={face.id}
+                                          ref={(el) => {
+                                            if (!groupFaceTileRefs.current[group.id]) {
+                                              groupFaceTileRefs.current[group.id] = [];
+                                            }
+                                            if (el && groupFaceTileRefs.current[group.id][faceIndex] !== el) {
+                                              groupFaceTileRefs.current[group.id][faceIndex] = el;
+                                            }
+                                          }}
+                                          className={`aspect-square ${imageClasses[face.image_id] || 'square'}`}
                                         >
                                           <SingleImageTile
-                                            ref={setRef}
                                             image={img}
                                             aspectClass={imageClasses[img.id] || 'square'}
                                             imageFit="cover"
@@ -1705,7 +1719,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                             selectionMode={selectionMode}
                                             isSelected={currentSelection.has(face.image_id)}
                                             onToggleSelect={(e) => toggleImageSelection(face.image_id, e)}
-                                            startDrag={extraProps?.startDrag}
                                             onOpen={() => openImageViewerInGroup(group.id, face.id)}
                                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
@@ -1722,9 +1735,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                           />
                                         </div>
                                       );
-                                    }}
-                                  />
-                                </div>
+                                    })}
+                                  </div>
+                                </OverlayScrollbarsComponent>
                               )}
                             </div>
                           </div>
@@ -1732,7 +1745,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       </div>
                     );
                   })}
-                </div>
+                  </div>
+                </OverlayScrollbarsComponent>
               )}
             </motion.div>
           )}
@@ -1751,7 +1765,25 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                   <p className="text-gray-500">{t('uploadDetail.noMomentsInThisUpload')}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <OverlayScrollbarsComponent
+                  element="div"
+                  className="mt-2"
+                  options={{
+                    scrollbars: {
+                      theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                      autoHide: 'never',
+                      autoHideDelay: 0,
+                      clickScroll: true,
+                      dragScroll: true,
+                      pointers: ['mouse', 'touch', 'pen'],
+                      visibility: 'visible',
+                      size: '10px',
+                    },
+                    overflow: { x: 'hidden', y: 'scroll' },
+                  }}
+                  style={{ maxHeight: isMobile ? 'calc(100vh - 15rem)' : 'calc(100vh - 16rem)', touchAction: 'pan-y' }}
+                >
+                  <div className="space-y-4 pr-2">
                   {uploadMoments.map((moment) => {
                     const isExpanded = expandedMoment === moment.id;
                     const momentImages = isExpanded ? getMomentImagesInUpload(moment.id) : [];
@@ -1860,46 +1892,41 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                               {momentImages.length === 0 ? (
                                 <p className="text-gray-500 text-sm text-center py-4">{t('uploadDetail.noImagesFromThisUpload')}</p>
                               ) : (
-                                <div style={{ height: '430px', marginTop: '0.5rem' }}>
-                                  <AbsoluteMasonryGrid
-                                    items={momentImages}
-                                    baseSize={Math.max(60, 266 * imageSize)}
-                                    imageClasses={imageClasses}
-                                    containerHeight="100%"
-                                    className="w-full"
-                                    onPinchRef={setGridContainerRef}
-                                    onSelectRange={handleSelectRange}
-                                    style={{
-                                      '--grid-scale': 1,
-                                      '--grid-z-index': 1,
-                                    }}
-                                    onItemRef={(img, imgIndex, el) => {
-                                      if (!momentImageTileRefs.current[moment.id]) {
-                                        momentImageTileRefs.current[moment.id] = [];
-                                      }
-                                      if (el) {
-                                        // Store ref for arrow key navigation - find actual index in momentImages array
-                                        const actualIndex = momentImages.findIndex(m => m.id === img.id);
-                                        if (actualIndex !== -1) {
-                                          // Ensure array is large enough
-                                          if (momentImageTileRefs.current[moment.id].length < actualIndex + 1) {
-                                            momentImageTileRefs.current[moment.id].length = actualIndex + 1;
-                                          }
-                                          if (momentImageTileRefs.current[moment.id][actualIndex] !== el) {
-                                            momentImageTileRefs.current[moment.id][actualIndex] = el;
-                                          }
-                                        }
-                                      }
-                                    }}
-                                    renderItem={(img, imgIndex, isPortrait, setRef, extraProps) => {
+                                <OverlayScrollbarsComponent
+                                  element="div"
+                                  className="mt-2"
+                                  options={{
+                                    scrollbars: {
+                                      theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
+                                      autoHide: 'never',
+                                      autoHideDelay: 0,
+                                      clickScroll: true,
+                                      dragScroll: true,
+                                      pointers: ['mouse', 'touch', 'pen'],
+                                      visibility: 'visible',
+                                      size: '10px',
+                                    },
+                                    overflow: { x: 'hidden', y: 'scroll' },
+                                  }}
+                                  style={{ height: '430px', touchAction: 'pan-y' }}
+                                >
+                                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 p-1">
+                                    {momentImages.map((img, imgIndex) => {
                                       const isRep = isRepresentative(img.id);
                                       return (
                                         <div
-                                          className={`photo-card ${imageClasses[img.id] || 'square'}`}
-                                          style={{ width: '100%', height: '100%' }}
+                                          key={img.id}
+                                          ref={(el) => {
+                                            if (!momentImageTileRefs.current[moment.id]) {
+                                              momentImageTileRefs.current[moment.id] = [];
+                                            }
+                                            if (el && momentImageTileRefs.current[moment.id][imgIndex] !== el) {
+                                              momentImageTileRefs.current[moment.id][imgIndex] = el;
+                                            }
+                                          }}
+                                          className={`aspect-square ${imageClasses[img.id] || 'square'}`}
                                         >
                                           <SingleImageTile
-                                            ref={setRef}
                                             image={img}
                                             aspectClass={imageClasses[img.id] || 'square'}
                                             imageFit="cover"
@@ -1907,7 +1934,6 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                             selectionMode={selectionMode}
                                             isSelected={currentSelection.has(img.id)}
                                             onToggleSelect={(e) => toggleImageSelection(img.id, e)}
-                                            startDrag={extraProps?.startDrag}
                                             onOpen={() => openImageViewerInMoment(moment.id, img.id)}
                                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
@@ -1923,9 +1949,9 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                           />
                                         </div>
                                       );
-                                    }}
-                                  />
-                                </div>
+                                    })}
+                                  </div>
+                                </OverlayScrollbarsComponent>
                               )}
                             </div>
                           </div>
@@ -1933,7 +1959,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                       </div>
                     );
                   })}
-                </div>
+                  </div>
+                </OverlayScrollbarsComponent>
               )}
             </motion.div>
           )}
