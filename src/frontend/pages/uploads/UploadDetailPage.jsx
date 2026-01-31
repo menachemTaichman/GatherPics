@@ -210,7 +210,7 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     }));
   }, []);
   
-  // Sort groups by name or count
+  // Sort groups by name or count (count = faces in this upload, from upload relation)
   const uploadGroups = useMemo(() => {
     // Use placeholders when not authenticated
     const groups = isAuthenticated ? rawUploadGroups : placeholderGroups;
@@ -218,9 +218,17 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     // Skip sorting for placeholders
     if (!isAuthenticated) return groups;
     
-    // Use sortGroups utility (supports 'name' and 'count' sorting)
+    if (groupsSortBy === 'count') {
+      // Sort by faces in this upload (upload_faces_count from upload.groups[groupId])
+      return [...groups].sort((a, b) => {
+        const countA = upload?.groups?.[a.id]?.upload_faces_count ?? 0;
+        const countB = upload?.groups?.[b.id]?.upload_faces_count ?? 0;
+        const comparison = countA - countB;
+        return sortDir === 'asc' ? comparison : -comparison;
+      });
+    }
     return sortGroups(groups, groupsSortBy, sortDir);
-  }, [rawUploadGroups, placeholderGroups, groupsSortBy, sortDir, isAuthenticated]);
+  }, [rawUploadGroups, placeholderGroups, groupsSortBy, sortDir, isAuthenticated, upload]);
   
   // Sort moments by label (which contains time)
   const uploadMoments = useMemo(() => {
