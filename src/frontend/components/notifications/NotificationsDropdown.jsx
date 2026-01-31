@@ -172,13 +172,35 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
     if (!buttonRef) return {};
     const rect = buttonRef.getBoundingClientRect();
     const dropdownWidth = 320; // w-80 = 320px
+    const dropdownMaxHeight = 384; // max-h-96 = 24rem
+    const gap = 4;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
+    const showAbove = spaceBelow < Math.min(dropdownMaxHeight, spaceAbove) && spaceAbove >= 200;
+
+    // Constrain horizontal position to viewport (especially for mobile)
+    const maxW = window.innerWidth - margin * 2;
+    let left = rect.left;
+    let right = window.innerWidth - rect.right;
+    if (!isRTL) {
+      if (left + dropdownWidth > window.innerWidth - margin) left = window.innerWidth - Math.min(dropdownWidth, maxW) - margin;
+      if (left < margin) left = margin;
+    } else {
+      if (right + dropdownWidth > window.innerWidth - margin) right = window.innerWidth - Math.min(dropdownWidth, maxW) - margin;
+      if (right < margin) right = margin;
+    }
+
     return {
       position: 'fixed',
-      ...(isRTL 
-        ? { right: `${window.innerWidth - rect.right}px` }
-        : { left: `${rect.left}px` }
+      ...(isRTL
+        ? { right: `${right}px` }
+        : { left: `${left}px` }
       ),
-      top: `${rect.bottom}px`,
+      ...(showAbove
+        ? { bottom: `${window.innerHeight - rect.top + gap}px` }
+        : { top: `${rect.bottom + gap}px` }
+      ),
       zIndex: 10000,
     };
   };
@@ -186,7 +208,7 @@ export default function NotificationsDropdown({ buttonRef, isOpen, onClose }) {
   const renderDropdownContent = () => (
     <OverlayScrollbarsComponent
       element="div"
-      className="w-80 max-h-96 bg-white border border-gray-200 rounded-md shadow-lg"
+      className="w-80 max-w-[calc(100vw-16px)] max-h-96 bg-white border border-gray-200 rounded-md shadow-lg"
       options={{
         scrollbars: {
           theme: isRTL ? 'os-theme-dark os-theme-dark-rtl' : 'os-theme-dark',
