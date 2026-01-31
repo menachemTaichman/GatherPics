@@ -23,6 +23,7 @@ export default function TransferFacesModal({
   currentGroup,
   selectedFaces,
   onTransferComplete,
+  onTransferInitiated,
   sourceGroupId,
   urlHelpers: injectedUrlHelpers,
   showCrops = false // Add showCrops prop to know current mode
@@ -229,6 +230,11 @@ export default function TransferFacesModal({
     }
 
     setError('');
+
+    // Notify parent before API call - when transferring all from current group, source is deleted
+    if (onTransferInitiated) {
+      onTransferInitiated(selectedGroupId || 'pending');
+    }
 
     try {
       // Extract face ids from face objects

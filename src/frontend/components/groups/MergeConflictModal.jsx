@@ -24,6 +24,7 @@ export default function MergeConflictModal({
   onCancel,
   onNavigateToGroup,
   onTransferComplete,
+  onTransferInitiated,
   urlHelpers: injectedUrlHelpers,
   showCrops = false // Add showCrops prop to know current mode
 }) {
@@ -84,6 +85,9 @@ export default function MergeConflictModal({
   const handleTransfer = async () => {
     setLoading(true);
     try {
+      if (onTransferInitiated) {
+        onTransferInitiated(conflictingGroupId);
+      }
       // Check if currentGroup exists before accessing its id
       if (!currentGroup || !currentGroup.id) {
         console.error('Current person is null or missing id');

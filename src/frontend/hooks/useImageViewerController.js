@@ -4,6 +4,8 @@ export default function useImageViewerController({
   eventUrl,
   showToast,
   onTransferComplete = null,
+  onTransferInitiated = null,
+  onTransferModalClose = null,
   onJumpToMoment = null,
   defaultSortBy = 'date',
   defaultSortOrder = 'asc',
@@ -30,15 +32,25 @@ export default function useImageViewerController({
 
   // Stabilize external callbacks to avoid prop churn
   const onTransferCompleteRef = useRef(onTransferComplete);
+  const onTransferInitiatedRef = useRef(onTransferInitiated);
+  const onTransferModalCloseRef = useRef(onTransferModalClose);
   const onJumpToMomentRef = useRef(onJumpToMoment);
   const showToastRef = useRef(showToast);
   onTransferCompleteRef.current = onTransferComplete;
+  onTransferInitiatedRef.current = onTransferInitiated;
+  onTransferModalCloseRef.current = onTransferModalClose;
   onJumpToMomentRef.current = onJumpToMoment;
   showToastRef.current = showToast;
 
   // Stable wrappers so prop identities don't churn when viewerProps changes
   const stableOnTransferComplete = useCallback((...args) => {
     if (onTransferCompleteRef.current) return onTransferCompleteRef.current(...args);
+  }, []);
+  const stableOnTransferInitiated = useCallback((...args) => {
+    if (onTransferInitiatedRef.current) return onTransferInitiatedRef.current(...args);
+  }, []);
+  const stableOnTransferModalClose = useCallback((...args) => {
+    if (onTransferModalCloseRef.current) return onTransferModalCloseRef.current(...args);
   }, []);
   const stableOnJumpToMoment = useCallback((...args) => {
     if (onJumpToMomentRef.current) return onJumpToMomentRef.current(...args);
@@ -90,6 +102,8 @@ export default function useImageViewerController({
     currentGroupId,
     onJumpToMoment: stableOnJumpToMoment,
     onTransferComplete: stableOnTransferComplete,
+    onTransferInitiated: stableOnTransferInitiated,
+    onTransferModalClose: stableOnTransferModalClose,
     showToast: stableShowToast,
     urlHelpers,
     filteredIds,
@@ -102,7 +116,7 @@ export default function useImageViewerController({
     filterGroups: currentFilterGroups,
     filterMode: currentFilterMode,
     onlySelected: currentOnlySelected,
-  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, currentFilterGroups, currentFilterMode, currentOnlySelected, stableOnJumpToMoment, stableOnTransferComplete, stableShowToast, urlHelpers]);
+  }), [eventUrl, close, navigate, index, currentGroupId, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, currentFilterGroups, currentFilterMode, currentOnlySelected, stableOnJumpToMoment, stableOnTransferComplete, stableOnTransferInitiated, stableOnTransferModalClose, stableShowToast, urlHelpers]);
 
   return { isOpen, open, close, navigate, viewerProps };
 }

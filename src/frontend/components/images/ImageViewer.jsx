@@ -192,7 +192,7 @@ function ImageViewerActions({
   );
 }
 
-function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false, onImageChange = null }) {
+function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, currentIndex, currentGroupId, onJumpToMoment, groups, onTransferComplete, onTransferInitiated, onTransferModalClose, showToast, parent, entity, sortBy, sortOrder, filteredIds, filterByUploadId, urlHelpers, filterGroups, filterMode, onlySelected, includeArchivedOverride = undefined, isUnassociatedGroup = false, onImageChange = null }) {
   const { t } = useTranslation();
   const permissions = usePermissions(); // <-- add this near the top of the component
   const { isRTL, ms, me, startClass, endClass } = useRTL();
@@ -2658,6 +2658,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           onClose={() => {
             setShowTransferModal(false);
             setSelectedFaceForTransfer(null);
+            onTransferModalClose?.();
           }}
           currentGroup={selectedFaceForTransfer ? (() => {
             const gid = selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id;
@@ -2666,6 +2667,7 @@ function ImageViewer({ image, eventUrl, onClose, onNavigate, totalImages, curren
           })() : null}
           selectedFaces={selectedFaceForTransfer?.all_faces_in_image || (selectedFaceForTransfer ? [selectedFaceForTransfer] : [])}
           onTransferComplete={handleTransferComplete}
+          onTransferInitiated={onTransferInitiated}
           sourceGroupId={selectedFaceForTransfer ? (selectedFaceForTransfer.groupId || selectedFaceForTransfer.group_id) : null}
           showCrops={true}
         />

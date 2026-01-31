@@ -108,6 +108,7 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   
   const __lastUrlRef = useRef('');
   const __initialRestorationComplete = useRef(false);
+  const pendingTransferTargetGroupIdRef = useRef(null);
   const { group_name, eventUrl } = useParams();
   const eventId = useEventId(eventUrl);
   const navigate = useNavigate();
@@ -267,10 +268,12 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
   
   
   // Initialize ImageViewer controller
-  const { isOpen: viewerOpen, open: openViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
+  const { isOpen: viewerOpen, open: openViewer, close: closeViewer, navigate: navigateViewer, viewerProps } = useImageViewerController({
     eventUrl,
     showToast,
     onTransferComplete: (result) => handleTransferComplete(result),
+    onTransferInitiated: (targetGroupId) => { pendingTransferTargetGroupIdRef.current = targetGroupId; },
+    onTransferModalClose: () => { pendingTransferTargetGroupIdRef.current = null; },
     onJumpToMoment: null, // Let ImageViewer handle navigation with proper eventUrl
     defaultSortBy: 'date',
     defaultSortOrder: sortOrder,
@@ -309,9 +312,14 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
     try { return decodeURIComponent(group_name || ''); } catch { return group_name || ''; }
   }, [group_name]);
 
+  // Close ImageViewer when navigating to a different group (e.g. from toast link after transfer)
+  const prevGroupNameRef = useRef(group_name);
   useEffect(() => {
-    
-  }, [eventUrl, group_name, decodedGroupName]);
+    if (prevGroupNameRef.current != null && group_name != null && prevGroupNameRef.current !== group_name) {
+      closeViewer();
+    }
+    prevGroupNameRef.current = group_name;
+  }, [group_name, closeViewer]);
 
   // Initialize filter state from URL on first load - only run once
   useEffect(() => {
@@ -964,6 +972,21 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
         setGroup(foundGroup);
       }
       return;
+    }
+    // Transfer all images may have deleted the current group - navigate to target instead of gallery
+    const pendingTarget = pendingTransferTargetGroupIdRef.current;
+    if (pendingTarget) {
+      pendingTransferTargetGroupIdRef.current = null;
+      if (pendingTarget === 'pending') {
+        // Target ID unknown yet (e.g. new group) - skip redirect, handleTransferComplete will navigate
+        return;
+      }
+      const targetGroup = (currentGroups || []).find(g => g.id === pendingTarget) ||
+        (storeSelectors.groupsAll(useDataStore.getState(), eventId) || []).find(g => g.id === pendingTarget);
+      if (targetGroup) {
+        navigate(`/${eventUrl}/people/${encodeURIComponent(targetGroup.label)}`, { replace: true });
+        return;
+      }
     }
     if (!attemptedLookupRef.current) {
       attemptedLookupRef.current = true;
@@ -2146,13 +2169,19 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
           eventUrl={eventUrl}
           urlHelpers={urlHelpers}
           showCrops={showCrops}
-          onClose={() => setShowMergeModal(false)}
+          onClose={() => {
+            setShowMergeModal(false);
+            pendingTransferTargetGroupIdRef.current = null;
+          }}
           newName={conflictData.newName}
           currentGroup={conflictData.currentGroup}
           conflictingGroup={conflictData.conflictingGroup}
           onMerge={handleMergeGroups}
           onCancel={handleMergeCancelLocal}
           onTransferComplete={handleTransferComplete}
+          onTransferInitiated={(targetGroupId) => {
+            pendingTransferTargetGroupIdRef.current = targetGroupId;
+          }}
           onNavigateToGroup={(targetGroupId, idsToHighlight = null) => {
             // Find the target group and navigate to it
             const targetGroup = currentGroups.find(g => g.id === targetGroupId);
@@ -2188,11 +2217,15 @@ export default function GroupDetail({ groups, onDeleteGroup, onRefreshGroups, ur
            onClose={() => {
              setShowTransferModal(false);
              setSelectedFacesForTransfer([]);
+             pendingTransferTargetGroupIdRef.current = null;
            }}
            groups={currentGroups}
            currentGroup={group}
            selectedFaces={selectedFacesForTransfer}
            onTransferComplete={handleTransferComplete}
+           onTransferInitiated={(targetGroupId) => {
+             pendingTransferTargetGroupIdRef.current = targetGroupId;
+           }}
          />
        )}
 
