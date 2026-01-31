@@ -441,11 +441,11 @@ export default function TransferFacesModal({
           {/* Groups Grid */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t('transferFaces.selectExistingPerson')}</h3>
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-64 overflow-y-auto overflow-x-hidden">
               {filteredAndSortedGroups.map((group) => (
                 <div
                   key={group.id}
-                  className={`p-2 border border-transparent rounded-lg cursor-pointer transition-colors ${
+                  className={`min-w-0 p-2 border border-transparent rounded-lg cursor-pointer transition-colors ${
                     selectedGroupId === group.id
                       ? 'border-orange-500 bg-orange-50'
                       : 'hover:border-gray-300'
@@ -469,7 +469,7 @@ export default function TransferFacesModal({
                         }
                       )}
                     </div>
-                    <div className="text-center">
+                    <div className="text-center min-w-0 w-full">
                       <p className="font-medium text-gray-900 text-xs truncate w-full">
                         {group.label || `Person ${group.id}`}
                       </p>
