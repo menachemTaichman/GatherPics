@@ -278,14 +278,39 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     enableRange: true,
   });
 
+  // Entities needed for group faces selection (before getGroupFacesInUpload is defined)
+  const entitiesForSelection = useDataStore((state) => state.entities?.[eventId] || null);
+  const groupFacesForSelection = useMemo(() => {
+    if (mode !== 'groups' || !expandedGroup || !entitiesForSelection) return [];
+    const group = entitiesForSelection.groups?.[expandedGroup];
+    if (!group?.faces) return [];
+    const facesMap = entitiesForSelection.faces || {};
+    const imagesMap = entitiesForSelection.images || {};
+    const faces = Array.from(group.faces)
+      .map((faceId) => facesMap[faceId])
+      .filter((face) => {
+        if (!face) return false;
+        const image = imagesMap[face.image_id];
+        return image && String(image.upload_id) === String(uploadId);
+      });
+    return faces.sort((a, b) => {
+      const imgA = imagesMap[a.image_id];
+      const imgB = imagesMap[b.image_id];
+      if (!imgA || !imgB) return 0;
+      const dateA = imgA.date_taken ? new Date(imgA.date_taken).getTime() : 0;
+      const dateB = imgB.date_taken ? new Date(imgB.date_taken).getTime() : 0;
+      return sortDir === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+  }, [mode, expandedGroup, entitiesForSelection, uploadId, sortDir]);
+
   const {
     selectedKeys: selectedImagesInGroupsMode,
     toggleKey: toggleSelectedImageInGroupsMode,
     clear: clearGroupSelection,
     selectAll: selectAllImagesInGroupsMode,
   } = useImageSelection({
-    items: uploadImages,
-    getKey: (img) => img?.id,
+    items: groupFacesForSelection,
+    getKey: (face) => (face?.id != null ? String(face.id) : undefined),
     enableRange: true,
   });
 
@@ -583,20 +608,29 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
   };
 
   // Open image viewer for a group (showing only images from this upload)
+  // Viewer shows unique images; index must be into that list (same order as useChilds in ImageViewer)
   const openImageViewerInGroup = (groupId, faceId) => {
     // Track context for refocus
     currentViewerContextRef.current = { mode: 'groups', groupId, momentId: null };
     
     const faces = getGroupFacesInUpload(groupId);
-    const imageIds = faces.map(f => f.image_id);
     const face = entities?.[eventId]?.faces?.[faceId];
     if (!face) return;
     
-    const index = imageIds.indexOf(face.image_id);
+    // Build unique image list in same order as viewer (first occurrence of each image)
+    const uniqueImageIds = [];
+    const seen = new Set();
+    for (const f of faces) {
+      if (!seen.has(f.image_id)) {
+        seen.add(f.image_id);
+        uniqueImageIds.push(f.image_id);
+      }
+    }
+    const index = uniqueImageIds.indexOf(face.image_id);
     if (index === -1) return;
     
-    setCurrentImageId(face.image_id);
-    openViewer({ index, parent: groupId, entity: 'group', sortBy: 'date', sortOrder: 'asc', filterByUploadId: uploadId });
+    setCurrentImageId(face.id);
+    openViewer({ index, parent: groupId, entity: 'group', sortBy: 'date', sortOrder: sortDir, filterByUploadId: uploadId });
   };
 
   // Open image viewer for a moment (showing only images from this upload)
@@ -624,19 +658,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
     // ids הוא מערך של כל הפריטים שנבחרו בטווח (כמו Shift)
     if (!ids || ids.length === 0) return;
 
-    // ב-groups mode, useSwipeSelection מחזיר face IDs, אבל הבחירה היא לפי image IDs
-    // צריך להמיר face IDs ל-image IDs
-    let idsToUse = ids;
-    if (mode === 'groups' && expandedGroup) {
-      const groupFaces = getGroupFacesInUpload(expandedGroup);
-      const faceIdToImageIdMap = new Map();
-      groupFaces.forEach(face => {
-        faceIdToImageIdMap.set(String(face.id), String(face.image_id));
-      });
-      
-      // המיר face IDs ל-image IDs
-      idsToUse = ids.map(id => faceIdToImageIdMap.get(String(id)) || id).filter(Boolean);
-    }
+    // Range selection is only used in images/moments grids (image IDs). In groups mode the face grid has no onSelectRange.
+    const idsToUse = ids;
 
     // אם זו תחילת לחיצה ארוכה (checkbox)
     if (isStart) {
@@ -1717,8 +1740,8 @@ export default function UploadDetail({ eventUrl, urlHelpers }) {
                                             imageFit="cover"
                                             thumbSrc={img.isPlaceholder ? null : (urlHelpers?.getFaceCropUrl?.(face.id))}
                                             selectionMode={selectionMode}
-                                            isSelected={currentSelection.has(face.image_id)}
-                                            onToggleSelect={(e) => toggleImageSelection(face.image_id, e)}
+                                            isSelected={currentSelection.has(String(face.id))}
+                                            onToggleSelect={(e) => toggleImageSelection(String(face.id), e)}
                                             onOpen={() => openImageViewerInGroup(group.id, face.id)}
                                             onImageLoad={(e) => handleImageLoad(img.id, e)}
                                             eventUrl={eventUrl}
