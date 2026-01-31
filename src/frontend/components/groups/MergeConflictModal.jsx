@@ -99,8 +99,8 @@ export default function MergeConflictModal({
       // Get all faces and images from the current group from store BEFORE transfer
       const store = useDataStore.getState();
       const currentGroupData = store.entities?.[eventId]?.groups?.[currentGroup.id];
-      const groupFaces = currentGroupData?.[eventId]?.faces;
-      const groupImages = currentGroupData?.[eventId]?.images;
+      const groupFaces = currentGroupData?.faces;
+      const groupImages = currentGroupData?.images;
       
       let faceIds = [];
       let imageIds = [];
